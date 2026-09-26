@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "WeScreen",
+  "version": "1.0.0",
+  "description": "录制整个屏幕、窗口或浏览器标签页，并保存为 WebM 视频。",
+  "action": {
+    "default_title": "打开全屏录制器",
+    "default_popup": "popup.html"
+  }
+}

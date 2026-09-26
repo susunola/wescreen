@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WeScreen</title>
+    <link rel="stylesheet" href="recorder.css">
+  </head>
+  <body>
+    <main class="card">
+      <span class="eyebrow">EDGE EXTENSION</span>
+      <h1>WeScreen</h1>
+      <p class="intro">点击开始后，在 Edge 的系统选择器中选择“整个屏幕”、窗口或标签页。</p>
+      <label class="toggle"><input id="audio" type="checkbox" checked><span>录制系统 / 标签页音频（取决于系统选择器中的设置）</span></label>
+      <div class="controls">
+        <button id="start" class="primary">开始录制</button>
+        <button id="stop" class="danger" disabled>停止并保存</button>
+      </div>
+      <div id="status" class="status" aria-live="polite">尚未开始</div>
+      <p class="hint">视频会以 WebM 格式下载到浏览器默认下载目录。</p>
+    </main>
+    <script src="recorder.js"></script>
+  </body>
+</html>

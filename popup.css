@@ -1,0 +1,6 @@
+body { margin: 0; min-width: 240px; font: 14px/1.45 system-ui, sans-serif; color: #172033; }
+main { padding: 18px; }
+strong { font-size: 16px; }
+p { color: #596579; margin: 7px 0 14px; }
+button { width: 100%; border: 0; border-radius: 8px; padding: 10px; color: white; background: #0969da; font-weight: 650; cursor: pointer; }
+button:hover { background: #075ab9; }
