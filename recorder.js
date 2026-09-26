@@ -1,73 +1,23 @@
-const startButton = document.querySelector('#start');
-const stopButton = document.querySelector('#stop');
-const audioOption = document.querySelector('#audio');
-const status = document.querySelector('#status');
-
-let stream;
-let recorder;
-let chunks = [];
-let startedAt;
-let timer;
-
-function setStatus(message, recording = false) {
-  status.textContent = message;
-  status.classList.toggle('recording', recording);
-}
-
-function formatElapsed(ms) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
-function preferredMimeType() {
-  return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-    .find((type) => MediaRecorder.isTypeSupported(type));
-}
-
-async function startRecording() {
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: 30, max: 60 } },
-      audio: audioOption.checked
-    });
-    const mimeType = preferredMimeType();
-    recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    chunks = [];
-    recorder.addEventListener('dataavailable', (event) => { if (event.data.size) chunks.push(event.data); });
-    recorder.addEventListener('stop', saveRecording, { once: true });
-    stream.getVideoTracks()[0].addEventListener('ended', () => { if (recorder?.state === 'recording') recorder.stop(); }, { once: true });
-    recorder.start(1000);
-    startedAt = Date.now();
-    timer = setInterval(() => setStatus(`正在录制 · ${formatElapsed(Date.now() - startedAt)}`, true), 500);
-    startButton.disabled = true;
-    stopButton.disabled = false;
-    audioOption.disabled = true;
-  } catch (error) {
-    setStatus(error.name === 'NotAllowedError' ? '未开始：你取消了屏幕选择。' : `无法开始录制：${error.message}`);
-  }
-}
-
-function stopRecording() {
-  if (recorder?.state === 'recording') recorder.stop();
-}
-
-function saveRecording() {
-  clearInterval(timer);
-  stream?.getTracks().forEach((track) => track.stop());
-  const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  link.href = url;
-  link.download = `edge-screen-recording-${stamp}.webm`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  setStatus(`录制已保存 · 时长 ${formatElapsed(Date.now() - startedAt)}`);
-  startButton.disabled = false;
-  stopButton.disabled = true;
-  audioOption.disabled = false;
-}
-
-startButton.addEventListener('click', startRecording);
-stopButton.addEventListener('click', stopRecording);
+const $ = (id) => document.querySelector(`#${id}`);
+let displayStream, micStream, cameraStream, recorder, chunks = [], startedAt, pausedAt = 0, pausedTotal = 0, timer, stopTimer, finalBlob;
+const quality = { compact: 2500000, standard: 6000000, high: 11000000 };
+const db = new Promise((resolve, reject) => { const r = indexedDB.open('wescreen', 1); r.onupgradeneeded = () => r.result.createObjectStore('chunks'); r.onsuccess = () => resolve(r.result); r.onerror = reject; });
+function store(mode, operation) { return db.then(d => new Promise((resolve, reject) => { const t = d.transaction('chunks', mode); operation(t.objectStore('chunks')); t.oncomplete = resolve; t.onerror = reject; })); }
+const clearChunks = () => store('readwrite', s => s.clear());
+const saveChunk = (chunk) => store('readwrite', s => s.put(chunk, `${Date.now()}-${Math.random()}`));
+async function getChunks() { const d = await db; return new Promise((resolve, reject) => { const r = d.transaction('chunks').objectStore('chunks').getAll(); r.onsuccess = () => resolve(r.result); r.onerror = reject; }); }
+function fmt(ms) { const seconds = Math.floor(ms / 1000); return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }
+function elapsed() { return Date.now() - startedAt - pausedTotal - (pausedAt ? Date.now() - pausedAt : 0); }
+function show(name) { ['setup','recording','result'].forEach(id => $(id).classList.toggle('hidden', id !== name)); }
+function outputName() { return `${($('filename').value.trim().replace(/[\\/:*?"<>|]/g, '-') || 'wescreen-recording')}.webm`; }
+function mediaType() { return ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(MediaRecorder.isTypeSupported); }
+function saveSettings() { chrome.storage.local.set({ settings: Object.fromEntries(['filename','quality','countdown','autostop','screen-audio','microphone','camera'].map(id => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value])) }); }
+function mixAudio() { const context = new AudioContext(); const out = context.createMediaStreamDestination(); [displayStream, micStream].filter(Boolean).forEach(s => { if (s.getAudioTracks().length) context.createMediaStreamSource(s).connect(out); }); return out.stream.getAudioTracks(); }
+async function start() { try { saveSettings(); await clearChunks(); const wait = Number($('countdown').value); if (wait) { $('start').disabled = true; for (let n = wait; n; n--) { $('start').textContent = `${n}…`; await new Promise(r => setTimeout(r, 1000)); } $('start').textContent = '开始录制'; $('start').disabled = false; } displayStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 60 } }, audio: $('screen-audio').checked }); if ($('microphone').checked) micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); if ($('camera').checked) cameraStream = await navigator.mediaDevices.getUserMedia({ video: true }); const tracks = [...displayStream.getVideoTracks(), ...mixAudio()]; recorder = new MediaRecorder(new MediaStream(tracks), { mimeType: mediaType(), videoBitsPerSecond: quality[$('quality').value] }); chunks = []; recorder.ondataavailable = async e => { if (e.data.size) { chunks.push(e.data); await saveChunk(e.data); } }; recorder.onstop = finish; displayStream.getVideoTracks()[0].onended = stop; recorder.start(1000); startedAt = Date.now(); pausedTotal = 0; timer = setInterval(() => $('timer').textContent = fmt(elapsed()), 250); const auto = Number($('autostop').value); if (auto) stopTimer = setTimeout(stop, auto * 1000); chrome.runtime.sendMessage({ type: 'recording-state', active: true }); show('recording'); } catch (e) { alert(e.name === 'NotAllowedError' ? '已取消屏幕选择。' : `无法开始录制：${e.message}`); $('start').disabled = false; $('start').textContent = '开始录制'; } }
+function pause() { if (!recorder) return; if (recorder.state === 'recording') { recorder.pause(); pausedAt = Date.now(); $('pause').textContent = '继续'; } else if (recorder.state === 'paused') { recorder.resume(); pausedTotal += Date.now() - pausedAt; pausedAt = 0; $('pause').textContent = '暂停'; } }
+function stop() { if (recorder && recorder.state !== 'inactive') recorder.stop(); }
+function finish() { clearInterval(timer); clearTimeout(stopTimer); [displayStream,micStream,cameraStream].filter(Boolean).forEach(s => s.getTracks().forEach(t => t.stop())); finalBlob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' }); $('preview').src = URL.createObjectURL(finalBlob); chrome.runtime.sendMessage({ type: 'recording-state', active: false }); clearChunks(); show('result'); }
+function download(blob = finalBlob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = outputName(); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+chrome.runtime.onMessage.addListener(m => { if (m.type === 'stop-recording') stop(); if (m.type === 'pause-recording') pause(); });
+$('start').onclick = start; $('stop').onclick = stop; $('pause').onclick = pause; $('download').onclick = () => download(); $('new-recording').onclick = () => show('setup');
+Promise.all([chrome.storage.local.get('settings'), getChunks()]).then(([{ settings = {} }, old]) => { Object.entries(settings).forEach(([id, value]) => { if ($(id)) $(id)[$(id).type === 'checkbox' ? 'checked' : 'value'] = value; }); if (old.length) { $('recovery').classList.remove('hidden'); $('recover').onclick = async () => { download(new Blob(old, { type: 'video/webm' })); await clearChunks(); $('recovery').classList.add('hidden'); }; $('discard').onclick = async () => { await clearChunks(); $('recovery').classList.add('hidden'); }; } });
