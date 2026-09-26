@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
   "name": "WeScreen",
-  "version": "1.0.0",
-  "description": "录制整个屏幕、窗口或浏览器标签页，并保存为 WebM 视频。",
+  "version": "1.1.0",
+  "default_locale": "zh_CN",
+  "description": "__MSG_extDescription__",
   "action": {
-    "default_title": "打开全屏录制器",
+    "default_title": "__MSG_actionTitle__",
     "default_popup": "popup.html"
   },
   "background": { "service_worker": "background.js" },
   "permissions": ["storage", "downloads"],
   "commands": {
-    "stop-recording": { "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" }, "description": "停止 WeScreen 录制" },
-    "pause-recording": { "suggested_key": { "default": "Ctrl+Shift+U", "mac": "Command+Shift+U" }, "description": "暂停或继续 WeScreen 录制" }
+    "stop-recording": { "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" }, "description": "__MSG_commandStop__" },
+    "pause-recording": { "suggested_key": { "default": "Ctrl+Shift+U", "mac": "Command+Shift+U" }, "description": "__MSG_commandPause__" }
   }
 }

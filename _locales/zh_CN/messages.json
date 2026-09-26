@@ -1,0 +1,9 @@
+{
+  "extDescription": { "message": "完全本地录制整个屏幕、窗口或浏览器标签页并保存为 WebM：无账号、无上传、无追踪。" },
+  "actionTitle": { "message": "打开 WeScreen 录制器" },
+  "commandStop": { "message": "停止 WeScreen 录制" },
+  "commandPause": { "message": "暂停或继续 WeScreen 录制" },
+  "popupLead": { "message": "选择录制范围并保存视频。" },
+  "popupPrivacy": { "message": "无账号 · 无上传 · 无追踪：录像只保存在这台设备上。" },
+  "popupOpen": { "message": "打开录制器" }
+}

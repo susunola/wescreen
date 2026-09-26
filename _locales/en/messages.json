@@ -1,0 +1,9 @@
+{
+  "extDescription": { "message": "Record your screen, a window, or a tab to WebM — entirely on your device. No account, no upload, no tracking." },
+  "actionTitle": { "message": "Open the WeScreen recorder" },
+  "commandStop": { "message": "Stop the WeScreen recording" },
+  "commandPause": { "message": "Pause or resume the WeScreen recording" },
+  "popupLead": { "message": "Pick what to record and save the video." },
+  "popupPrivacy": { "message": "No account · No upload · No tracking: recordings stay on this device." },
+  "popupOpen": { "message": "Open the recorder" }
+}

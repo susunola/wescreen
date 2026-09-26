@@ -8,11 +8,35 @@
   </head>
   <body>
     <main class="app">
-      <header><div><span class="eyebrow">LOCAL · PRIVATE · EDGE</span><h1>WeScreen</h1></div><button id="language" class="quiet">中文 / EN</button></header>
-      <section id="setup" class="panel"><p>录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。</p><div class="grid"><label><span>文件名</span><input id="filename" value="wescreen-recording" maxlength="80"></label><label><span>画质</span><select id="quality"><option value="standard">1080p · 标准</option><option value="high">1080p · 高画质</option><option value="compact">720p · 节省空间</option></select></label><label><span>倒计时</span><select id="countdown"><option value="0">不等待</option><option value="3" selected>3 秒</option><option value="5">5 秒</option></select></label><label><span>自动停止</span><select id="autostop"><option value="0">不设置</option><option value="300">5 分钟</option><option value="900">15 分钟</option><option value="1800">30 分钟</option></select></label></div><fieldset><legend>音视频源</legend><label class="toggle"><input id="screen-audio" type="checkbox" checked><span>系统 / 标签页音频</span></label><label class="toggle"><input id="microphone" type="checkbox"><span>麦克风旁白</span></label></fieldset><button id="start" class="primary">开始录制</button><p class="hint">录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。</p></section>
-      <section id="recording" class="panel hidden"><div class="record-head"><div><span class="live">REC</span><strong id="timer">00:00</strong></div><span id="memory">本地分段保护已开启</span></div><div class="controls"><button id="pause" class="quiet">暂停</button><button id="stop" class="danger">停止录制</button></div><p class="hint">录制片段会暂存到本机，以便意外关闭后恢复。</p></section>
-      <section id="result" class="panel hidden"><h2>录制完成</h2><video id="preview" controls></video><div class="controls"><button id="download" class="primary">下载 WebM</button><button id="new-recording" class="quiet">新建录制</button></div></section>
-      <section id="recovery" class="recovery hidden"><span>检测到未完成的本地录制。</span><button id="recover" class="quiet">恢复并下载</button><button id="discard" class="text">丢弃</button></section>
+      <header><div><span class="eyebrow" data-i18n="eyebrow">LOCAL · PRIVATE · EDGE</span><h1>WeScreen</h1></div><button id="language" class="quiet" type="button" data-i18n="langSwitch">English</button></header>
+      <section id="setup" class="panel">
+        <p class="privacy" id="privacy"></p>
+        <p data-i18n="setupLead">录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。</p>
+        <div class="grid">
+          <label><span data-i18n="labelFilename">文件名</span><input id="filename" value="wescreen-recording" maxlength="80"></label>
+          <label><span data-i18n="labelResolution">分辨率</span><select id="resolution"><option value="source" data-i18n="resSource">原始分辨率</option><option value="1080" data-i18n="res1080">1080p</option><option value="720" data-i18n="res720">720p</option></select></label>
+          <label><span data-i18n="labelQuality">画质</span><select id="quality"><option value="standard" data-i18n="qualityStandard">标准</option><option value="high" data-i18n="qualityHigh">高画质</option><option value="compact" data-i18n="qualityCompact">节省空间</option></select></label>
+          <label><span data-i18n="labelFrameRate">帧率</span><select id="framerate"><option value="30">30 fps</option><option value="60">60 fps</option></select></label>
+          <label><span data-i18n="labelCountdown">倒计时</span><select id="countdown"><option value="0" data-i18n="countdownNone">不等待</option><option value="3" selected data-i18n="countdown3">3 秒</option><option value="5" data-i18n="countdown5">5 秒</option></select></label>
+          <label><span data-i18n="labelAutoStop">自动停止</span><select id="autostop"><option value="0" data-i18n="autostopNone">不设置</option><option value="300" data-i18n="autostop5">5 分钟</option><option value="900" data-i18n="autostop15">15 分钟</option><option value="1800" data-i18n="autostop30">30 分钟</option></select></label>
+        </div>
+        <fieldset>
+          <legend data-i18n="legendSources">音视频源</legend>
+          <label class="toggle"><input id="screen-audio" type="checkbox" checked><span data-i18n="toggleScreenAudio">系统 / 标签页音频</span></label>
+          <label class="toggle"><input id="microphone" type="checkbox"><span data-i18n="toggleMicrophone">麦克风旁白</span></label>
+        </fieldset>
+        <p class="notice" id="notice" hidden></p>
+        <button id="start" class="primary" type="button" data-i18n="btnStart">开始录制</button>
+        <p class="hint" data-i18n="shortcutHint">录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。</p>
+        <p class="hint" id="storage-hint"></p>
+      </section>
+      <section id="recording" class="panel hidden">
+        <div class="record-head"><div><span class="live">REC</span><strong id="timer">00:00</strong></div><span id="memory"></span></div>
+        <div class="controls"><button id="pause" class="quiet" type="button" data-i18n="btnPause">暂停</button><button id="stop" class="danger" type="button" data-i18n="btnStop">停止录制</button></div>
+        <p class="hint" id="recording-hint" data-i18n="recordingHint">录制片段会暂存到本机，以便意外关闭后恢复。</p>
+      </section>
+      <section id="result" class="panel hidden"><h2 data-i18n="resultTitle">录制完成</h2><video id="preview" controls></video><div class="controls"><button id="download" class="primary" type="button" data-i18n="btnDownload">下载 WebM</button><button id="new-recording" class="quiet" type="button" data-i18n="btnNewRecording">新建录制</button></div></section>
+      <section id="recovery" class="recovery hidden"><span id="recovery-text"></span><button id="recover" class="quiet" type="button" data-i18n="btnRecover">恢复并下载</button><button id="discard" class="text" type="button" data-i18n="btnDiscard">丢弃</button></section>
     </main>
     <script src="recorder.js"></script>
   </body>
