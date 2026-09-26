@@ -1,46 +1,154 @@
-# WeScreen
+<p align="center">
+  <img src="assets/logo.png" alt="WeScreen" width="150">
+</p>
 
-这是一个无需构建步骤、完全本地运行的 Microsoft Edge Manifest V3 扩展。可录制整个屏幕、窗口或浏览器标签页，并下载 WebM 视频；不需要账号、服务器或上传。
+<h1 align="center">WeScreen</h1>
 
-## 隐私
+<p align="center">
+  <strong>Screen recording for Microsoft Edge that never leaves your machine.</strong><br>
+  No account. No upload. No tracking.
+</p>
 
-- **无账号**：没有登录、没有后端、没有遥测。
-- **无上传**：录像只写入这台设备的内存与磁盘，不会发送到任何服务器。
-- **无追踪**：不引入分析脚本、不申请与录制无关的权限。
+<p align="center">
+  <a href="README.zh-CN.md">中文</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#known-limitations">Limitations</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-扩展只申请 `storage`（保存你的偏好设置与录制分片）和 `downloads`（把 WebM 存到本地）。屏幕、窗口与标签页的内容完全由浏览器的共享选择器决定，WeScreen 无法在未经你选择的情况下读取画面。
+<p align="center">
+  <img alt="Local only" src="https://img.shields.io/badge/processing-100%25%20local-29a56d">
+  <img alt="No account" src="https://img.shields.io/badge/account-not%20required-29a56d">
+  <img alt="Manifest V3" src="https://img.shields.io/badge/Edge-Manifest%20V3-0b6bcb">
+  <img alt="Output WebM" src="https://img.shields.io/badge/output-WebM-8957e5">
+  <img alt="No build step" src="https://img.shields.io/badge/build-none%20required-6e7781">
+</p>
 
-## 安装
+---
 
-1. 在 Edge 打开 `edge://extensions/`。
-2. 打开右侧的“开发人员模式”。
-3. 点击“加载解压缩的扩展”。
-4. 选择本目录（`wescreen`）。
-5. 点击扩展图标，打开录制器，再点击“开始录制”。
+WeScreen records your entire screen, a single window, or a browser tab and saves it as a WebM
+file. Recording, audio mixing, and storage all happen inside your browser — there is no server,
+no sign-in, and no telemetry. It is a plain unpacked Manifest V3 extension: no build step, no
+bundler, no dependencies.
 
-## 使用提示
+## Why local-first matters
 
-- 在 Edge 的共享选择器中选择“整个屏幕”即可全屏录制。
-- 是否录入音频由共享选择器内的音频开关和操作系统支持情况共同决定。
-- 分辨率、帧率、码率三者独立可调；分辨率上限会在共享选择器确认后应用到采集轨道上，源分辨率低于上限时保持原始画面。
-- 浏览器原生录制使用 WebM；如需 MP4，可用剪映、HandBrake 或 ffmpeg 转换。
+Most screen recorders ask you to upload your take before you can do anything with it. WeScreen
+does the opposite: the file is written to your disk and nowhere else.
 
-## 已实现功能
+- **No account** — there is no backend to sign in to.
+- **No upload** — video never leaves the device, so nothing can leak from a server that does not exist.
+- **No tracking** — no analytics scripts, no remote code, no permissions beyond recording.
 
-- 倒计时、暂停/继续、自动停止、可自定义文件名。
-- 系统/标签页音频与麦克风旁白的本地混音；麦克风被拒绝或共享源没有音频时会降级继续录制并明确提示，不会中断。
-- 独立的分辨率（原始 / 1080p / 720p）、帧率（30/60 fps）与画质（标准 / 高画质 / 节省空间）设置。
-- 录制中显示已录制体积与本次上限；接近浏览器内存上限、或本机可用存储不足 500 MB 时会给出提示。
-- 录制中每秒把分片写入本机 IndexedDB；意外关闭页面后可恢复已录制片段，录制中关闭标签页会先弹出确认。
-- 停止与暂停的 Edge 扩展快捷键，以及录后浏览器内预览。
-- 中文与英文界面（跟随浏览器语言，可在页面右上角切换），扩展名称与描述也随语言本地化。
+WeScreen requests exactly two permissions:
 
-## 快捷键
+| Permission | Why |
+| --- | --- |
+| `storage` | Saves your preferences and the recording chunks buffered on disk for crash recovery |
+| `downloads` | Writes the finished WebM to your Downloads folder |
 
-- `Ctrl/⌘ + Shift + S`：停止录制
-- `Ctrl/⌘ + Shift + U`：暂停或继续
+What gets captured is decided entirely by the browser's own sharing picker. WeScreen cannot read
+your screen unless you pick a source, and it cannot see anything you did not share.
 
-## 已知限制
+## Install
 
-- 录制数据在停止时仍需在标签页内存中拼装成完整 Blob，因此单次录制的实际上限由“已录制体积”提示决定（约 1.6 GB 软上限）；超长录制建议分段进行。
-- 输出固定为 WebM，暂无 MP4/GIF 转码。
+1. Open `edge://extensions/` in Microsoft Edge.
+2. Turn on **Developer mode** in the left sidebar.
+3. Click **Load unpacked**.
+4. Select this repository's root folder.
+5. Click the WeScreen icon in the toolbar, then **Start recording**.
+
+## Usage
+
+1. Pick a file name, resolution, frame rate, quality preset, countdown, and an optional auto-stop.
+2. Choose your audio sources: system/tab audio, microphone narration, or both.
+3. Click **Start recording** and pick what to share in the Edge picker.
+4. Pause, resume, or stop from the recorder page, the toolbar badge, or the keyboard.
+5. Preview the result and download it as WebM.
+
+With the countdown set, the recorder waits 3 or 5 seconds after you confirm the shared source, so
+you have time to switch to the window you want to demonstrate.
+
+<p align="center">
+  <img src="assets/screenshot-setup-en.png" alt="WeScreen setup screen" width="620">
+</p>
+
+While recording, the header keeps a running total of what has been captured against the soft
+ceiling for a single take:
+
+<p align="center">
+  <img src="assets/screenshot-recording-en.png" alt="WeScreen recording in progress" width="620">
+</p>
+
+## Features
+
+**Recording control**
+- 3 or 5 second countdown, pause/resume, auto-stop after 5/15/30 minutes
+- Global stop and pause/resume shortcuts that work while another app has focus
+- Custom file name, applied to the downloaded file
+
+**Audio**
+- System / tab audio and microphone narration mixed locally through a Web Audio graph
+- Independent toggles for each source; noise suppression and echo cancellation on the microphone
+- A denied microphone or a source without audio degrades the take with an explicit notice instead of failing the recording
+
+**Output quality**
+- Resolution cap (source / 1080p / 720p) applied to the capture track, with the real output size reported back
+- Frame rate (30 / 60 fps) and quality presets (standard / high / space saver) chosen independently
+- In-browser preview before you download
+
+**Reliability**
+- Chunks are written to IndexedDB every second, so an unexpected close can be recovered
+- The recorder shows how much has been captured against a soft ceiling and warns before memory runs out
+- Free local storage is surfaced, with a warning below 500 MB
+- Closing the tab mid-recording asks for confirmation first
+
+**Interface**
+- Chinese and English UI, following the browser language and switchable from the recorder
+- Localized extension name, description, and command labels
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl/⌘ + Shift + S` | Stop recording |
+| `Ctrl/⌘ + Shift + U` | Pause or resume recording |
+
+These are Edge extension commands, so they fire even when the recorder tab is in the background.
+Rebind them at `edge://extensions/shortcuts`.
+
+## Known limitations
+
+- **WebM only.** That is what the browser records natively. Convert to MP4 with ffmpeg, HandBrake, or 剪映 if you need it.
+- **A ~1.6 GB soft ceiling per take.** Chunks are persisted to disk while recording, but stopping still assembles the whole take into a single in-memory Blob. The recorder warns at 800 MB and turns red at 1.6 GB; for longer sessions, record in parts.
+- **Crash recovery is best-effort.** Whatever chunks reached IndexedDB before a crash can be recovered; the last second or so may be missing.
+- **No editing yet.** No trimming, no annotations, no camera overlay, no MP4/GIF export.
+
+## Development
+
+There is nothing to build. Edit a file, then press **Reload** on the extension card at
+`edge://extensions/`.
+
+```
+manifest.json   Extension manifest, permissions, and keyboard commands
+background.js   Service worker: command routing and the REC toolbar badge
+recorder.html   Recorder page: setup, recording, result, and recovery views
+recorder.js     Capture, audio mixing, MediaRecorder lifecycle, IndexedDB chunk store
+recorder.css    Recorder page styling
+popup.html/js   Toolbar popup
+_locales/       Localized manifest strings (zh_CN, en)
+assets/         Logo and store artwork
+```
+
+Two implementation notes worth knowing before you change anything:
+
+- **The bitrate is not the resolution.** Quality presets only set `videoBitsPerSecond`; the resolution cap is a separate `applyConstraints` call on the capture track. Keep them independent.
+- **IndexedDB is not a memory fix.** It survives a crash, but the take is still assembled in the tab heap when you stop, which is what the size warnings measure.
+
+## Credits
+
+Logo artwork generated with 豆包 AI. The bundled `assets/logo.png` has the generator watermark
+cropped out and its white background converted to transparency so it renders on both GitHub
+themes.
