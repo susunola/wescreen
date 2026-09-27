@@ -5,6 +5,10 @@ document.querySelector('#lead').textContent = t('popupLead', '选择录制范围
 document.querySelector('#privacy').textContent = t('popupPrivacy', '无账号 · 无上传 · 无追踪：录像只保存在这台设备上。');
 document.querySelector('#open').textContent = t('popupOpen', '打开录制器');
 document.querySelector('#open').addEventListener('click', async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && /^https?:/i.test(tab.url || '')) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['pointer-tracker.js'] });
+  } catch { /* The page may be protected or an extension page; recording still works. */ }
   await chrome.tabs.create({ url: chrome.runtime.getURL('recorder.html') });
   window.close();
 });
