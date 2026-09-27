@@ -4,3 +4,4 @@
 .hint.alert{color:#f0c37a}
 .mem{color:#9cafaa;font-size:13px}.mem.warn{color:#f0c37a}.mem.crit{color:#f19aa6;font-weight:650}
 .course{margin:0 0 20px;padding:13px 15px;border:1px solid #3a4a47;border-radius:10px;background:#13201d}.course summary{cursor:pointer;font-weight:750;color:#d8ece4}.course[open] summary{margin-bottom:10px}.course-grid{display:grid;grid-template-columns:1fr 120px;gap:12px}.course-title{grid-column:1/-1}@media(max-width:560px){.course-grid{grid-template-columns:1fr}.course-title{grid-column:auto}}
+.course-library{margin-top:14px;border-top:1px solid #3a4a47;padding-top:12px}.course-library-head{display:flex;justify-content:space-between;align-items:center}.course-library ul{margin:8px 0 0;padding:0;list-style:none}.course-library li{padding:7px 0;border-top:1px solid #283a35;color:#bed0c9;font-size:13px}.course-library li span{color:#849b94;margin-left:6px}

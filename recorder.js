@@ -26,7 +26,7 @@ const I18N = {
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
-    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`, segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
+    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`, courseLibrary: '本地课程库', exportCourse: '导出索引', segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
     storageHint: (free) => `本机可用存储约 ${free}，录像只写入这台设备。`,
     storageUnknown: '无法读取本机可用存储空间。',
     starting: (n) => `${n}…`,
@@ -65,7 +65,7 @@ const I18N = {
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
-    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`, segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
+    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`, courseLibrary: 'Local course library', exportCourse: 'Export index', segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
     storageHint: (free) => `About ${free} of local storage available. This recording is written to this device only.`,
     storageUnknown: 'Local storage availability could not be read.',
     starting: (n) => `${n}…`,
@@ -242,6 +242,22 @@ function updateCourseFilename() {
   $('filename').value = generated;
   hint.textContent = L('courseFilename', generated);
 }
+async function saveCourseEntry(parts) {
+  if (!$('course-enabled').checked || !$('course-name').value.trim()) return;
+  const { courseLibrary = [] } = await chrome.storage.local.get('courseLibrary');
+  const entry = { course: $('course-name').value.trim(), episode: Number($('episode-number').value) || 1, title: $('episode-title').value.trim(), filename: sanitized(), parts, recordedAt: new Date().toISOString(), markers: markers.map((marker) => ({ ...marker })) };
+  const index = courseLibrary.findIndex((item) => item.course === entry.course && item.episode === entry.episode);
+  if (index >= 0) courseLibrary[index] = entry; else courseLibrary.push(entry);
+  await chrome.storage.local.set({ courseLibrary });
+  renderCourseLibrary(courseLibrary);
+}
+function renderCourseLibrary(entries) {
+  const name = $('course-name').value.trim();
+  const visible = entries.filter((entry) => !name || entry.course === name).sort((a, b) => a.episode - b.episode);
+  const list = $('course-items'); list.replaceChildren();
+  visible.forEach((entry) => { const item = document.createElement('li'); item.textContent = `${entry.course} · ${String(entry.episode).padStart(2, '0')} · ${entry.title || entry.filename}`; const meta = document.createElement('span'); meta.textContent = `${entry.parts || 1} part${entry.parts === 1 ? '' : 's'}`; item.append(meta); list.append(item); });
+  $('course-library').classList.toggle('hidden', !visible.length);
+}
 
 // ---- capture --------------------------------------------------------------
 function mediaType() { return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((type) => MediaRecorder.isTypeSupported(type)); }
@@ -384,6 +400,7 @@ async function saveSegmentAndContinue() {
   const completed = segmentIndex++;
   await Promise.all([...pendingWrites]);
   download(part, `${sanitized()}-part-${String(completed).padStart(3, '0')}.webm`);
+  saveCourseEntry(completed).catch(() => {});
   chunks = []; chunkBytes = 0; chunkSeq = 0;
   await clearChunks();
   rollingSegment = false;
@@ -488,6 +505,7 @@ function finish() {
   const type = (recorder && recorder.mimeType) || 'video/webm';
   finalBlob = new Blob(chunks, { type });
   finalSize = finalBlob.size;
+  saveCourseEntry(Math.max(1, segmentIndex - 1)).catch(() => {});
   if ($('course-enabled').checked) { $('episode-number').value = String(Math.max(1, Number($('episode-number').value) || 1) + 1); persist(); updateCourseFilename(); }
   const url = URL.createObjectURL(finalBlob);
   $('preview').src = url;
@@ -541,6 +559,7 @@ $('pause').onclick = pause;
 $('mark').onclick = markImportant;
 $('download').onclick = () => download();
 $('notes').onclick = downloadNotes;
+$('export-course').onclick = async () => { const { courseLibrary = [] } = await chrome.storage.local.get('courseLibrary'); download(new Blob([JSON.stringify(courseLibrary, null, 2)], { type: 'application/json' }), 'wescreen-course-index.json'); };
 $('new-recording').onclick = () => { setNotice(''); setHint(null); show('setup'); };
 $('language').onclick = () => {
   applyLang(LANG === 'zh' ? 'en' : 'zh');
@@ -569,4 +588,5 @@ loadSettings()
       clearChunks().then(() => setInProgress(null)).then(() => $('recovery').classList.add('hidden'));
     };
   })
+  .then(async () => { const { courseLibrary = [] } = await chrome.storage.local.get('courseLibrary'); renderCourseLibrary(courseLibrary); })
   .catch(() => {});
