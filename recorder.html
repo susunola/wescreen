@@ -13,14 +13,9 @@
         <p class="privacy" id="privacy"></p>
         <p data-i18n="setupLead">录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。</p>
         <details class="course" id="course-panel"><summary data-i18n="courseMode">课程录制模式</summary><label class="toggle"><input id="course-enabled" type="checkbox"><span data-i18n="courseEnabled">使用课程自动命名</span></label><div class="course-grid"><label><span data-i18n="courseName">课程名称</span><input id="course-name" maxlength="60" placeholder="Edge 基础教程"></label><label><span data-i18n="episodeNumber">第几集</span><input id="episode-number" type="number" min="1" value="1"></label><label class="course-title"><span data-i18n="episodeTitle">本集标题</span><input id="episode-title" maxlength="80" placeholder="第一课：开始使用"></label></div><p class="hint" id="course-filename"></p><div id="course-library" class="course-library hidden"><div class="course-library-head"><strong data-i18n="courseLibrary">本地课程库</strong><button id="export-course" class="text" type="button" data-i18n="exportCourse">导出索引</button></div><ul id="course-items"></ul></div></details>
-        <div class="grid">
+        <div class="quick-grid">
           <label><span data-i18n="labelFilename">文件名</span><input id="filename" value="wescreen-recording" maxlength="80"></label>
-          <label><span data-i18n="labelResolution">分辨率</span><select id="resolution"><option value="source" data-i18n="resSource">原始分辨率</option><option value="1080" data-i18n="res1080">1080p</option><option value="720" data-i18n="res720">720p</option></select></label>
           <label><span data-i18n="labelQuality">画质</span><select id="quality"><option value="standard" data-i18n="qualityStandard">标准</option><option value="high" data-i18n="qualityHigh">高画质</option><option value="compact" data-i18n="qualityCompact">节省空间</option></select></label>
-          <label><span data-i18n="labelFrameRate">帧率</span><select id="framerate"><option value="30">30 fps</option><option value="60">60 fps</option></select></label>
-          <label><span data-i18n="labelCountdown">倒计时</span><select id="countdown"><option value="0" data-i18n="countdownNone">不等待</option><option value="3" selected data-i18n="countdown3">3 秒</option><option value="5" data-i18n="countdown5">5 秒</option></select></label>
-          <label><span data-i18n="labelAutoStop">自动停止</span><select id="autostop"><option value="0" data-i18n="autostopNone">不设置</option><option value="300" data-i18n="autostop5">5 分钟</option><option value="900" data-i18n="autostop15">15 分钟</option><option value="1800" data-i18n="autostop30">30 分钟</option></select></label>
-          <label><span data-i18n="labelSegment">长录制分段</span><select id="segment-minutes"><option value="0" data-i18n="segmentOff">单个文件</option><option value="15" data-i18n="segment15">每 15 分钟</option><option value="30" data-i18n="segment30">每 30 分钟</option></select></label>
         </div>
         <fieldset>
           <legend data-i18n="legendSources">音视频源</legend>
@@ -29,8 +24,15 @@
           <label class="toggle"><input id="camera" type="checkbox"><span data-i18n="toggleCamera">摄像头画中画</span></label>
           <label class="toggle"><input id="clicks" type="checkbox" checked><span data-i18n="toggleClicks">鼠标点击高亮（当前标签页）</span></label>
         </fieldset>
+        <details class="advanced"><summary data-i18n="advancedSettings">高级录制设置</summary><div class="grid">
+          <label><span data-i18n="labelResolution">分辨率</span><select id="resolution"><option value="source" data-i18n="resSource">原始分辨率</option><option value="1080" data-i18n="res1080">1080p</option><option value="720" data-i18n="res720">720p</option></select></label>
+          <label><span data-i18n="labelFrameRate">帧率</span><select id="framerate"><option value="30">30 fps</option><option value="60">60 fps</option></select></label>
+          <label><span data-i18n="labelCountdown">倒计时</span><select id="countdown"><option value="0" data-i18n="countdownNone">不等待</option><option value="3" selected data-i18n="countdown3">3 秒</option><option value="5" data-i18n="countdown5">5 秒</option></select></label>
+          <label><span data-i18n="labelAutoStop">自动停止</span><select id="autostop"><option value="0" data-i18n="autostopNone">不设置</option><option value="300" data-i18n="autostop5">5 分钟</option><option value="900" data-i18n="autostop15">15 分钟</option><option value="1800" data-i18n="autostop30">30 分钟</option></select></label>
+          <label><span data-i18n="labelSegment">长录制分段</span><select id="segment-minutes"><option value="0" data-i18n="segmentOff">单个文件</option><option value="15" data-i18n="segment15">每 15 分钟</option><option value="30" data-i18n="segment30">每 30 分钟</option></select></label>
+        </div></details>
         <p class="notice" id="notice" hidden></p>
-        <button id="start" class="primary" type="button" data-i18n="btnStart">开始录制</button>
+        <button id="start" class="primary start-button" type="button" data-i18n="btnStart">开始录制</button>
         <p class="hint" data-i18n="shortcutHint">录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。</p>
         <p class="hint" id="storage-hint"></p>
       </section>
