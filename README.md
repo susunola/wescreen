@@ -15,6 +15,7 @@
   <a href="#usage">Usage</a> ·
   <a href="#features">Features</a> ·
   <a href="#known-limitations">Limitations</a> ·
+  <a href="PRIVACY.md">Privacy</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
@@ -51,6 +52,9 @@ WeScreen requests exactly two permissions:
 
 What gets captured is decided entirely by the browser's own sharing picker. WeScreen cannot read
 your screen unless you pick a source, and it cannot see anything you did not share.
+
+The full policy is in [`PRIVACY.md`](PRIVACY.md) ([中文](PRIVACY.zh-CN.md)), published at
+<https://susunola.github.io/wescreen/>.
 
 ## Install
 
@@ -138,14 +142,30 @@ recorder.html   Recorder page: setup, recording, result, and recovery views
 recorder.js     Capture, audio mixing, MediaRecorder lifecycle, IndexedDB chunk store
 recorder.css    Recorder page styling
 popup.html/js   Toolbar popup
-_locales/       Localized manifest strings (zh_CN, en)
-assets/         Logo and store artwork
+_locales/       Localized manifest strings (en, zh_CN)
+assets/         Logo and UI captures used by this README
+docs/           Privacy policy as a self-contained page for GitHub Pages
+store/          Partner Center submission pack: graphics, listing copy, checklist
+scripts/        build-store-assets.py regenerates every store graphic
 ```
 
 Two implementation notes worth knowing before you change anything:
 
 - **The bitrate is not the resolution.** Quality presets only set `videoBitsPerSecond`; the resolution cap is a separate `applyConstraints` call on the capture track. Keep them independent.
 - **IndexedDB is not a memory fix.** It survives a crash, but the take is still assembled in the tab heap when you stop, which is what the size warnings measure.
+
+## Store submission
+
+The Edge Add-ons pack is in [`store/`](store/README.md): the uploadable zip, every graphic at its
+exact required size, paste-ready listing copy for both languages, and the certification notes.
+
+```bash
+python3 scripts/build-store-assets.py   # regenerate graphics (requires Pillow)
+```
+
+`store/README.md` is a step-by-step checklist, including the exact answers for the privacy
+questionnaire. The package itself is verified by loading the unzipped artifact into Chromium and
+recording with it, not just by inspecting the manifest.
 
 ## Credits
 

@@ -15,6 +15,7 @@
   <a href="#使用">使用</a> ·
   <a href="#功能">功能</a> ·
   <a href="#已知限制">已知限制</a> ·
+  <a href="PRIVACY.zh-CN.md">隐私</a> ·
   <a href="CHANGELOG.md">更新日志</a>
 </p>
 
@@ -49,6 +50,9 @@ WeScreen 只申请两项权限：
 
 录什么完全由浏览器自带的共享选择器决定。除非你主动选择共享源，WeScreen 无法读取你的屏幕，
 也看不到任何你没有共享的内容。
+
+完整政策见 [`PRIVACY.zh-CN.md`](PRIVACY.zh-CN.md)（[English](PRIVACY.md)），线上地址：
+<https://susunola.github.io/wescreen/>。
 
 ## 安装
 
@@ -132,14 +136,29 @@ recorder.html   录制页面：设置、录制中、结果与恢复视图
 recorder.js     采集、音频混音、MediaRecorder 生命周期、IndexedDB 分片存储
 recorder.css    录制页面样式
 popup.html/js   工具栏弹窗
-_locales/       清单字符串本地化（zh_CN、en）
-assets/         图标与商店素材
+_locales/       清单字符串本地化（en、zh_CN）
+assets/         Logo 与本 README 使用的界面截图
+docs/           隐私政策的独立页面，用于 GitHub Pages
+store/          Partner Center 上架包：素材、文案、清单
+scripts/        build-store-assets.py，重新生成全部商店素材
 ```
 
 动手改之前，有两点实现约定值得知道：
 
 - **码率不等于分辨率。** 画质预设只设置 `videoBitsPerSecond`；分辨率上限是独立的 `applyConstraints` 调用。两者保持解耦。
 - **IndexedDB 不是内存问题的解法。** 它解决崩溃恢复，但停止时整段录像仍要在标签页堆里拼装，体积告警衡量的正是这件事。
+
+## 商店上架
+
+Edge Add-ons 上架包在 [`store/`](store/README.md)：可直接上传的 zip、每个尺寸都精确符合要求的
+图形素材、中英文双语的商店文案，以及送审说明。
+
+```bash
+python3 scripts/build-store-assets.py   # 重新生成素材（需要 Pillow）
+```
+
+`store/README.md` 是逐步清单，包含隐私问卷每一项该填什么。上架包经过实际验证：把解压后的产物加载
+进 Chromium 真正录一段，而不是只检查 manifest。
 
 ## 致谢
 
