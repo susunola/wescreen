@@ -47,7 +47,8 @@ const I18N = {
     errRecorder: '录制过程中浏览器报告了错误，已停止录制。',
     errUnsupported: '当前浏览器不支持 WebM 录制。',
     errStart: (msg) => `无法开始录制：${msg}`,
-    errEmpty: '没有可下载的录像数据。'
+    errEmpty: '没有可下载的录像数据。',
+    errDownload: '保存文件失败，请检查浏览器的下载设置。'
   },
   en: {
     langSwitch: '中文', pageTitle: 'WeScreen',
@@ -85,7 +86,8 @@ const I18N = {
     errRecorder: 'The browser reported an error while recording, so recording stopped.',
     errUnsupported: 'This browser does not support WebM recording.',
     errStart: (msg) => `Could not start recording: ${msg}`,
-    errEmpty: 'There is no recorded data to download.'
+    errEmpty: 'There is no recorded data to download.',
+    errDownload: 'Saving the file failed. Check your browser download settings.'
   }
 };
 let LANG = 'zh';
@@ -422,11 +424,21 @@ function finish() {
 }
 function download(blob = finalBlob) {
   if (!blob || !blob.size) { setNotice(L('errEmpty')); return; }
+  const name = `${sanitized()}.webm`;
   const anchor = document.createElement('a');
   anchor.href = URL.createObjectURL(blob);
-  anchor.download = `${sanitized()}.webm`;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(anchor.href), 2000);
+  anchor.download = name;
+  const fallback = () => { anchor.click(); setTimeout(() => URL.revokeObjectURL(anchor.href), 2000); };
+  // chrome.downloads is what the declared permission is for: it keeps the chosen name and reports
+  // failures. The anchor click stays as a fallback so a failed call can never lose the recording.
+  if (!chrome.downloads || !chrome.downloads.download) { fallback(); return; }
+  chrome.downloads.download({ url: anchor.href, filename: name, saveAs: false })
+    .then((id) => {
+      if (typeof id === 'number') { setTimeout(() => URL.revokeObjectURL(anchor.href), 60000); return; }
+      // undefined means the download was rejected without throwing.
+      fallback();
+    })
+    .catch(() => { fallback(); setNotice(L('errDownload')); });
 }
 const persistLang = () => chrome.storage.local.set({ lang: LANG }).catch(() => {});
 

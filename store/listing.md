@@ -8,6 +8,7 @@ Counts below are for the body text between the `---` markers, not this surroundi
 
 - [English (en-US)](#english-en-us)
 - [Chinese (zh-CN)](#chinese-zh-cn)
+- [Privacy page answers](#privacy-page-answers)
 - [Search terms](#search-terms)
 
 ---
@@ -137,6 +138,99 @@ WeScreen 可以录制你的整个屏幕、单个窗口或浏览器标签页，�
 - **支持联系方式：** https://github.com/susunola/wescreen/issues
 - **成人内容：** 否
 - **隐私政策 URL：** https://susunola.github.io/wescreen/
+
+---
+
+## Privacy page answers
+
+The Partner Center **Privacy** page has four required text boxes, each capped at 1000 characters.
+Paste one block per box. Character counts are verified against that cap; the English set is the
+recommended one for the primary submission, with Chinese provided if you fill that listing in
+Chinese.
+
+### Single purpose description
+
+<!-- BEGIN PRIVACY PURPOSE: en -->
+WeScreen has one purpose: recording the screen, a window, or a browser tab to a local WebM video
+file on the user's own device.
+
+The extension lets the user configure that single recording task — countdown, pause and resume,
+auto-stop, resolution and frame rate, and mixing system or tab audio with microphone narration —
+and then saves the finished file through the browser's own download mechanism.
+
+WeScreen has no server and no remote component. It does not read, collect, or transmit page
+content, browsing activity, or any other user data. Screen capture is initiated only when the user
+starts a recording and picks a source in Edge's own sharing picker, and it stops when the user
+stops it. All recording, audio mixing, and storage happen locally in the browser.
+<!-- END PRIVACY PURPOSE: en -->
+
+<!-- BEGIN PRIVACY PURPOSE: zh -->
+WeScreen 只有一个用途：把屏幕、窗口或浏览器标签页录制为保存在用户自己设备上的 WebM 视频文件。
+
+扩展让用户为这一件事做设置——倒计时、暂停与继续、自动停止、分辨率与帧率，以及把系统/标签页
+音频与麦克风旁白混音——然后通过浏览器自身的下载机制保存录制完成的文件。
+
+WeScreen 没有服务器，也没有任何远程组件。它不读取、不收集、不传输页面内容、浏览行为或任何
+其他用户数据。只有在用户主动开始录制并在 Edge 自带的共享选择器中选定来源时才会开始采集画面，
+并在用户停止时结束。录制、音频混音与存储全部在浏览器本地完成。
+<!-- END PRIVACY PURPOSE: zh -->
+
+### storage justification
+
+<!-- BEGIN PRIVACY STORAGE: en -->
+The storage permission is used for two local-only purposes:
+
+1. Saving the user's own recording preferences, so settings such as resolution, frame rate, quality
+   preset, countdown length, auto-stop duration, interface language, and audio source toggles persist
+   between sessions instead of being re-entered every time.
+
+2. Buffering recording chunks locally in IndexedDB while a recording is in progress. Video is
+   written in one-second chunks so that if the browser or the tab closes unexpectedly, the user can
+   recover the part that was already recorded when they reopen the recorder. These chunks are
+   deleted when the user discards the recording.
+
+Both are stored on the user's device only. Nothing written to storage is ever transmitted, shared,
+or used for any purpose other than the recording feature the user is actively using.
+<!-- END PRIVACY STORAGE: en -->
+
+<!-- BEGIN PRIVACY STORAGE: zh -->
+storage 权限仅用于两个纯本地的目的：
+
+1. 保存用户自己的录制偏好设置，使分辨率、帧率、画质预设、倒计时长度、自动停止时长、界面语言
+   与音频来源开关等设置在多次使用之间保留，无需每次重新填写。
+
+2. 在录制过程中把视频分片缓存在本地 IndexedDB 中。视频按每秒一个分片写入，这样当浏览器或标签页
+   意外关闭时，用户重新打开录制器即可恢复已经录好的部分。用户丢弃录像时这些分片会被删除。
+
+以上数据只保存在用户自己的设备上。写入存储的任何内容都不会被传输、共享，也不会用于用户当前
+正在使用的录制功能之外的任何目的。
+<!-- END PRIVACY STORAGE: zh -->
+
+### downloads justification
+
+<!-- BEGIN PRIVACY DOWNLOADS: en -->
+The downloads permission is how WeScreen delivers its result. When the user finishes a recording and
+clicks "Download WebM", the extension saves the finished video file to the user's Downloads folder
+using the browser's download API, with the file name the user chose.
+
+This is the only way the extension produces output; there is no server upload, no cloud storage, and
+no other use of the permission. The permission is not used to download anything from the internet —
+WeScreen makes no network requests at all.
+<!-- END PRIVACY DOWNLOADS: en -->
+
+<!-- BEGIN PRIVACY DOWNLOADS: zh -->
+downloads 权限是 WeScreen 交付结果的方式。用户结束录制并点击"下载 WebM"时，扩展通过浏览器的下载
+API 把录制完成的视频文件以用户设定的文件名保存到用户的下载目录。
+
+这是扩展产生输出的唯一途径；没有服务器上传、没有云端存储，也没有对该权限的任何其他用途。该权限
+不会用于从互联网下载任何内容——WeScreen 不发起任何网络请求。
+<!-- END PRIVACY DOWNLOADS: zh -->
+
+### Chinese field values, if you list in Chinese
+
+The Chinese blocks above are written for the same four boxes and also fit the 1000-character cap.
+Use them only if you are filing the Chinese listing; Partner Center shows one Privacy page per
+extension, so in practice you select one language set and use it consistently.
 
 ---
 
