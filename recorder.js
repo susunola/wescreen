@@ -16,17 +16,17 @@ const I18N = {
     eyebrow: '本地处理 · 保护隐私 · 为 EDGE 打造',
     privacy: '无账号 · 无上传 · 无追踪 —— 录制、混音和存储全部在这台设备上完成。',
     setupLead: '录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。',
-    labelFilename: '文件名', labelResolution: '分辨率', labelQuality: '画质', labelFrameRate: '帧率', labelCountdown: '倒计时', labelAutoStop: '自动停止',
+    labelFilename: '文件名', labelResolution: '分辨率', labelQuality: '画质', labelFrameRate: '帧率', labelCountdown: '倒计时', labelAutoStop: '自动停止', labelSegment: '长录制分段',
     resSource: '原始分辨率', res1080: '1080p', res720: '720p',
     qualityStandard: '标准', qualityHigh: '高画质', qualityCompact: '节省空间',
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
-    autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟',
+    autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '单个文件', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
     btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载 WebM', btnNewRecording: '新建录制',
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
-    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`,
+    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`, segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`,
     storageHint: (free) => `本机可用存储约 ${free}，录像只写入这台设备。`,
     storageUnknown: '无法读取本机可用存储空间。',
     starting: (n) => `${n}…`,
@@ -55,17 +55,17 @@ const I18N = {
     eyebrow: 'LOCAL · PRIVATE · EDGE',
     privacy: 'No account · No upload · No tracking — recording, mixing, and storage all happen on this device.',
     setupLead: 'Record your entire screen, a window, or a tab. All media is processed on your device only.',
-    labelFilename: 'File name', labelResolution: 'Resolution', labelQuality: 'Quality', labelFrameRate: 'Frame rate', labelCountdown: 'Countdown', labelAutoStop: 'Auto stop',
+    labelFilename: 'File name', labelResolution: 'Resolution', labelQuality: 'Quality', labelFrameRate: 'Frame rate', labelCountdown: 'Countdown', labelAutoStop: 'Auto stop', labelSegment: 'Long-recording segments',
     resSource: 'Source resolution', res1080: '1080p', res720: '720p',
     qualityStandard: 'Standard', qualityHigh: 'High', qualityCompact: 'Space saver',
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
-    autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes',
+    autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'One file', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
     btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download WebM', btnNewRecording: 'New recording',
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
-    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`,
+    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`, segmentSaved: (n) => `Part ${n} saved. Recording continues.`,
     storageHint: (free) => `About ${free} of local storage available. This recording is written to this device only.`,
     storageUnknown: 'Local storage availability could not be read.',
     starting: (n) => `${n}…`,
@@ -97,7 +97,7 @@ const L = (key, ...args) => {
 };
 
 let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null, clicks = [];
-let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, finalBlob = null, finalSize = 0;
+let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, segmentTimer = null, finalBlob = null, finalSize = 0, recordingStream = null, segmentIndex = 1, rollingSegment = false;
 let sessionStartedAt = 0, lastMemorySync = 0, chunkSeq = 0;
 let hintKey = null, hintArgs = [], hintAlerts = false, captureNote = null;
 const pendingWrites = new Set();
@@ -205,7 +205,7 @@ function applyLang(next) {
 // ---- settings -------------------------------------------------------------
 const SETTING_FIELDS = [
   ['filename', 'text'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
-  ['countdown', 'select'], ['autostop', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
+  ['countdown', 'select'], ['autostop', 'select'], ['segment-minutes', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
 ];
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
 const persist = () => chrome.storage.local.set({ settings: readSettings() }).catch(() => {});
@@ -349,12 +349,14 @@ function armRecorder(stream, type) {
     if (chunkBytes >= HEAP_LIMIT_BYTES) setHint('heapCritical', [fmtBytes(chunkBytes)], true);
     else if (chunkBytes >= HEAP_WARN_BYTES) setHint('heapWarn', [fmtBytes(chunkBytes)], true);
   };
-  recorder.onstop = finish;
+  recorder.onstop = () => { if (rollingSegment) saveSegmentAndContinue(); else finish(); };
   recorder.onerror = () => { setHint('errRecorder', [], true); stop(); };
 }
 function beginRecording(stream) {
   const type = mediaType();
   if (!type) throw new Error(L('errUnsupported'));
+  recordingStream = stream;
+  segmentIndex = 1;
   armRecorder(stream, type);
   sessionStartedAt = Date.now();
   startedAt = sessionStartedAt;
@@ -366,6 +368,8 @@ function beginRecording(stream) {
   timer = setInterval(tick, 250);
   const auto = Number($('autostop').value);
   if (auto) stopTimer = setTimeout(stop, auto * 1000);
+  const segment = Number($('segment-minutes').value);
+  if (segment) segmentTimer = setTimeout(() => { rollingSegment = true; stop(); }, segment * 60 * 1000);
   const audioKey = audioHintKey();
   if (audioKey) setHint(audioKey, [], true);
   else if (captureNote) setHint(captureNote.key, captureNote.args);
@@ -373,6 +377,23 @@ function beginRecording(stream) {
   show('recording');
   syncMemory();
   chrome.runtime.sendMessage({ type: 'recording-state', active: true }).catch(() => {});
+}
+async function saveSegmentAndContinue() {
+  const part = new Blob(chunks, { type: (recorder && recorder.mimeType) || 'video/webm' });
+  const completed = segmentIndex++;
+  await Promise.all([...pendingWrites]);
+  download(part, `${sanitized()}-part-${String(completed).padStart(3, '0')}.webm`);
+  chunks = []; chunkBytes = 0; chunkSeq = 0;
+  await clearChunks();
+  rollingSegment = false;
+  const type = mediaType();
+  if (!recordingStream || !type) return finish();
+  armRecorder(recordingStream, type);
+  recorder.start(TIMESLICE_MS);
+  const segment = Number($('segment-minutes').value);
+  if (segment) segmentTimer = setTimeout(() => { rollingSegment = true; stop(); }, segment * 60 * 1000);
+  setHint('segmentSaved', [completed]);
+  syncMemory();
 }
 function tick() {
   $('timer').textContent = fmt(elapsed());
@@ -431,8 +452,10 @@ const stop = () => { if (recorder && recorder.state !== 'inactive') recorder.sto
 function releaseCapture() {
   clearInterval(timer);
   clearTimeout(stopTimer);
+  clearTimeout(segmentTimer);
   timer = null;
   stopTimer = null;
+  segmentTimer = null;
   if (compositor) { cancelAnimationFrame(compositor.frame); compositor.screenVideo.pause(); compositor.cameraVideo.pause(); compositor = null; }
   [displayStream, micStream, cameraStream].filter(Boolean).forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
   if (mixer) { mixer.close().catch(() => {}); mixer = null; }
@@ -446,6 +469,9 @@ function resetStart() {
   micStream = null;
   cameraStream = null;
   recorder = null;
+  recordingStream = null;
+  rollingSegment = false;
+  segmentIndex = 1;
   chunks = [];
   chunkBytes = 0;
   captureNote = null;
@@ -470,9 +496,9 @@ function finish() {
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
 }
-function download(blob = finalBlob) {
+function download(blob = finalBlob, explicitName = null) {
   if (!blob || !blob.size) { setNotice(L('errEmpty')); return; }
-  const name = `${sanitized()}.webm`;
+  const name = explicitName || `${sanitized()}.webm`;
   const anchor = document.createElement('a');
   anchor.href = URL.createObjectURL(blob);
   anchor.download = name;
