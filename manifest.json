@@ -25,5 +25,6 @@
   "commands": {
     "stop-recording": { "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" }, "description": "__MSG_commandStop__" },
     "pause-recording": { "suggested_key": { "default": "Ctrl+Shift+U", "mac": "Command+Shift+U" }, "description": "__MSG_commandPause__" }
+    ,"mark-important": { "suggested_key": { "default": "Ctrl+Shift+M", "mac": "Command+Shift+M" }, "description": "Mark an important learning moment" }
   }
 }

@@ -36,10 +36,10 @@
       </section>
       <section id="recording" class="panel hidden">
         <div class="record-head"><div><span class="live">REC</span><strong id="timer">00:00</strong></div><span id="memory"></span></div>
-        <div class="controls"><button id="pause" class="quiet" type="button" data-i18n="btnPause">暂停</button><button id="stop" class="danger" type="button" data-i18n="btnStop">停止录制</button></div>
+        <div class="controls"><button id="pause" class="quiet" type="button" data-i18n="btnPause">暂停</button><button id="mark" class="quiet" type="button" data-i18n="btnMark">标记重点</button><button id="stop" class="danger" type="button" data-i18n="btnStop">停止录制</button></div>
         <p class="hint" id="recording-hint" data-i18n="recordingHint">录制片段会暂存到本机，以便意外关闭后恢复。</p>
       </section>
-      <section id="result" class="panel hidden"><h2 data-i18n="resultTitle">录制完成</h2><video id="preview" controls></video><div class="controls"><button id="download" class="primary" type="button" data-i18n="btnDownload">下载 WebM</button><button id="new-recording" class="quiet" type="button" data-i18n="btnNewRecording">新建录制</button></div></section>
+      <section id="result" class="panel hidden"><h2 data-i18n="resultTitle">录制完成</h2><video id="preview" controls></video><div class="controls"><button id="download" class="primary" type="button" data-i18n="btnDownload">下载 WebM</button><button id="notes" class="quiet" type="button" data-i18n="btnNotes">下载学习笔记</button><button id="new-recording" class="quiet" type="button" data-i18n="btnNewRecording">新建录制</button></div></section>
       <section id="recovery" class="recovery hidden"><span id="recovery-text"></span><button id="recover" class="quiet" type="button" data-i18n="btnRecover">恢复并下载</button><button id="discard" class="text" type="button" data-i18n="btnDiscard">丢弃</button></section>
     </main>
     <script src="recorder.js"></script>

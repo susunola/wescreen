@@ -22,11 +22,11 @@ const I18N = {
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
     autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '单个文件', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
-    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载 WebM', btnNewRecording: '新建录制',
+    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载 WebM', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '新建录制',
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
-    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`, segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`,
+    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`, segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
     storageHint: (free) => `本机可用存储约 ${free}，录像只写入这台设备。`,
     storageUnknown: '无法读取本机可用存储空间。',
     starting: (n) => `${n}…`,
@@ -61,11 +61,11 @@ const I18N = {
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
     autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'One file', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
-    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download WebM', btnNewRecording: 'New recording',
+    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download WebM', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'New recording',
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
-    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`, segmentSaved: (n) => `Part ${n} saved. Recording continues.`,
+    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`, segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
     storageHint: (free) => `About ${free} of local storage available. This recording is written to this device only.`,
     storageUnknown: 'Local storage availability could not be read.',
     starting: (n) => `${n}…`,
@@ -96,7 +96,7 @@ const L = (key, ...args) => {
   return typeof value === 'function' ? value(...args) : value;
 };
 
-let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null, clicks = [];
+let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null, clicks = [], markers = [];
 let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, segmentTimer = null, finalBlob = null, finalSize = 0, recordingStream = null, segmentIndex = 1, rollingSegment = false;
 let sessionStartedAt = 0, lastMemorySync = 0, chunkSeq = 0;
 let hintKey = null, hintArgs = [], hintAlerts = false, captureNote = null;
@@ -357,6 +357,7 @@ function beginRecording(stream) {
   if (!type) throw new Error(L('errUnsupported'));
   recordingStream = stream;
   segmentIndex = 1;
+  markers = [];
   armRecorder(stream, type);
   sessionStartedAt = Date.now();
   startedAt = sessionStartedAt;
@@ -448,6 +449,10 @@ function pause() {
     $('pause').dataset.i18n = 'btnPause';
   }
 }
+function markImportant() {
+  if (!isRecording() || !recorder || recorder.state !== 'recording') return;
+  const at = elapsed(); markers.push({ at, label: 'important' }); setHint('markerSaved', [fmt(at)]);
+}
 const stop = () => { if (recorder && recorder.state !== 'inactive') recorder.stop(); };
 function releaseCapture() {
   clearInterval(timer);
@@ -514,12 +519,17 @@ function download(blob = finalBlob, explicitName = null) {
     })
     .catch(() => { fallback(); setNotice(L('errDownload')); });
 }
+function downloadNotes() {
+  const payload = { title: sanitized(), durationSeconds: Math.round(elapsed() / 1000), markers, createdAt: new Date().toISOString() };
+  download(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `${sanitized()}.learning-notes.json`);
+}
 const persistLang = () => chrome.storage.local.set({ lang: LANG }).catch(() => {});
 
 // ---- messages and boot -----------------------------------------------------
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'stop-recording') stop();
   if (message.type === 'pause-recording') pause();
+  if (message.type === 'mark-important') markImportant();
   if (message.type === 'pointer-event' && isRecording()) clicks.push({ x: Math.min(1, Math.max(0, message.x)), y: Math.min(1, Math.max(0, message.y)), at: Date.now() });
 });
 $('start').addEventListener('click', () => {
@@ -528,7 +538,9 @@ $('start').addEventListener('click', () => {
 });
 $('stop').onclick = stop;
 $('pause').onclick = pause;
+$('mark').onclick = markImportant;
 $('download').onclick = () => download();
+$('notes').onclick = downloadNotes;
 $('new-recording').onclick = () => { setNotice(''); setHint(null); show('setup'); };
 $('language').onclick = () => {
   applyLang(LANG === 'zh' ? 'en' : 'zh');
