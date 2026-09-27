@@ -72,7 +72,7 @@ If you need MP4 rather than WebM, convert the downloaded file with any video too
 - **Website:** https://github.com/susunola/wescreen
 - **Support contact:** https://github.com/susunola/wescreen/issues
 - **Mature content:** no
-- **Privacy policy URL:** https://susunola.github.io/wescreen/privacy.html
+- **Privacy policy URL:** https://susunola.github.io/wescreen/
 
 ---
 
@@ -136,7 +136,7 @@ WeScreen 可以录制你的整个屏幕、单个窗口或浏览器标签页，�
 - **网站：** https://github.com/susunola/wescreen
 - **支持联系方式：** https://github.com/susunola/wescreen/issues
 - **成人内容：** 否
-- **隐私政策 URL：** https://susunola.github.io/wescreen/privacy.html
+- **隐私政策 URL：** https://susunola.github.io/wescreen/
 
 ---
 
