@@ -209,7 +209,7 @@ const SETTING_FIELDS = [
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
 const persist = () => chrome.storage.local.set({ settings: readSettings() }).catch(() => {});
 async function loadSettings() {
-  const { settings = {}, lang } = await chrome.storage.local.get(['settings', 'lang']);
+  const { settings = {}, lang, pendingLink, filenameSuggestion } = await chrome.storage.local.get(['settings', 'lang', 'pendingLink', 'filenameSuggestion']);
   if (settings.quality === '1' || settings.quality === '0') settings.quality = 'standard';
   // 1.0 folded resolution into the quality preset; 1.1 gives it its own field.
   if (!OPEN_QUALITIES.has(settings.resolution)) settings.resolution = settings.quality === 'compact' ? '720' : '1080';
@@ -221,6 +221,10 @@ async function loadSettings() {
     if (kind === 'checked') $(id).checked = Boolean(value);
     else if (kind === 'select' && ![...$(id).options].some((option) => option.value === String(value))) continue;
     else $(id).value = String(value);
+  }
+  if (pendingLink && filenameSuggestion && (!settings.filename || settings.filename === 'wescreen-recording')) {
+    $('filename').value = `${filenameSuggestion}-recording`;
+    setNotice(LANG === 'zh' ? `已打开 ${new URL(pendingLink).hostname}。在 Edge 选择器中选择该标签页即可开始录制。` : `${new URL(pendingLink).hostname} is ready. Select that tab in the Edge picker to record it.`);
   }
   if (!Number.isFinite(Number($('countdown').value))) $('countdown').value = '3';
 }
@@ -344,6 +348,7 @@ async function start() {
     resetStart();
     return;
   }
+  chrome.storage.local.remove(['pendingLink', 'filenameSuggestion']).catch(() => {});
   const note = await applyOutputSize(displayStream);
   setCaptureNote(note && note.key, (note && note.args) || []);
   await addMic();

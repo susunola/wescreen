@@ -8,3 +8,20 @@ document.querySelector('#open').addEventListener('click', async () => {
   await chrome.tabs.create({ url: chrome.runtime.getURL('recorder.html') });
   window.close();
 });
+
+const urlInput = document.querySelector('#record-url');
+document.querySelector('#open-link').addEventListener('click', async () => {
+  let url = urlInput.value.trim();
+  if (!url) return urlInput.focus();
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  try {
+    const target = new URL(url);
+    await chrome.storage.local.set({ pendingLink: target.href, filenameSuggestion: target.hostname.replace(/^www\./, '') });
+    await chrome.tabs.create({ url: target.href });
+    window.close();
+  } catch {
+    urlInput.setCustomValidity('Enter a valid http(s) URL.');
+    urlInput.reportValidity();
+  }
+});
+urlInput.addEventListener('input', () => urlInput.setCustomValidity(''));
