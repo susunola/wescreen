@@ -12,6 +12,7 @@
       <section id="setup" class="panel">
         <p class="privacy" id="privacy"></p>
         <p data-i18n="setupLead">录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。</p>
+        <details class="course" id="course-panel"><summary data-i18n="courseMode">课程录制模式</summary><label class="toggle"><input id="course-enabled" type="checkbox"><span data-i18n="courseEnabled">使用课程自动命名</span></label><div class="course-grid"><label><span data-i18n="courseName">课程名称</span><input id="course-name" maxlength="60" placeholder="Edge 基础教程"></label><label><span data-i18n="episodeNumber">第几集</span><input id="episode-number" type="number" min="1" value="1"></label><label class="course-title"><span data-i18n="episodeTitle">本集标题</span><input id="episode-title" maxlength="80" placeholder="第一课：开始使用"></label></div><p class="hint" id="course-filename"></p></details>
         <div class="grid">
           <label><span data-i18n="labelFilename">文件名</span><input id="filename" value="wescreen-recording" maxlength="80"></label>
           <label><span data-i18n="labelResolution">分辨率</span><select id="resolution"><option value="source" data-i18n="resSource">原始分辨率</option><option value="1080" data-i18n="res1080">1080p</option><option value="720" data-i18n="res720">720p</option></select></label>

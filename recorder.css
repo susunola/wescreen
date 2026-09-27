@@ -3,3 +3,4 @@
 .notice{margin:14px 0 0;padding:11px 13px;border:1px solid #9f5353;border-radius:9px;background:#2f1d20;color:#f3c3c8;font-size:13px;line-height:1.55}
 .hint.alert{color:#f0c37a}
 .mem{color:#9cafaa;font-size:13px}.mem.warn{color:#f0c37a}.mem.crit{color:#f19aa6;font-weight:650}
+.course{margin:0 0 20px;padding:13px 15px;border:1px solid #3a4a47;border-radius:10px;background:#13201d}.course summary{cursor:pointer;font-weight:750;color:#d8ece4}.course[open] summary{margin-bottom:10px}.course-grid{display:grid;grid-template-columns:1fr 120px;gap:12px}.course-title{grid-column:1/-1}@media(max-width:560px){.course-grid{grid-template-columns:1fr}.course-title{grid-column:auto}}

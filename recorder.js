@@ -26,7 +26,7 @@ const I18N = {
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
-    resultTitle: '录制完成',
+    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`,
     storageHint: (free) => `本机可用存储约 ${free}，录像只写入这台设备。`,
     storageUnknown: '无法读取本机可用存储空间。',
     starting: (n) => `${n}…`,
@@ -65,7 +65,7 @@ const I18N = {
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
-    resultTitle: 'Recording complete',
+    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`,
     storageHint: (free) => `About ${free} of local storage available. This recording is written to this device only.`,
     storageUnknown: 'Local storage availability could not be read.',
     starting: (n) => `${n}…`,
@@ -199,12 +199,13 @@ function applyLang(next) {
   if (finalSize && !$('result').classList.contains('hidden')) setHint('resultSize', [fmtBytes(finalSize)]);
   syncMemory();
   renderStorageHint();
+  if ($('course-enabled')) updateCourseFilename();
 }
 
 // ---- settings -------------------------------------------------------------
 const SETTING_FIELDS = [
   ['filename', 'text'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
-  ['countdown', 'select'], ['autostop', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked']
+  ['countdown', 'select'], ['autostop', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
 ];
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
 const persist = () => chrome.storage.local.set({ settings: readSettings() }).catch(() => {});
@@ -227,6 +228,19 @@ async function loadSettings() {
     setNotice(LANG === 'zh' ? `已打开 ${new URL(pendingLink).hostname}。在 Edge 选择器中选择该标签页即可开始录制。` : `${new URL(pendingLink).hostname} is ready. Select that tab in the Edge picker to record it.`);
   }
   if (!Number.isFinite(Number($('countdown').value))) $('countdown').value = '3';
+  updateCourseFilename();
+}
+
+function updateCourseFilename() {
+  const enabled = $('course-enabled').checked;
+  const name = $('course-name').value.trim();
+  const episode = Math.max(1, Number($('episode-number').value) || 1);
+  const title = $('episode-title').value.trim();
+  const hint = $('course-filename');
+  if (!enabled || !name) { hint.textContent = ''; return; }
+  const generated = `${name}-${String(episode).padStart(2, '0')}${title ? `-${title}` : ''}`.replace(/[\\/:*?"<>|]/g, '-');
+  $('filename').value = generated;
+  hint.textContent = L('courseFilename', generated);
 }
 
 // ---- capture --------------------------------------------------------------
@@ -443,6 +457,7 @@ function finish() {
   const type = (recorder && recorder.mimeType) || 'video/webm';
   finalBlob = new Blob(chunks, { type });
   finalSize = finalBlob.size;
+  if ($('course-enabled').checked) { $('episode-number').value = String(Math.max(1, Number($('episode-number').value) || 1) + 1); persist(); updateCourseFilename(); }
   const url = URL.createObjectURL(finalBlob);
   $('preview').src = url;
   $('preview').onloadeddata = () => URL.revokeObjectURL(url);
@@ -493,6 +508,7 @@ $('language').onclick = () => {
   applyLang(LANG === 'zh' ? 'en' : 'zh');
   persistLang();
 };
+['course-enabled', 'course-name', 'episode-number', 'episode-title'].forEach((id) => $(id).addEventListener('input', updateCourseFilename));
 // Closing mid-recording loses the in-flight take; IndexedDB only keeps what already landed.
 window.addEventListener('beforeunload', (event) => {
   if (!recorder || recorder.state === 'inactive') return;
