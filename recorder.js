@@ -21,7 +21,7 @@ const I18N = {
     qualityStandard: '标准', qualityHigh: '高画质', qualityCompact: '节省空间',
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
     autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟',
-    legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白',
+    legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画',
     btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载 WebM', btnNewRecording: '新建录制',
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
@@ -60,7 +60,7 @@ const I18N = {
     qualityStandard: 'Standard', qualityHigh: 'High', qualityCompact: 'Space saver',
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
     autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes',
-    legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration',
+    legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture',
     btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download WebM', btnNewRecording: 'New recording',
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
@@ -96,7 +96,7 @@ const L = (key, ...args) => {
   return typeof value === 'function' ? value(...args) : value;
 };
 
-let displayStream = null, micStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0;
+let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null;
 let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, finalBlob = null, finalSize = 0;
 let sessionStartedAt = 0, lastMemorySync = 0, chunkSeq = 0;
 let hintKey = null, hintArgs = [], hintAlerts = false, captureNote = null;
@@ -204,7 +204,7 @@ function applyLang(next) {
 // ---- settings -------------------------------------------------------------
 const SETTING_FIELDS = [
   ['filename', 'text'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
-  ['countdown', 'select'], ['autostop', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked']
+  ['countdown', 'select'], ['autostop', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked']
 ];
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
 const persist = () => chrome.storage.local.set({ settings: readSettings() }).catch(() => {});
@@ -268,6 +268,32 @@ async function addMic() {
   try {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   } catch { micStream = null; }
+}
+async function addCamera() {
+  if (!$('camera').checked) return;
+  cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+}
+async function composePictureInPicture() {
+  const screenVideo = document.createElement('video');
+  const cameraVideo = document.createElement('video');
+  screenVideo.srcObject = displayStream; cameraVideo.srcObject = cameraStream;
+  screenVideo.muted = true; cameraVideo.muted = true; screenVideo.playsInline = true; cameraVideo.playsInline = true;
+  await Promise.all([screenVideo.play(), cameraVideo.play()]);
+  const source = displayStream.getVideoTracks()[0].getSettings();
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width || 1280; canvas.height = source.height || 720;
+  const ctx = canvas.getContext('2d');
+  const draw = () => {
+    ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+    const width = Math.round(canvas.width * .23), height = Math.round(width * 9 / 16), pad = Math.round(canvas.width * .025);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(canvas.width - width - pad, canvas.height - height - pad, width, height, Math.round(width * .08)); ctx.clip();
+    ctx.drawImage(cameraVideo, canvas.width - width - pad, canvas.height - height - pad, width, height); ctx.restore();
+    ctx.lineWidth = Math.max(2, Math.round(canvas.width / 500)); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeRect(canvas.width - width - pad, canvas.height - height - pad, width, height);
+    compositor.frame = requestAnimationFrame(draw);
+  };
+  compositor = { frame: 0, screenVideo, cameraVideo };
+  draw();
+  return canvas.captureStream(Number($('framerate').value) || 30);
 }
 function mixAudio() {
   const context = new AudioContext();
@@ -352,6 +378,7 @@ async function start() {
   const note = await applyOutputSize(displayStream);
   setCaptureNote(note && note.key, (note && note.args) || []);
   await addMic();
+  try { await addCamera(); } catch { cameraStream = null; }
   const wait = Number($('countdown').value) || 0;
   if (wait) {
     $('start').disabled = true;
@@ -365,7 +392,7 @@ async function start() {
   const video = displayStream.getVideoTracks()[0];
   if (video) video.onended = () => stop();
   try {
-    beginRecording(displayStream);
+    beginRecording(cameraStream ? await composePictureInPicture() : displayStream);
   } catch (error) {
     releaseCapture();
     setNotice(error && error.message ? error.message : L('errStart', 'unknown error'));
@@ -393,7 +420,8 @@ function releaseCapture() {
   clearTimeout(stopTimer);
   timer = null;
   stopTimer = null;
-  [displayStream, micStream].filter(Boolean).forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+  if (compositor) { cancelAnimationFrame(compositor.frame); compositor.screenVideo.pause(); compositor.cameraVideo.pause(); compositor = null; }
+  [displayStream, micStream, cameraStream].filter(Boolean).forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
   if (mixer) { mixer.close().catch(() => {}); mixer = null; }
 }
 function resetStart() {
@@ -403,6 +431,7 @@ function resetStart() {
   $('start').dataset.i18n = 'btnStart';
   displayStream = null;
   micStream = null;
+  cameraStream = null;
   recorder = null;
   chunks = [];
   chunkBytes = 0;
