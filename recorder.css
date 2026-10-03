@@ -317,3 +317,5 @@ body.cinema-mode{background:#090b0e;}body.cinema-mode .app{width:100%;max-width:
 @media(min-width:1300px){body.cinema-mode #playback-shell .player-control-deck{left:36px;right:36px;bottom:26px;padding:12px 24px 16px;}body.cinema-mode #rotated-playback-controls{gap:18px;}}
 @media(max-width:650px){#playback-shell .player-control-deck,#playback-shell:fullscreen .player-control-deck{left:10px;right:10px;bottom:10px;padding:6px 10px 8px;border-radius:12px;}#rotated-playback-controls{gap:2px;}#rotated-playback-controls #rotated-play{width:32px!important;height:32px!important;}.cinema-popover{max-height:calc(100vh - 170px);}body.cinema-mode .app{padding:0 8px;}.cinema-header-action{font-size:11px;padding:7px 6px;}.player-topbar #playback-name{font-size:11px;}.cinema-brand{width:22px;height:22px;}#playback-enhancement-badge{left:10px;top:10px;font-size:10px;}}
 @media(prefers-reduced-transparency:reduce){#playback-shell .player-control-deck{background:#1b2029;backdrop-filter:none;}.cinema-popover{background:#21252c;}}
+/* The page's generic video preview cap must not constrain cinema/fullscreen. */
+#playback-stage #preview{max-height:none;border-radius:0;}
