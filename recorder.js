@@ -151,7 +151,7 @@ async function saveThumbnail(blob, id) {
       const store = tx.objectStore('recordings'), request = store.get(id);
       request.onsuccess = () => { if (request.result) store.put({ ...request.result, thumbnail }); };
     });
-    await renderRecordingLibrary();
+    for(const row of $('recording-items').children){if(row.dataset.recordingId===id){const image=row.querySelector('.recording-thumbnail');if(image)image.src=thumbnail;}}
   } finally { video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url); }
 }
 async function refreshMicDevices() {
@@ -252,6 +252,7 @@ function applyLang(next) {
     const value = I18N[LANG][node.dataset.i18n];
     if (typeof value === 'string') node.textContent = value;
   });
+  $('library-search').placeholder=L('librarySearchPlaceholder');
   $('privacy').textContent = L('privacy');
   const pauseKey = recorder && recorder.state === 'paused' ? 'btnResume' : 'btnPause';
   $('pause').textContent = L(pauseKey);

@@ -42,7 +42,7 @@ async function renderRecordingLibrary() {
   for (const choice of choices) { const option = document.createElement('option'); option.value = choice.value; option.textContent = choice.text; courseSelect.append(option); }
   courseSelect.value = [...courseSelect.options].some(option => option.value === selectedCourse) ? selectedCourse : '';
   const query = $('library-search').value.trim().toLocaleLowerCase();
-  const entries = active.filter(entry => (!courseSelect.value || (courseSelect.value.startsWith('channel:') ? entry.channelId === courseSelect.value.slice(8) : !entry.channelId && entry.course === courseSelect.value)) && `${entry.name} ${entry.course || ''}`.toLocaleLowerCase().includes(query));
+  const entries = active.filter(entry => (!$('library-kind').value || ($('library-kind').value==='enhanced' ? !!entry.enhancedFrom : !entry.enhancedFrom)) && (!courseSelect.value || (courseSelect.value.startsWith('channel:') ? entry.channelId === courseSelect.value.slice(8) : !entry.channelId && entry.course === courseSelect.value)) && `${entry.name} ${entry.course || ''}`.toLocaleLowerCase().includes(query));
   const sort = $('library-sort')?.value || 'newest';
   entries.sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name) : sort === 'size' ? b.size-a.size : b.createdAt-a.createdAt);
   if ($('library-group').checked) {
@@ -65,11 +65,14 @@ async function renderRecordingLibrary() {
     const row = document.createElement('li'); row.className = 'media-row' + (entry.enhancedFrom && $('library-group').checked ? ' derived-row' : ''); row.dataset.recordingId = entry.id;
     const check = document.createElement('input'); check.type = 'checkbox'; check.className = 'row-select'; check.checked = librarySelection.has(entry.id); check.setAttribute('aria-label', L('selectRecording', entry.name));
     check.onchange = () => { if (check.checked) librarySelection.add(entry.id); else librarySelection.delete(entry.id); updateLibrarySelection(); }; row.append(check);
-    const image = document.createElement('img'); image.src = entry.thumbnail || 'assets/logo.png'; image.alt = ''; image.className = 'recording-thumbnail'; row.append(image);
+    const image = document.createElement('img'); image.src = entry.thumbnail || 'assets/logo.png'; image.alt = ''; image.className = 'recording-thumbnail'; const thumbnail=document.createElement('button');thumbnail.type='button';thumbnail.className='thumbnail-play';thumbnail.setAttribute('aria-label',L('openRecording')+' '+entry.name);thumbnail.onclick=()=>playRecording(entry).catch(workspaceError);thumbnail.append(image);const overlay=document.createElement('span');overlay.className='thumbnail-overlay';overlay.textContent='▶';thumbnail.append(overlay);const duration=document.createElement('span');duration.className='thumbnail-duration';duration.textContent=entry.duration ? fmt(entry.duration) : '--:--';thumbnail.append(duration);row.append(thumbnail);
     const body = document.createElement('div'); body.className = 'media-body';
-    const title = document.createElement('strong'); title.textContent = entry.name; body.append(title);
+    const title = document.createElement('strong'); title.textContent = entry.sourceTitle || entry.name.replace(/\.(mp4|webm)$/i,''); body.append(title);
+    const badge=document.createElement('span');badge.className='recording-badge'+(entry.enhancedFrom ? ' enhanced-badge':'');badge.textContent=L(entry.enhancedFrom ? 'enhancedBadge':'originalBadge');title.append(badge);
+    const filename=document.createElement('p');filename.className='recording-filename hint';filename.textContent=entry.name;body.append(filename);
     const detail = document.createElement('p'); detail.className = 'hint'; detail.textContent = `${entry.duration ? fmt(entry.duration) : '--:--'} · ${entry.width && entry.height ? `${entry.width}×${entry.height} · ` : ''}${fmtBytes(entry.size)} · ${entry.course || L('uncategorized')} · ${new Date(entry.createdAt).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : 'en')}`; body.append(detail);
-    if (entry.enhancedFrom) { const parent = all.find(item => item.id === entry.enhancedFrom); const version = document.createElement('p'); version.className = 'version-label'; version.textContent = L('derivedVersion', parent?.name || L('originalUnavailable')); body.append(version); if (parent && !parent.deletedAt) body.append(libraryButton('originalVideo', () => playRecording(parent), 'text')); }
+    if (entry.enhancedFrom) { const parent = all.find(item => item.id === entry.enhancedFrom); if (parent && !parent.deletedAt) { const original=libraryButton('originalVideo',()=>playRecording(parent),'text');original.classList.add('original-link');detail.append(' · ',original); } else { const version=document.createElement('p');version.className='version-label';version.textContent=L('originalUnavailable');body.append(version); } }
+
     const location = document.createElement('p'); location.className = 'hint recording-location'; location.textContent = L('localLocation'); body.append(location);
     if (entry.downloadPath) { const path = document.createElement('p'); path.className = 'hint recording-location'; path.textContent = L(entry.downloadExists === false ? 'missingDownload' : 'downloadedLocation', entry.downloadPath); body.append(path); }
     if (entry.sourceUrl) { const link = document.createElement('a'); link.href = telegramLink(entry.sourceUrl); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = L('sourceMessage'); body.append(link); }
@@ -80,7 +83,7 @@ async function renderRecordingLibrary() {
     } else {
       actions.append(libraryButton('openRecording', () => playRecording(entry), 'primary'));
       actions.append(libraryButton('enhanceRecording', () => openEnhancement(entry)));
-      const menu = document.createElement('details'); menu.className = 'row-menu'; const summary = document.createElement('summary'); summary.textContent = L('more'); menu.append(summary);
+      const menu = document.createElement('details'); menu.className = 'row-menu'; const summary = document.createElement('summary'); summary.textContent = '⋯';summary.setAttribute('aria-label',L('more')); menu.append(summary);
       const items = document.createElement('div'); items.className = 'menu-items';
       items.append(libraryButton('btnDownload', async () => { const blob = await readStore('videos',entry.id); download(blob,entry.name,entry.id); }));
       items.append(libraryButton('editVideo', () => openVideoEditor(entry)));
@@ -98,11 +101,12 @@ async function renderRecordingLibrary() {
       items.append(libraryButton('deleteRecording', () => removeRecordings([entry.id])));
       menu.append(items); actions.append(menu);
     }
-    body.append(actions); row.append(body); list.append(row);
+    row.append(body,actions); list.append(row);
   }
   updateLibrarySelection();
 }
 function updateLibrarySelection() {
+  $('library-selection-count').textContent=librarySelection.size ? L('selectedCount',librarySelection.size) : L('selectAll');
   $('bulk-hint').hidden=librarySelection.size>0;
   $('batch-add').disabled = !librarySelection.size || libraryTrash;$('bulk-delete').disabled = !librarySelection.size; $('bulk-restore').disabled = !librarySelection.size; $('bulk-restore').hidden = !libraryTrash;
   $('bulk-delete').textContent = L(libraryTrash ? 'deletePermanently' : 'moveTrash') + (librarySelection.size ? ` (${librarySelection.size})` : '');

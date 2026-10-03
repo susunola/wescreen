@@ -33,6 +33,19 @@ const {chromium}=require('playwright');const fs=require('fs'),os=require('os'),p
   await page.evaluate(async()=>{await renderEnhancementTasks();});await page.waitForFunction(()=>!document.getElementById('tasks-connect').hidden);if(!await page.locator('#tasks-connect').isVisible())throw new Error('Offline reconnect action missing');
   checks.processingEmptyState=true;checks.processingConnectionStatus=true;
 
+  await page.setViewportSize({width:1280,height:1000});await page.evaluate(()=>applyLang('zh'));
+  await page.locator('[data-view=about]').click();if(!await page.locator('#about-view').isVisible())throw new Error('About navigation failed');
+  if(!await page.locator('#about-view').textContent().then(text=>text.includes('atomoswang')))throw new Error('About author missing');
+  if(await page.locator('#about-view [data-app-version]').textContent()!=='v'+version)throw new Error('About version mismatch');
+  if(await page.locator('#about-helper-download').getAttribute('href')!=='https://github.com/susunola/wescreen/releases/latest')throw new Error('Helper download link missing');
+  if(process.env.WESCREEN_ABOUT_SCREENSHOT)await page.screenshot({path:process.env.WESCREEN_ABOUT_SCREENSHOT,fullPage:true});
+  await page.evaluate(async()=>{const original=await readStore('recordings',finalId),blob=await readStore('videos',finalId);await updateRecording(original.id,{sourceTitle:'视频演示'});const child={...original,id:crypto.randomUUID(),name:'demo-natural.mp4',enhancedFrom:original.id,enhancement:'natural',createdAt:Date.now()};await runTx(['recordings','videos'],'readwrite',tx=>{tx.objectStore('recordings').put(child);tx.objectStore('videos').put(blob,child.id);});librarySelection.add(child.id);await renderRecordingLibrary();navigateWorkspace('library');});
+  if(await page.locator('.media-row').count()!==2 || await page.locator('.derived-row').count()!==1)throw new Error('Library version grouping failed');
+  await page.locator('.row-menu summary').first().click();await page.evaluate(async()=>{await saveThumbnail(await readStore('videos',finalId),finalId);});if(!await page.locator('.row-menu').first().getAttribute('open').then(value=>value!==null))throw new Error('Thumbnail refresh closed recording actions');await page.locator('.row-menu summary').first().click();
+  await page.locator('.library-more-filters summary').click();await page.locator('#library-kind').selectOption('enhanced');await page.waitForFunction(()=>document.querySelectorAll('.media-row').length===1);if(await page.locator('.derived-row').count()!==1)throw new Error('Enhanced version filter failed');await page.locator('#library-kind').selectOption('original');await page.waitForFunction(()=>document.querySelectorAll('.media-row').length===1 && !document.querySelector('.derived-row'));await page.locator('#library-kind').selectOption('');await page.waitForFunction(()=>document.querySelectorAll('.media-row').length===2);await page.locator('.library-more-filters summary').click();
+  if(process.env.WESCREEN_LIBRARY_SCREENSHOT)await page.screenshot({path:process.env.WESCREEN_LIBRARY_SCREENSHOT,fullPage:true});
+  for(const lang of ['zh','en']){await page.evaluate(lang=>applyLang(lang),lang);await page.setViewportSize({width:390,height:844});for(const view of ['library','about']){await page.evaluate(view=>navigateWorkspace(view),view);if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error(view+' narrow overflow '+lang);}}
+  checks.aboutPage=true;checks.libraryRedesign=true;
   console.log(JSON.stringify({package:path.basename(zip),...checks,errors,narrowLanguages:['zh','en']}));
  }finally{if(context)await context.close();fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exitCode=1;});
