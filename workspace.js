@@ -36,7 +36,7 @@ function stopLivePreview() {
 function workspaceError(error){$(workspaceView==='tasks' ? 'tasks-status' : workspaceView==='channels' ? 'channel-status' : workspaceView==='library' ? 'library-status' : 'notice').textContent=error.message;if(workspaceView==='capture')$('notice').hidden=false;}
 async function initWorkspace() {
   await initTelegramChannels();
-  document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>navigateWorkspace(button.dataset.view));
+  document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>{if(button.dataset.view==='capture' && recordingView==='result' && !recorder)prepareNextRecording();else navigateWorkspace(button.dataset.view);});
   $('channel-start').onclick=()=>{$('capture-mode').value='telegram';applyCapturePreset();navigateWorkspace('capture');show('setup');};
   $('live-return').onclick=()=>navigateWorkspace('capture');
   for (const id of ['library-sort','library-group']) $(id).onchange=()=>{libraryPage=0;renderRecordingLibrary().catch(workspaceError);};

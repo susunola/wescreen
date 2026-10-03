@@ -26,7 +26,7 @@ const I18N = {
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
     autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '仅按内存自动分段', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
-    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载录像', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '新建录制',
+    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载录像', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '录制下一条',
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
@@ -68,7 +68,7 @@ const I18N = {
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
     autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'Memory-based rotation only', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
-    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download video', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'New recording',
+    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download video', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'Record next video',
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
@@ -759,7 +759,9 @@ $('mark').onclick = markImportant;
 $('download').onclick = () => download();
 $('notes').onclick = downloadNotes;
 $('export-course').onclick = async () => { const entries = (await readStore('recordings')).filter(entry => entry.course && !entry.deletedAt); download(new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' }), 'wescreen-course-index.json'); };
-$('new-recording').onclick = () => { setNotice(''); setHint(null); show('setup'); };
+function prepareNextRecording() { $('preview').pause(); setNotice(''); setHint(null); show('setup'); window.scrollTo({top:0}); }
+$('new-recording').onclick = prepareNextRecording;
+$('result-library').onclick = () => { $('preview').pause(); navigateWorkspace('library'); };
 $('language').onclick = () => {
   applyLang(LANG === 'zh' ? 'en' : 'zh');
   persistLang();
