@@ -6,6 +6,7 @@ for (const lang of ['zh','en']) Object.assign(I18N[lang],UI_TEXT[lang]);
 let recordingMonitor=null,monitorLastFrames=0,monitorSilenceAt=0;
 let workspaceView = 'capture', liveMeter = null;
 function navigateWorkspace(view) {
+  if((view!=='capture' || recordingView!=='result') && document.body.classList.contains('cinema-mode'))setTheatreMode(false);
   workspaceView = view;
   $('about-view').classList.toggle('hidden',view!=='about');
   $('channel-workbench').classList.toggle('hidden',view!=='channels');

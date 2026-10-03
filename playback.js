@@ -5,7 +5,7 @@ function layoutPlaybackRotation() {
  if(!video.videoWidth || !video.videoHeight || !stage.clientWidth)return;
  const radians=playbackRotation*Math.PI/180,c=Math.abs(Math.cos(radians)),s=Math.abs(Math.sin(radians));
  const boundsWidth=video.videoWidth*c+video.videoHeight*s,boundsHeight=video.videoWidth*s+video.videoHeight*c;
- const maxHeight=document.fullscreenElement===$('playback-shell') ? Math.max(120,innerHeight):540;
+ const maxHeight=document.fullscreenElement===$('playback-shell') ? Math.max(120,innerHeight):(document.body.classList.contains('cinema-mode') ? Math.max(120,innerHeight-120):540);
  const scale=Math.min(stage.clientWidth/boundsWidth,maxHeight/boundsHeight);
  stage.style.height=`${boundsHeight*scale}px`;video.style.width=`${video.videoWidth*scale*playbackZoom}px`;video.style.height=`${video.videoHeight*scale*playbackZoom}px`;
  const maxX=boundsWidth*scale*(playbackZoom-1)/2,maxY=boundsHeight*scale*(playbackZoom-1)/2;playbackPan.x=Math.max(-maxX,Math.min(maxX,playbackPan.x));playbackPan.y=Math.max(-maxY,Math.min(maxY,playbackPan.y));stage.dataset.zoomed=String(playbackZoom>1);
@@ -108,7 +108,7 @@ $('playback-volume').oninput=()=>{$('preview').volume=Number($('playback-volume'
 $('preview').addEventListener('volumechange',()=>{$('playback-volume').value=String($('preview').volume);});
 
 let instantEnhancement=null,playbackAIBusy=false;
-function updateInstantEnhancementButton(){const button=$('playback-instant');button.setAttribute('aria-pressed',String(!!instantEnhancement));button.textContent=E('即时增强','Instant enhancement');}
+function updateInstantEnhancementButton(){const button=$('playback-instant');button.setAttribute('aria-pressed',String(!!instantEnhancement));button.textContent=E('即时增强','Instant enhancement');const badge=$('playback-enhancement-badge');if(badge)badge.hidden=!instantEnhancement;}
 $('playback-instant').onclick=()=>{
  if(instantEnhancement){for(const [key,value] of Object.entries(instantEnhancement))$('playback-'+key).value=value;instantEnhancement=null;}
  else{instantEnhancement=Object.fromEntries(['brightness','contrast','sharpness'].map(key=>[key,$('playback-'+key).value]));$('playback-brightness').value='1.05';$('playback-contrast').value='1.1';$('playback-sharpness').value='0.2';}
@@ -191,3 +191,19 @@ $('playback-enhance').dataset.i18n='enhanceMore';$('playback-enhance').textConte
 cinemaTransport.insertBefore($('rotated-mute'),$('playback-time'));cinemaTransport.insertBefore($('playback-volume'),$('playback-time'));
 function paintCinemaRanges(){for(const input of [$('rotated-seek'),$('playback-volume')]){const fraction=(Number(input.value)-Number(input.min))/(Number(input.max)-Number(input.min));input.style.setProperty('--played',`${Math.max(0,Math.min(1,fraction))*100}%`);}}
 $('preview').addEventListener('timeupdate',paintCinemaRanges);$('preview').addEventListener('loadedmetadata',paintCinemaRanges);$('rotated-seek').addEventListener('input',paintCinemaRanges);$('playback-volume').addEventListener('input',paintCinemaRanges);paintCinemaRanges();
+
+// Immersive cinema mode shares the same controls with native fullscreen.
+$('playback-stage').append(document.querySelector('.player-control-deck'));
+const theatreButton=document.createElement('button');theatreButton.id='playback-theatre';theatreButton.type='button';theatreButton.className='cinema-header-action';theatreButton.setAttribute('aria-pressed','false');theatreButton.dataset.i18n='cinemaMode';theatreButton.textContent=E('影院模式','Cinema mode');
+const closePlayer=document.createElement('button');closePlayer.id='playback-close';closePlayer.type='button';closePlayer.className='cinema-header-action';closePlayer.textContent='×';closePlayer.setAttribute('aria-label',E('返回录像库','Back to library'));closePlayer.onclick=()=>{$('preview').pause();setTheatreMode(false);$('result-library').click();};
+const playerHeader=document.querySelector('.player-topbar');playerHeader.append(theatreButton,closePlayer);
+let theatreScroll=0;
+function setTheatreMode(enabled){if(enabled)theatreScroll=scrollY;document.body.classList.toggle('cinema-mode',enabled);theatreButton.setAttribute('aria-pressed',String(enabled));if(enabled)scrollTo(0,0);else scrollTo(0,theatreScroll);layoutPlaybackRotation();revealFullscreenControls();}
+theatreButton.onclick=()=>setTheatreMode(!document.body.classList.contains('cinema-mode'));
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && !document.fullscreenElement && !document.querySelector('dialog[open]') && document.body.classList.contains('cinema-mode'))setTheatreMode(false);});
+const moreMenu=document.createElement('details');moreMenu.id='playback-more-menu';moreMenu.className='cinema-menu';moreMenu.innerHTML='<summary aria-label="More" title="More"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></summary><div class="cinema-popover"></div>';
+const morePanel=moreMenu.querySelector('.cinema-popover');morePanel.append($('playback-version').closest('label'));cinemaTransport.append(moreMenu);cinemaMenus.push(moreMenu);moreMenu.querySelector('summary').onclick=()=>{cinemaMenus.filter(menu=>menu!==moreMenu).forEach(menu=>menu.open=false);revealFullscreenControls();};moreMenu.addEventListener('toggle',revealFullscreenControls);
+const enhancementBadge=document.createElement('span');enhancementBadge.id='playback-enhancement-badge';enhancementBadge.dataset.i18n='enhancementEnabled';enhancementBadge.textContent=E('增强已开启','Enhancement on');enhancementBadge.hidden=!instantEnhancement;$('playback-stage').append(enhancementBadge);
+$('playback-instant').addEventListener('click',()=>enhancementBadge.hidden=!instantEnhancement);
+$('preview').addEventListener('loadedmetadata',()=>enhancementBadge.hidden=!instantEnhancement);
+document.addEventListener('fullscreenchange',()=>{$('playback-fullscreen').querySelector('svg').innerHTML=document.fullscreenElement ? '<path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/>' : '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>';});
