@@ -1,6 +1,6 @@
 {
   "extDescription": {
-    "message": "Record screens, windows or tabs to MP4/WebM locally. Manage recordings, crop and trim, and optionally enhance through an authenticated local helper."
+    "message": "Record screens to MP4/WebM locally. Manage, crop, trim and rotate videos, with optional local enhancement."
   },
   "actionTitle": {
     "message": "Open the WeScreen recorder"

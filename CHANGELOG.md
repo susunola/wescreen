@@ -2,6 +2,8 @@
 
 ## 1.6.0 — 2026-10-03
 
+- Shorten the English manifest description to meet the 132-character store limit and validate every locale before packaging.
+
 - Add clockwise/counterclockwise portrait rotation, arbitrary 0–360° angles and an optional 1920×1080 landscape canvas, preserving audio and the original video.
 - Add recording write/audio warnings and preview frame diagnostics.
 - Add a channel workbench with reorder, skip and rerecord actions, duplicate message detection and remembered crop regions.
