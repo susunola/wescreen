@@ -40,4 +40,3 @@ document.querySelector('#open-link').addEventListener('click', async () => {
 });
 urlInput.addEventListener('input', () => urlInput.setCustomValidity(''));
 
-document.querySelector('#github-download').textContent = String(chrome.i18n.getUILanguage?.() || 'en').startsWith('zh') ? 'GitHub 下载扩展包' : 'Download from GitHub';
