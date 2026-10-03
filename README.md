@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.6.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.7.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -39,3 +39,7 @@ Browser tests require Playwright and Chromium; if absent those tests are skipped
 ## 1.6 workflow additions
 
 Channel workbench supports reorder, skip, rerecord and duplicate links. Recording diagnostics show preview fps/dropped frames, last completed writes and missing audio signals. A persisted sequential enhancement queue supports pause after the current job, resume and retries. Editing supports clockwise/counterclockwise 90° and arbitrary rotation, plus a 1920×1080 landscape canvas, preserving originals and audio. Border suggestions use the current frame only and require visual checking. Channel crop preferences and synchronized detail zoom are available. Token-file import simplifies pairing. Existing Homebrew installations can install missing FFmpeg/Python when starting; other systems still need prerequisites.
+
+### Continuous Telegram recording
+
+Check the shared picture and audio before starting. Open the separate control window to pause, resume or stop. Save the current video and prepare the next to retain the shared source while paused. Copy the next message link and open it in the original shared tab before resuming. Review start/middle/end thumbnails, inspect suggested black-screen trims, and remember crop/rotation/landscape preferences for matching dimensions. The control window is not always-on-top and may appear in whole-screen capture.

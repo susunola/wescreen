@@ -1,7 +1,7 @@
 let editorSource = null, editorUrl = null, editorSize = null, editorSubmitting = false;
 function clearVideoEditor() { const video=$('edit-preview');video.pause();video.removeAttribute('src');video.load();if(editorUrl)URL.revokeObjectURL(editorUrl);editorUrl=null;editorSource=null; }
 async function openVideoEditor(entry) {
-  if(editorSubmitting)return;editorSource=entry;editorSize=null;$('remember-channel-crop').checked=false;$('remember-channel-crop').disabled=!entry.channelId;$('edit-rotation').value='0';$('edit-landscape').checked=false;$('edit-status').textContent='';$('edit-start').value='0';$('edit-end').value=entry.duration ? (entry.duration/1000).toFixed(2):'';
+  if(editorSubmitting)return;editorSource=entry;editorSize=null;trimSuggestion=null;$('apply-trim').disabled=true;$('remember-channel-crop').checked=false;$('remember-channel-crop').disabled=!entry.channelId;$('edit-rotation').value='0';$('edit-landscape').checked=false;$('edit-status').textContent='';$('edit-start').value='0';$('edit-end').value=entry.duration ? (entry.duration/1000).toFixed(2):'';
   const blob=await readStore('videos',entry.id);if(!blob)throw new Error(L('errEmpty'));
   if(editorUrl)URL.revokeObjectURL(editorUrl);editorUrl=URL.createObjectURL(blob);$('edit-preview').src=editorUrl;$('edit-panel').showModal();
   $('edit-preview').onloadedmetadata=()=>{const video=$('edit-preview');editorSize={width:video.videoWidth,height:video.videoHeight};if(!Number.isFinite(Number($('edit-end').value)) || !$('edit-end').value)$('edit-end').value=Number.isFinite(video.duration)?video.duration.toFixed(2):'';resetCrop();restoreChannelCrop().catch(error=>$('edit-status').textContent=error.message);};
@@ -37,7 +37,7 @@ $('edit-save').onclick=async()=>{
   if(!enhancementToken){$('edit-status').textContent=L('helperOffline');return;}
   editorSubmitting=true;$('edit-save').disabled=true;
   try {
-    const source=editorSource,cropPreference={crop,width:editorSize.width,height:editorSize.height},remember=$('remember-channel-crop').checked;
+    const source=editorSource,cropPreference={crop,rotation,landscape:$('edit-landscape').checked,width:editorSize.width,height:editorSize.height},remember=$('remember-channel-crop').checked;
     const task=await submitProcessing(source,{mode:'edit',preview:false,start,end,crop,rotation,landscape:$('edit-landscape').checked});
     if(remember && source.channelId){const profile=await readStore('meta','channel:'+source.channelId);if(profile)await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,cropPreference},'channel:'+source.channelId));}
     $('edit-panel').close();clearVideoEditor();navigateWorkspace('tasks');
@@ -62,6 +62,7 @@ $('edit-preview').addEventListener('timeupdate',drawRotationPreview);$('edit-pre
 
 async function restoreChannelCrop(){
  const source=editorSource;if(!source?.channelId)return;const profile=await readStore('meta','channel:'+source.channelId),pref=profile?.cropPreference;if(editorSource!==source || !pref || pref.width!==editorSize?.width || pref.height!==editorSize?.height)return;
+ $('edit-rotation').value=String(pref.rotation || 0);$('edit-landscape').checked=!!pref.landscape;
  for(const [i,key] of ['x','y','width','height'].entries())$('crop-'+key).value=String(pref.crop[i]);drawCrop();
 }
 $('detect-video-area').onclick=()=>{
@@ -73,3 +74,13 @@ $('detect-video-area').onclick=()=>{
 };
 
 $('edit-landscape').onchange=drawRotationPreview;
+
+let trimSuggestion=null;
+$('suggest-trim').onclick=async()=>{
+ const source=editorSource,video=$('edit-preview'),duration=Number.isFinite(video.duration)?video.duration:(source?.duration || 0)/1000;if(!source || duration<=.4)return;
+ const button=$('suggest-trim');button.disabled=true;trimSuggestion=null;$('apply-trim').disabled=true;const originalTime=video.currentTime,canvas=document.createElement('canvas');canvas.width=160;canvas.height=90;const ctx=canvas.getContext('2d');
+ const blackAt=async time=>{if(editorSource!==source)throw new Error(E('视频已切换。','Video changed.'));const target=Math.max(.001,Math.min(duration-.001,time));if(Math.abs(video.currentTime-target)>.0001 || video.readyState<2)await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{cleanup();reject(new Error('Seek timeout'));},5000),cleanup=()=>{clearTimeout(timeout);video.removeEventListener('seeked',done);};const done=()=>{cleanup();resolve();};video.addEventListener('seeked',done,{once:true});video.currentTime=target;});ctx.drawImage(video,0,0,160,90);const data=ctx.getImageData(0,0,160,90).data;let dark=0;for(let i=0;i<data.length;i+=4)if(Math.max(data[i],data[i+1],data[i+2])<16)dark++;return dark/(160*90)>.98;};
+ try{video.pause();let start=0,end=duration;for(let time=.05;time<Math.min(5,duration/3);time+=.5){if(!await blackAt(time))break;start=time;}for(let time=duration-.05;time>Math.max(duration-5,duration*2/3);time-=.5){if(!await blackAt(time))break;end=time;}trimSuggestion={start,end};$('apply-trim').disabled=!(start>0 || end<duration);$('edit-status').textContent=E('黑屏建议范围：','Suggested non-black range: ')+start.toFixed(2)+'–'+end.toFixed(2)+' s · '+E('最多检查头尾各 5 秒；请预览确认，静态画面及静音不会自动删除。','Checks up to 5 seconds at each end. Preview before applying; static or silent scenes are not removed automatically.');
+ }catch(error){$('edit-status').textContent=error.message;}finally{if(editorSource===source)video.currentTime=originalTime;button.disabled=false;}
+};
+$('apply-trim').onclick=()=>{if(!trimSuggestion)return;$('edit-start').value=trimSuggestion.start.toFixed(2);$('edit-end').value=trimSuggestion.end.toFixed(2);};

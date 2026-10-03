@@ -16,7 +16,7 @@ for locale_file in (ROOT/'_locales').glob('*/messages.json'):
     if not 1 <= length <= 132:
         raise ValueError(f'{locale_file.parent.name}: manifest description has {length} characters; maximum is 132')
     print(f'{locale_file.parent.name}: description {length}/132 characters')
-front=['manifest.json','version.js','background.js','popup.html','popup.js','popup.css','recorder.html','recorder.css','recorder.js','storage.js','library.js','workspace.js','telegram.js','compositor-worker.js','enhancer.js','editor.js','batch.js','pointer-tracker.js','helper-guide.html','assets/logo.png']
+front=['manifest.json','capture-assist.js','controls.html','controls.js','version.js','background.js','popup.html','popup.js','popup.css','recorder.html','recorder.css','recorder.js','storage.js','library.js','workspace.js','telegram.js','compositor-worker.js','enhancer.js','editor.js','batch.js','pointer-tracker.js','helper-guide.html','assets/logo.png']
 front += [str(p.relative_to(ROOT)) for name in ('icons','_locales') for p in (ROOT/name).rglob('*') if p.is_file()]
 helper=['enhancement/server.py','enhancement/start.sh','enhancement/start.command','enhancement/install-seedvr.sh','enhancement/install-seedvr.command','enhancement/requirements-seedvr.txt','enhancement/verify-seedvr.py','enhancement/requirements.txt','enhancement/README.md','enhancement/models/FSRCNN_x2.pb','enhancement/models/LICENSE-FSRCNN.txt']
 for label,files in [('wescreen',front),('wescreen-helper',helper)]:

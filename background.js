@@ -16,3 +16,9 @@ async function updateRecordingState(message,sender={}) {
 chrome.runtime.onMessage.addListener((message,sender)=>{if(message.type==='recording-state')updateRecordingState(message,sender).catch(()=>{});});
 chrome.tabs.onRemoved?.addListener(async tabId=>{const {recordingOwner}=await chrome.storage.session.get('recordingOwner');if(recordingOwner?.tabId===tabId)await updateRecordingState({active:false});});
 chrome.runtime.onStartup?.addListener(()=>{chrome.action.setBadgeText({text:''});chrome.storage.session.remove('recordingOwner').catch(()=>{});});
+
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+ if(message.type!=='recorder-control')return;
+ if(sender.url!==chrome.runtime.getURL('controls.html') || !['stop-recording','pause-recording','mark-important','get-recording-status'].includes(message.action)){respond({error:'Unsupported control request'});return;}
+ chrome.storage.session.get('recordingOwner').then(async({recordingOwner})=>{if(!recordingOwner?.tabId)return respond({active:false});try{respond(await chrome.tabs.sendMessage(recordingOwner.tabId,{type:message.action}));}catch{respond({active:false});}}).catch(error=>respond({error:error.message}));return true;
+});

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0 — 2026-10-03
+
+- Add Telegram source preflight with a picture/audio meter and a separate recording control window.
+- Save each channel video separately while retaining the shared source; pause between videos and copy the next message link for the original shared tab.
+- Add start/middle/end recording review thumbnails and direct editing.
+- Remember channel crop, rotation and landscape preferences for matching source dimensions.
+- Suggest conservative leading/trailing black-screen trims for manual confirmation and warn before rerecording completed plan items.
+
 ## 1.6.1 — 2026-10-03
 
 - Display the installed manifest version beside the name in the recorder and popup.

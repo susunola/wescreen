@@ -1,7 +1,7 @@
-# Edge 商店提交 · WeScreen 1.6.1
+# Edge 商店提交 · WeScreen 1.7.0
 
-上传扩展文件：`wescreen-1.6.1.zip`（manifest.json 位于 ZIP 根目录）。
-`wescreen-helper-1.6.1.zip` 是独立的本地增强程序，不能作为扩展包上传。
+上传扩展文件：`wescreen-1.7.0.zip`（manifest.json 位于 ZIP 根目录）。
+`wescreen-helper-1.7.0.zip` 是独立的本地增强程序，不能作为扩展包上传。
 
 ## 商店资料
 

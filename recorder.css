@@ -88,3 +88,5 @@ textarea { width: 100%; border: 1px solid #4b657a; border-radius: 7px; padding: 
 .enhance-comparison>div{overflow:auto;max-height:420px}.enhance-comparison video{max-width:none!important}.bulk-controls{flex-wrap:wrap}
 
 .brand-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.version-badge{font-size:12px;letter-spacing:normal;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px;white-space:nowrap}
+
+#review-frames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}#review-frames figure{margin:0}#review-frames img{width:100%;max-height:150px;object-fit:contain}#review-frames figcaption{font-size:12px;color:var(--muted)}#preflight-video{width:100%;max-height:340px}

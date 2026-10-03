@@ -164,7 +164,7 @@ test('a delayed start message cannot re-enable highlights after stopping', async
   const calls = [];
   const chrome = {
     commands: { onCommand: { addListener: () => {} } },
-    runtime: { onMessage: { addListener: callback => { listener = callback; } } },
+    runtime: { onMessage: { addListener: callback => { const previous=listener;listener=(...args)=>{previous?.(...args);return callback(...args);}; } } },
     action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
     storage: { session: { get: () => resolveStart ? Promise.resolve({ pointerTargetTabId: 42 }) : new Promise(resolve => { resolveStart = resolve; }) } },
     tabs: { sendMessage: async (_, payload) => calls.push(payload.active) }
@@ -183,7 +183,7 @@ test('recording-state enables then disables the ring on the tracked tab', async 
   const calls = [];
   const chrome = {
     commands: { onCommand: { addListener: () => {} } },
-    runtime: { onMessage: { addListener: callback => { listener = callback; } } },
+    runtime: { onMessage: { addListener: callback => { const previous=listener;listener=(...args)=>{previous?.(...args);return callback(...args);}; } } },
     action: { setBadgeText: () => {}, setBadgeBackgroundColor: () => {} },
     storage: { session: { get: async () => ({ pointerTargetTabId: 42 }) } },
     tabs: { sendMessage: async (id, payload) => { calls.push({ id, payload }); } }

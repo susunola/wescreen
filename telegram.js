@@ -48,6 +48,7 @@ async function saveTelegramProfile(){
 async function prepareTelegramChannel(){
   captureChannelContext=null;if($('capture-mode').value!=='telegram')return;
   const profile=await saveTelegramProfile();updateTelegramFilename();
+  const taskId=$('channel-plan-item').value;const existing=(await readStore('recordings')).filter(entry=>entry.channelTaskId && entry.channelTaskId===taskId && !entry.deletedAt);if(existing.length && !confirm(E('这条消息已有录像，仍要录制新的版本吗？','This message already has recordings. Record another version?')))throw new Error(E('已取消重录。','Rerecord cancelled.'));
   captureChannelContext={channelId:profile.id,channelName:profile.name,channelUrl:profile.url,course:profile.name,episode:profile.nextEpisode,sourceUrl:telegramLink($('channel-message-url').value),sourceTitle:$('channel-video-title').value.trim(),channelTaskId:$('channel-plan-item').value || null,exportFolder:profile.exportFolder};
 }
 async function completeTelegramRecording(state){

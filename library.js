@@ -28,7 +28,7 @@ function libraryButton(label, action, kind = 'quiet') {
 async function playRecording(entry) {
   const blob = await readStore('videos', entry.id); if (!blob) throw new Error(L('errEmpty'));
   finalBlob = blob; finalSize = blob.size; finalName = entry.name; finalId = entry.id; finalMarkers = entry.markers || []; finalDuration = entry.duration || 0;
-  setPreview(blob); $('result-warning').hidden = true; show('result');
+  renderRecordingReview(entry).catch(error=>$('review-summary').textContent=error.message);setPreview(blob); $('result-warning').hidden = true; show('result');
 }
 async function renderRecordingLibrary() {
   const generation = ++libraryRenderGeneration;

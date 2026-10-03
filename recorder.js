@@ -323,7 +323,7 @@ function renderCourseLibrary(entries) {
 // ---- capture --------------------------------------------------------------
 function applyCapturePreset() {
   const telegram = $('capture-mode').value === 'telegram';
-  $('telegram-guide').hidden = !telegram;
+  $('telegram-guide').hidden = !telegram;$('preflight-enabled').checked=telegram;
   $('telegram-channel').hidden = !telegram; $('course-panel').hidden = telegram;
   if (!telegram) return;
   const mp4 = MP4_TYPES.some(type => MediaRecorder.isTypeSupported(type));
@@ -470,9 +470,10 @@ function armRecorder(stream, type, state) {
     }
   };
   instance.onstop = () => {
+    if (state === activeSegment && state.awaitingNext){releaseCapture();Promise.allSettled([...state.writes]).then(()=>discardSession(state.session)).catch(error=>setNotice(error.message)).finally(()=>{chrome.runtime.sendMessage({type:'recording-state',active:false,highlightClicks:false}).catch(()=>{});resetStart();});return;}
     if (state === activeSegment) finish().catch(error => setNotice(error.message));
     else {
-      const saving = saveCompletedSegment(state).catch(error => { storageError(); setNotice(error.message); stop(); });
+      const saving = state.savePromise = saveCompletedSegment(state).catch(error => { storageError(); setNotice(error.message); stop(); });
       segmentSaves.add(saving); saving.finally(() => segmentSaves.delete(saving));
     }
   };
@@ -512,7 +513,7 @@ async function beginRecording(stream) {
   scheduleSegment();
   const audioKey = audioHintKey();
   if (audioKey) setHint(audioKey, [], true); else if (captureNote) setHint(captureNote.key, captureNote.args); else setHint('recordingHint');
-  show('recording'); startLivePreview(stream); syncMemory();
+  $('copy-next-message').hidden=true;$('next-channel-video').disabled=false;$('next-channel-video').hidden=!captureChannelContext?.channelId;show('recording'); startLivePreview(stream); syncMemory();
   chrome.runtime.sendMessage({ type: 'recording-state', active: true, highlightClicks: $('clicks').checked }).catch(() => {});
 }
 function snapshotSegment() {
@@ -526,7 +527,7 @@ async function saveCompletedSegment(state) {
   try { id = await archiveRecording(blob, state.name, state.session, state.index, false, state.details); }
   catch (error) { storageError(); throw error; }
   finally { download(blob, state.name, id); state.chunks = []; }
-  setHint('segmentSaved', [state.index]);
+  state.savedId=id;setHint('segmentSaved', [state.index]);return id;
 }
 async function saveSegmentAndContinue() {
   if (rollingSegment || stopRequested || !activeSegment || recorder.state === 'inactive') return;
@@ -578,6 +579,7 @@ async function start() {
   setCaptureNote(note && note.key, (note && note.args) || []);
   await addMic();
   try { await addCamera(); } catch (error) { releaseCapture(); setNotice(L('cameraFailed')); resetStart(); return; }
+  try{if($('preflight-enabled')?.checked && !await confirmCaptureSource(displayStream)){releaseCapture();resetStart();return;}}catch(error){clearInterval(preflightTimer);await preflightAudio?.close().catch(()=>{});preflightAudio=null;resolvePreflight(false);$('preflight-video').srcObject=null;releaseCapture();setNotice(error.message);resetStart();return;}
   const wait = Number($('countdown').value) || 0;
   if (wait) {
     $('start').disabled = true;
@@ -608,6 +610,7 @@ async function start() {
   }
 }
 function pause() {
+  if(typeof advancingChannel!=='undefined' && advancingChannel)return;
   if (!recorder) return;
   if (recorder.state === 'recording') {
     recorder.pause();
@@ -615,7 +618,7 @@ function pause() {
     $('pause').textContent = L('btnResume');
     $('pause').dataset.i18n = 'btnResume';
   } else if (recorder.state === 'paused') {
-    recorder.resume();
+    const nextPending=activeSegment.awaitingNext;activeSegment.awaitingNext=false;recorder.resume();if(nextPending){$('next-channel-video').disabled=false;$('copy-next-message').hidden=true;scheduleSegment();}
     pausedTotal += Date.now() - pausedAt;
     pausedAt = 0;
     $('pause').textContent = L('btnPause');
@@ -685,6 +688,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   recorder = null;
   chrome.runtime.sendMessage({ type: 'recording-state', active: false, highlightClicks: false }).catch(() => {});
   show('result');
+  (finalId ? readStore('recordings',finalId) : Promise.resolve(null)).then(renderRecordingReview).catch(error=>$('review-summary').textContent=error.message);
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
 }
@@ -731,7 +735,9 @@ function downloadNotes() {
 const persistLang = () => chrome.storage.local.set({ lang: LANG }).catch(() => {});
 
 // ---- messages and boot -----------------------------------------------------
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message,sender,respond) => {
+  if(message.type==='get-recording-status'){respond({active:!!recorder && recorder.state!=='inactive',paused:recorder?.state==='paused',elapsed:elapsed(),volume:Number($('live-level').value)});return;}
+  if(['stop-recording','pause-recording','mark-important'].includes(message.type))respond?.({ok:true});
   if (message.type === 'stop-recording') stop();
   if (message.type === 'pause-recording') pause();
   if (message.type === 'mark-important') markImportant();
