@@ -117,7 +117,7 @@ test('Telegram channel plans persist, recordings advance only their channel and 
   const p=await pageReady(cx,url);
   await p.evaluate(()=>{$('capture-mode').value='telegram';applyCapturePreset();$('channel-name').value='Channel A';$('channel-url').value='https://t.me/channel_a';$('channel-episode').value='7';$('channel-plan').value='Video One | https://t.me/channel_a/10\nVideo Two | https://t.me/channel_a/11';});
   await p.locator('#channel-save-plan').evaluate(button=>$('channel-plan-dialog').showModal());await p.locator('#channel-save-plan').click();await waitForStorage(p,async()=>(await readStore('meta')).some(e=>e?.channelProfile && e.plan.length===2));
-  const id=await p.evaluate(()=>chosenChannel().id);await p.locator('#channel-config summary').click();await p.locator('#channel-plan-item').selectOption(await p.evaluate(()=>chosenChannel().plan[0].id));
+  const id=await p.evaluate(()=>chosenChannel().id);await p.evaluate(()=>{selectNextChannelVideo();});
   await capture(p);await p.waitForTimeout(1200);await stopCapture(p);
   await waitForStorage(p,async()=>(await readStore('meta')).some(e=>e?.channelProfile && e.nextEpisode===8));
   const entry=await p.evaluate(async()=>(await readStore('recordings'))[0]);assert.equal(entry.channelId,id);assert.equal(entry.episode,7);assert.equal(entry.sourceUrl,'https://t.me/channel_a/10');assert.equal(entry.sourceTitle,'Video One');
