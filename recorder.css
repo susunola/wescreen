@@ -128,3 +128,32 @@ details[open] > summary { margin-bottom: 16px; }
 .github-link { display: inline-flex; align-items: center; padding: 10px 14px; border: 1px solid #486279; border-radius: 8px; text-decoration: none; white-space: nowrap; }
 
 #course-panel[hidden] { display: none; }
+
+/* Video processing workspace */
+#tasks-view { background: #0e1a28; }
+.tasks-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.tasks-heading h2 { margin: 0 0 8px; font-size: 24px; }
+.tasks-heading .hint { margin: 0; }
+.tasks-toolbar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.connection-state { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.connection-dot { width: 8px; height: 8px; border-radius: 50%; background: #8393a4; }
+.connection-state[data-state=connected] .connection-dot { background: #51d681; }
+.connection-state[data-state=connecting] .connection-dot { background: #e8b951; }
+.tasks-toolbar button { min-height: 38px; padding: 8px 12px; font-size: 13px; }
+.refresh-button { display: inline-flex; align-items: center; gap: 8px; }
+.refresh-button svg { width: 18px; height: 18px; }
+#tasks-connect[hidden], #tasks-empty[hidden], #task-items[hidden] { display: none; }
+#tasks-status:empty { display: none; }
+.tasks-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 44px 12px 36px; }
+.tasks-empty-icon { width: 78px; height: 78px; border-radius: 50%; background: #152c43; border: 1px solid #294b69; color: #55a9f7; display: grid; place-items: center; }
+.tasks-empty-icon svg { width: 42px; height: 42px; }
+.tasks-empty h3 { margin: 22px 0 8px; font-size: 21px; }
+.tasks-empty p { margin: 0 0 24px; }
+.tasks-empty button { padding: 12px 22px; font-size: 14px; }
+.tasks-footer { text-align: center; font-size: 12px; margin: 20px 0 0; }
+#task-items { padding: 0; list-style: none; display: grid; gap: 12px; margin: 24px 0; }
+.task-row { background: #142436; border: 1px solid #294156; border-radius: 10px; padding: 18px; }
+.task-row strong { font-size: 15px; }
+.task-row .hint { font-size: 13px; }
+.task-row button { font-size: 13px; padding: 8px 12px; }
+@media(max-width:700px) { .tasks-heading { flex-direction: column; align-items: stretch; }.tasks-toolbar { justify-content: flex-start; }.tasks-empty { padding: 32px 0; }.tasks-empty h3 { font-size: 19px; } }

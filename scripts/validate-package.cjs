@@ -20,6 +20,19 @@ const {chromium}=require('playwright');const fs=require('fs'),os=require('os'),p
   await page.waitForTimeout(1200);const control=await context.newPage();await control.goto(`chrome-extension://${id}/controls.html`);await control.waitForFunction(()=>!document.getElementById('pause').disabled);await control.locator('#pause').click();await page.waitForFunction(()=>recorder.state==='paused');await control.locator('#pause').click();await page.waitForFunction(()=>recorder.state==='recording');await control.locator('#stop').click();await page.waitForFunction(()=>recorder===null && finalId);await page.waitForFunction(()=>$('review-frames').children.length===3);checks.controlRouting=true;await control.close();
   const savedId=await page.evaluate(()=>finalId);await page.locator('[data-view=library]').click();await page.locator('[data-view=capture]').click();if(!await page.locator('#setup').isVisible())throw new Error('Recording menu stays on result');if(!await page.evaluate(async id=>!!(await readStore('recordings',id)),savedId))throw new Error('Returning to setup removed saved recording');
   await page.evaluate(()=>show('result'));await page.locator('#new-recording').click();if(!await page.locator('#setup').isVisible())throw new Error('Next recording failed');checks.nextRecordingNavigation=true;
+  await context.unroute('http://127.0.0.1:8765/**');
+  await context.route('http://127.0.0.1:8765/**',route=>{const url=new URL(route.request().url());return route.fulfill({json:url.pathname==='/connect' ? {token:'test-credential-for-isolated-check'} : url.pathname==='/health' ? {ready:true,ai:true,strong:true} : {jobs:[]}});});
+  await page.evaluate(async()=>{await connectHelper();navigateWorkspace('tasks');await renderEnhancementTasks();});
+  if(!await page.locator('#tasks-empty').isVisible() || await page.locator('#tasks-connect').isVisible())throw new Error('Connected empty processing state incorrect');
+  await page.locator('#tasks-library').click();if(!await page.locator('#recording-library').isVisible())throw new Error('Empty-state library action failed');
+  await page.locator('[data-view=tasks]').click();await page.evaluate(()=>applyLang('zh'));
+  if(process.env.WESCREEN_UI_SCREENSHOT)await page.screenshot({path:process.env.WESCREEN_UI_SCREENSHOT,fullPage:true});
+  for(const lang of ['zh','en']){await page.evaluate(lang=>applyLang(lang),lang);await page.setViewportSize({width:390,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Processing narrow overflow '+lang);}
+  await page.waitForFunction(()=>!taskPolling && !helperConnecting);
+  await context.unroute('http://127.0.0.1:8765/**');await context.route('http://127.0.0.1:8765/**',route=>route.abort());
+  await page.evaluate(async()=>{await renderEnhancementTasks();});await page.waitForFunction(()=>!document.getElementById('tasks-connect').hidden);if(!await page.locator('#tasks-connect').isVisible())throw new Error('Offline reconnect action missing');
+  checks.processingEmptyState=true;checks.processingConnectionStatus=true;
+
   console.log(JSON.stringify({package:path.basename(zip),...checks,errors,narrowLanguages:['zh','en']}));
  }finally{if(context)await context.close();fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exitCode=1;});

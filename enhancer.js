@@ -14,6 +14,12 @@ function clearEnhancementPreview() {
   for(const id of ['enhance-original','enhance-output']){const video=$(id);video.pause();video.removeAttribute('src');video.load();}
   enhancementUrls.forEach(url=>URL.revokeObjectURL(url));enhancementUrls=[];enhancementOutputUrl=null;
 }
+function updateTaskConnection(connected, connecting=false) {
+  $('tasks-connection').dataset.state=connecting ? 'connecting' : connected ? 'connected' : 'offline';
+  const key=connecting ? 'helperConnecting' : connected ? 'helperConnected' : 'helperDisconnected';
+  $('tasks-connection-label').dataset.i18n=key;$('tasks-connection-label').textContent=L(key);
+  $('tasks-connect').hidden=connected || connecting;
+}
 let helperConnecting=null;
 async function discoverHelperToken(){
  const response=await fetch(ENHANCER_URL+'/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(3000)});
@@ -24,14 +30,14 @@ async function discoverHelperToken(){
 async function connectHelper(){
  if(helperConnecting)return helperConnecting;
  helperConnecting=(async()=>{
-  enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');
+  enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');
   try{
    if(!enhancementToken)await discoverHelperToken();
    try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
    $('helper-status').textContent=L('connectReady');$('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
   }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('本机程序已连接另一扩展。请在原扩展目录更新版本，或使用高级连接设置。','Helper is paired with another extension. Update the original extension directory or use Advanced connection settings.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');updateEnhancementMode();return null;}
- })();try{return await helperConnecting;}finally{helperConnecting=null;}
+ })();try{return await helperConnecting;}finally{helperConnecting=null;updateTaskConnection(!!helperHealth);}
 }
 function enhancementControls(busy) {
   enhancementBusy=busy;$('enhance-progress').hidden=!busy;$('enhance-cancel').hidden=!busy;
@@ -147,12 +153,13 @@ async function renderEnhancementTasks() {
   if(taskPolling)return;taskPolling=true;
   try {
     const local=await readStore('tasks');let jobs=[],remoteChecked=false;
-    if(enhancementToken){try{jobs=(await(await enhancementRequest('/jobs')).json()).jobs;remoteChecked=true;$('tasks-status').textContent='';}catch(error){$('tasks-status').textContent=L('helperOffline')+' '+error.message;}}
+    if(enhancementToken){try{jobs=(await(await enhancementRequest('/jobs')).json()).jobs;remoteChecked=true;$('tasks-status').textContent='';}catch(error){helperHealth=null;$('tasks-status').textContent=L('helperOffline')+' '+error.message;}}
     else $('tasks-status').textContent=L('helperOffline');
+    updateTaskConnection(remoteChecked,!!helperConnecting && !remoteChecked);
     const records=await readStore('recordings');
     const merged=new Map(local.map(task=>[task.id,task]));for(const job of jobs)merged.set(job.id,{...merged.get(job.id),...job});
     const list=$('task-items');list.replaceChildren();
-    if(!merged.size){const empty=document.createElement('li');empty.textContent=L('noTasks');list.append(empty);}
+    $('tasks-empty').hidden=merged.size>0;list.hidden=merged.size===0;
     for(const task of [...merged.values()].sort((a,b)=>b.createdAt-a.createdAt)){
       const row=document.createElement('li');row.className='task-row';
       const title=document.createElement('strong');title.textContent=task.name || task.id;row.append(title);
