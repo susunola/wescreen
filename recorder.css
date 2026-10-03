@@ -220,3 +220,5 @@ details[open] > summary { margin-bottom: 16px; }
 @media(max-width:650px) { .workspace-nav .nav-icon { width:18px; height:18px; flex-basis:18px; } }
 
 .github-logo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; filter: invert(1); }
+
+#channel-plan-dialog .channel-plan-actions { gap: 16px; margin-top: 4px; }
