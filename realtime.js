@@ -33,7 +33,7 @@ async function processRealtimeFrame(mediaTime){
    const elapsed=performance.now()-started;realtimeAI.average=realtimeAI.average ? realtimeAI.average*.75+elapsed*.25:elapsed;
    realtimeAI.failures=0;
    // Discard late results after seeks or when inference cannot keep up with audio.
-   const timely=Math.abs(video.currentTime-mediaTime)<=.1;
+   const timely=Math.abs(video.currentTime-mediaTime)<=.1 && ($('realtime-strategy')?.value==='smooth' || (bitmap.width>=video.videoWidth && bitmap.height>=video.videoHeight));
    if(timely){realtimeCanvas.width=bitmap.width;realtimeCanvas.height=bitmap.height;realtimeCanvas.getContext('2d').drawImage(bitmap,0,0);syncRealtimeLayout();realtimeAI.mediaTime=mediaTime;realtimeCanvas.hidden=false;realtimeAI.slow=0;realtimeAI.frames.push(performance.now());realtimeAI.frames=realtimeAI.frames.slice(-20);}
    else{realtimeCanvas.hidden=true;realtimeAI.slow++;}
    if(realtimeAI.average>65 && realtimeAI.edge>320)realtimeAI.edge=Math.max(320,Math.floor(realtimeAI.edge*.8/16)*16);
@@ -48,6 +48,9 @@ realtimeButton.onclick=async()=>{
  if(realtimeAI.enabled){stopRealtimeAI();return;}
  realtimeButton.disabled=true;realtimeHint.textContent=E('正在检查实时 AI…','Checking realtime AI…');const source=activePlaybackId;
  try{const health=await connectHelper();if(source!==activePlaybackId)return;
+  const entry=activePlaybackId ? await readStore('recordings',activePlaybackId):null;if(source!==activePlaybackId)return;
+  if($('realtime-text-protect')?.checked && entry?.captureContent==='detail'){realtimeHint.textContent=E('桌面文字保护已开启，保持原画。','Desktop text protection keeps the original.');return;}
+  if(Math.max($('preview').videoWidth,$('preview').videoHeight)>1920 || Math.min($('preview').videoWidth,$('preview').videoHeight)>1080){realtimeHint.textContent=E('高清源保持原画，避免缩小后再放大。需要修复请使用后台自然修复。','Keeping the high-resolution original. Use background Natural restoration for repair.');return;}
   if(!health?.realtime){realtimeHint.textContent=E('请启动或更新本机增强包；需要支持实时 AI 的新版程序。','Start or update the local helper to support realtime AI.');return;}
   realtimeAI.enabled=true;realtimeAI.generation++;realtimeAI.edge=960;realtimeAI.average=0;realtimeAI.failures=0;realtimeAI.slow=0;realtimeAI.frames=[];realtimeButton.setAttribute('aria-pressed','true');
   processRealtimeFrame($('preview').currentTime);scheduleRealtimeAI();

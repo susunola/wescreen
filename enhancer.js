@@ -40,7 +40,7 @@ async function connectHelper(){
    try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
    $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();renderEnhancementTasks().catch(()=>{});return helperHealth;
-  }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('旧扩展配对阻止了连接。在本机增强包中双击 reset-connection.command，再点击自动连接。录像和处理结果会保留。','Old extension pairing blocks this connection. Open reset-connection.command in the local helper package, then retry. Videos and results are preserved.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
+  }catch(error){$('tasks-connection').dataset.reason=/paired/.test(error.message)?'pairing':/version|incompatible/.test(error.message)?'version':'unreachable';$('helper-status').textContent=/paired with another/.test(error.message) ? E('旧扩展配对阻止了连接。在本机增强包中双击 reset-connection.command，再点击自动连接。录像和处理结果会保留。','Old extension pairing blocks this connection. Open reset-connection.command in the local helper package, then retry. Videos and results are preserved.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
  })();try{return await helperConnecting;}finally{helperConnecting=null;$('helper-check').disabled=false;$('helper-check').textContent=L('autoConnect');updateTaskConnection(!!helperHealth);}
 }
 function enhancementControls(busy) {
@@ -73,13 +73,15 @@ async function openEnhancement(entry=null) {
   await connectHelper();
 }
 function resultName(task) {
-  const label=task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
+  const label=task.mode==='merge' ? 'merged' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
   return `${(task.name || 'video').replace(/\.(mp4|webm)$/i,'')}-${label}${task.preview ? '-preview' : ''}.mp4`;
 }
 async function submitProcessing(source,options) {
   enhancementToken=$('enhance-token').value.trim();if(!enhancementToken)throw new Error(L('helperOffline'));
   const blob=await readStore('videos',source.id);if(!blob)throw new Error(L('errEmpty'));
   const query=new URLSearchParams({mode:options.mode,preview:options.preview ? '1':'0',start:String(options.start || 0),end:String(options.end || 0),sourceId:source.id,name:source.name});
+  if($('enhance-strength') && ['natural','basic','light','ai'].includes(options.mode))query.set('strength',options.strength ?? $('enhance-strength').value);
+  if(options.audioPreset)query.set('audioPreset',options.audioPreset);
   if(options.previewSeconds)query.set('previewSeconds',String(options.previewSeconds));
   if(options.crop)query.set('crop',options.crop.join(','));
   if(options.landscape)query.set('landscape','1');
@@ -169,10 +171,11 @@ async function renderEnhancementTasks() {
       const title=document.createElement('strong');title.textContent=task.name || task.id;row.append(title);
       let saved=records.find(entry=>entry.helperJobId===task.id);const remote=jobs.some(job=>job.id===task.id);
       if(task.playbackAI && task.state==='done' && remote && !saved){try{const id=await saveTaskResult(task);saved={id};if(typeof completePlaybackAI==='function')await completePlaybackAI(task,id);}catch(error){$('tasks-status').textContent=error.message;}}
-      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
+      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit'),merge:E('合并','Merge'),audio:E('声音修复','Audio repair')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
       if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error ? enhancementErrorText(task.error) : L('taskLost');row.append(error);}
       if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);const percent=document.createElement('span');percent.className='task-percent';percent.textContent=Math.round((task.progress || 0)*100)+'%';row.append(percent);}
       const buttons=document.createElement('div');buttons.className='controls task-actions';
+      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.mode==='merge')await mergeRecordingParts(source,task.compatible);else await submitProcessing(source,{mode:task.mode,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
       if(task.state==='done' && remote){if(!saved)buttons.append(libraryButton('saveLibrary',async()=>{await saveTaskResult(task);await renderEnhancementTasks();}));buttons.append(libraryButton('exportResult',()=>exportTask(task)));}
       if(['queued','processing'].includes(task.state) && remote)buttons.append(libraryButton('cancelTask',async()=>{await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await renderEnhancementTasks();}));
       else buttons.append(libraryButton('deleteTask',async()=>{

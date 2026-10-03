@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from realtime import enhance_frame
+from merge import handle_media_post
 
 ROOT = Path(__file__).resolve().parent
 MODEL = ROOT / 'models' / 'FSRCNN_x2.pb'
@@ -25,6 +26,19 @@ FILTERS = {
     'basic': 'hqdn3d=1.2:1.2:3:3,eq=contrast=1.03:brightness=0.01:saturation=1.02,unsharp=5:5:0.35:5:5:0',
     'light': 'hqdn3d=1:1:2:2,eq=contrast=1.06:brightness=0.025:gamma=1.08:saturation=1.04,unsharp=5:5:0.25:5:5:0',
 }
+def enhancement_filter(mode, strength=1):
+    if strength == 1: return FILTERS[mode]
+    if strength == 0: return 'null'
+    denoise = (1.2 if mode == 'basic' else 1) * strength
+    temporal = (3 if mode == 'basic' else 2) * strength
+    filters = [f'hqdn3d={denoise}:{denoise}:{temporal}:{temporal}']
+    if mode == 'natural': filters.insert(0, 'deblock=filter=weak:block=8')
+    if mode == 'basic': filters.append(f'eq=contrast={1+.03*strength}:brightness={.01*strength}:saturation={1+.02*strength}')
+    if mode == 'light': filters.append(f'eq=contrast={1+.06*strength}:brightness={.025*strength}:gamma={1+.08*strength}:saturation={1+.04*strength}')
+    sharpen = {'natural':.2, 'basic':.35, 'light':.25}[mode] * strength
+    filters.append(f'unsharp=5:5:{sharpen}:5:5:0')
+    return ','.join(filters)
+
 TOKEN_FILE = ROOT / '.runtime' / 'token.txt'
 TOKEN = os.environ.get('WESCREEN_ENHANCE_TOKEN') or (TOKEN_FILE.read_text().strip() if TOKEN_FILE.exists() else secrets.token_urlsafe(32))
 JOBS = {}
@@ -43,7 +57,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -147,7 +161,8 @@ def update_ffmpeg_progress(job, line, duration):
 def checked_process(job, command, **kwargs):
     if job['cancel'].is_set():
         raise InterruptedError('Cancelled')
-    process = subprocess.Popen(command, stderr=job['log'], start_new_session=os.name == 'posix', **kwargs)
+    stderr = kwargs.pop('stderr', job['log'])
+    process = subprocess.Popen(command, stderr=stderr, start_new_session=os.name == 'posix', **kwargs)
     job['processes'].append(process)
     if job['cancel'].is_set(): stop_process(process)
     return process
@@ -198,10 +213,25 @@ def run_job(job):
                 raise ValueError('Not enough disk space for this job. Trim the video or free space first.')
             trim = ['-t', str(limit)] if limit else []
             encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart']
-            if job['mode'] == 'strong':
+            if job['mode']=='audio':
+                preset=job.get('audioPreset','level')
+                audio_filter={'voice':'highpass=f=90,equalizer=f=2200:t=q:w=1:g=3,afftdn=nf=-25','night':'acompressor=threshold=0.08:ratio=6:attack=10:release=200:makeup=2,alimiter=limit=0.9','level':'loudnorm=I=-16:TP=-1.5:LRA=11'}[preset]
+                if preset=='level':
+                    analysis=checked_process(job,['ffmpeg','-nostdin','-v','info',*INPUT_OPTIONS,'-i',str(source),*trim,'-vn','-af','loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json','-f','null','-'],stderr=subprocess.PIPE,text=True)
+                    _,report=analysis.communicate()
+                    if analysis.returncode!=0: raise RuntimeError('Audio loudness analysis failed')
+                    match=re.findall(r'\{[^{}]*"input_i"[^{}]*\}',report,re.S)
+                    if not match: raise ValueError('No analyzable audio track')
+                    measured=json.loads(match[-1])
+                    if measured['input_i']=='-inf': raise ValueError('Source audio is silent')
+                    audio_filter=f"loudnorm=I=-16:TP=-1.5:LRA=11:measured_I={measured['input_i']}:measured_TP={measured['input_tp']}:measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}:offset={measured['target_offset']}:linear=true"
+                process=checked_process(job,['ffmpeg','-nostdin','-y','-v','error',*INPUT_OPTIONS,'-i',str(source),*trim,'-map','0:v:0','-map','0:a:0','-c:v','copy','-af',audio_filter,'-c:a','aac','-b:a','192k','-ar','48000','-movflags','+faststart','-progress','pipe:1',str(output)],stdout=subprocess.PIPE,text=True)
+                for line in process.stdout: update_ffmpeg_progress(job,line,limit)
+                if process.wait()!=0: raise RuntimeError('Audio processing failed')
+            elif job['mode'] == 'strong':
                 run_seed(job, source, output, width, height, trim, encode)
             elif job['mode'] != 'ai':
-                command = ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-map', '0:a:0?', '-vf', edit_filter(job, width, height) if job['mode'] == 'edit' else FILTERS[job['mode']] + ',pad=ceil(iw/2)*2:ceil(ih/2)*2', *encode, '-progress', 'pipe:1', str(output)]
+                command = ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-map', '0:a:0?', '-vf', edit_filter(job, width, height) if job['mode'] == 'edit' else enhancement_filter(job['mode'],job.get('strength',1)) + ',pad=ceil(iw/2)*2:ceil(ih/2)*2', *encode, '-progress', 'pipe:1', str(output)]
                 process = checked_process(job, command, stdout=subprocess.PIPE, text=True)
                 for line in process.stdout:
                     update_ffmpeg_progress(job, line, limit)
@@ -234,7 +264,10 @@ def run_job(job):
                     if len(data) != frame_size:
                         raise RuntimeError('Incomplete decoded frame')
                     frame = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 3)
-                    encoder.stdin.write(model.upsample(frame).tobytes())
+                    enhanced=model.upsample(frame)
+                    strength=job.get('strength',1)
+                    if strength<1: enhanced=cv2.addWeighted(enhanced,strength,cv2.resize(frame,(width*2,height*2),interpolation=cv2.INTER_CUBIC),1-strength,0)
+                    encoder.stdin.write(enhanced.tobytes())
                     frames += 1
                     if limit:
                         job['progress'] = min(0.99, frames / fps / limit)
@@ -336,6 +369,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'token': TOKEN})
         if not self.authorized():
             return
+        if handle_media_post(self,urlparse(self.path).path,globals()): return
         if urlparse(self.path).path == '/realtime/frame':
             try: size = int(self.headers.get('Content-Length', '0'))
             except ValueError: size = 0
@@ -372,7 +406,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError: return self.reply(400, {'error': 'Invalid preview duration'})
         if preview_seconds not in (3, 5, 10): return self.reply(400, {'error': 'Preview duration must be 3, 5 or 10 seconds'})
         mode = query.get('mode', ['basic'])[0]
-        if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit'):
+        if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit','audio'):
             return self.reply(400, {'error': 'Invalid processing mode'})
         if mode == 'strong' and not seed_ready():
             return self.reply(503, {'error': 'SeedVR2 is not installed. Run enhancement/install-seedvr.sh first.'})
@@ -387,6 +421,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if shutil.disk_usage(WORK).free < size * 2 + 512 * 1024 * 1024:
                 raise ValueError('Not enough disk space to accept the video')
+            audio_preset=query.get('audioPreset',['level'])[0]
+            if audio_preset not in ('voice','night','level'):raise ValueError('Invalid audio preset')
+            strength=float(query.get('strength',['1'])[0])
+            if not 0 <= strength <= 1: raise ValueError('Enhancement strength must be 0–1')
             rotation = float(query.get('rotation', ['0'])[0])
             if not (0 <= rotation <= 360): raise ValueError('Invalid rotation')
             start = float(query.get('start', ['0'])[0]); end = float(query.get('end', ['0'])[0])
@@ -413,7 +451,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             SLOT.release(); shutil.rmtree(directory, ignore_errors=True)
             return self.reply(400, {'error': str(error)})
-        job = dict(id=identifier, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
+        job = dict(id=identifier, audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
         try:
             persist_job(job)
             with GUARD: JOBS[identifier] = job
@@ -436,7 +474,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.16.0','merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None

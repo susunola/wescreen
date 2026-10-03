@@ -25,7 +25,7 @@ $('playback-angle').oninput=()=>setPlaybackRotation(Number($('playback-angle').v
 $('preview').addEventListener('loadedmetadata',restorePlaybackState);
 new ResizeObserver(layoutPlaybackRotation).observe($('playback-stage'));
 document.addEventListener('fullscreenchange',layoutPlaybackRotation);
-$('playback-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('playback-shell').requestFullscreen();}catch(error){setNotice(error.message);}};
+$('playback-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('playback-shell').requestFullscreen();layoutPlaybackRotation();requestAnimationFrame(layoutPlaybackRotation);}catch(error){setNotice(error.message);}};
 $('rotated-play').onclick=()=>{const video=$('preview');if(video.paused)video.play().catch(error=>setNotice(error.message));else video.pause();};
 $('rotated-mute').onclick=()=>{$('preview').muted=!$('preview').muted;};
 function updateRecordingTimeline(){const total=playbackTimelineTotal(),time=playbackTimelineTime();if(!playbackSeeking && total>0)$('rotated-seek').value=String(time/total);$('playback-time').textContent=fmt(time*1000)+' / '+fmt(total*1000);}
@@ -37,10 +37,13 @@ $('rotated-seek').addEventListener('pointerdown',()=>{playbackSeeking=true;});
 for(const event of ['pointerup','pointercancel','change','blur'])$('rotated-seek').addEventListener(event,()=>{playbackSeeking=false;savePlaybackState();});
 
 let activePlaybackId=null,playbackReady=false,playbackGeneration=0,lastPlaybackSave=0,pendingPlaybackPosition=null;
+function currentPlaybackView(){const v=$('preview');return {volume:v.volume,muted:v.muted,rotation:playbackRotation,speed:v.playbackRate,zoom:playbackZoom,fill:playbackFill,pan:{...playbackPan},ambient:!!$('playback-ambient-toggle')?.checked,instantPreset:instantEnhancement,brightness:$('playback-brightness').value,contrast:$('playback-contrast').value,sharpness:$('playback-sharpness').value};}
+function applyPlaybackView(view){if($('playback-ambient-toggle')){$('playback-ambient-toggle').checked=!!view.ambient;ambientCanvas.hidden=!view.ambient;}const v=$('preview');v.volume=view.volume;v.muted=view.muted;v.playbackRate=view.speed;$('playback-speed').value=String(view.speed);playbackZoom=view.zoom;$('playback-zoom').value=String(view.zoom);playbackFill=view.fill;playbackPan=view.pan;instantEnhancement=view.instantPreset;updateInstantEnhancementButton();updateFitButton();setPlaybackRotation(view.rotation);for(const key of ['brightness','contrast','sharpness'])$('playback-'+key).value=view[key];applyPlaybackTuning();}
 function savePlaybackState() {
  if(!activePlaybackId || !playbackReady)return;
  const video=$('preview'),id=activePlaybackId;
- const value={instantPreset:instantEnhancement,time:video.ended ? 0:video.currentTime,rotation:playbackRotation,speed:video.playbackRate,zoom:playbackZoom,brightness:Number($('playback-brightness').value),contrast:Number($('playback-contrast').value),sharpness:Number($('playback-sharpness').value)};
+ const value={ambient:!!$('playback-ambient-toggle')?.checked,instantPreset:instantEnhancement,time:video.ended ? 0:video.currentTime,volume:video.volume,muted:video.muted,fill:playbackFill,pan:{...playbackPan},rotation:playbackRotation,speed:video.playbackRate,zoom:playbackZoom,brightness:Number($('playback-brightness').value),contrast:Number($('playback-contrast').value),sharpness:Number($('playback-sharpness').value)};
+ if(playbackParts.length>1 && playbackParts.some(p=>p.id===id))runTx('meta','readwrite',tx=>tx.objectStore('meta').put({partId:id,time:video.currentTime},'continuous:'+(playbackParts[0].recordingGroupId || playbackParts[0].id))).catch(()=>{});
  runTx('meta','readwrite',tx=>tx.objectStore('meta').put(value,`playback:${id}`)).catch(error=>{if(id===activePlaybackId)$('playback-status').textContent=error.message;});
 }
 function beginPlaybackSource(id) {
@@ -53,9 +56,9 @@ async function restorePlaybackState() {
  try {
   const state=id ? await readStore('meta',`playback:${id}`):null;
   if(generation!==playbackGeneration)return;
-  if(state){instantEnhancement=state.instantPreset || null;updateInstantEnhancementButton();setPlaybackRotation(state.rotation || 0);$('playback-speed').value=String(state.speed || 1);video.playbackRate=Number($('playback-speed').value) || 1;playbackZoom=Math.max(1,Math.min(3,state.zoom || 1));$('playback-zoom').value=String(playbackZoom);for(const key of ['brightness','contrast','sharpness'])$('playback-'+key).value=String(state[key] ?? (key==='sharpness' ? 0:1));applyPlaybackTuning();if(Number.isFinite(video.duration))video.currentTime=Math.max(0,Math.min(state.time || 0,video.duration-.1));}
+  if(state){if($('playback-ambient-toggle')){$('playback-ambient-toggle').checked=!!state.ambient;ambientCanvas.hidden=!state.ambient;}video.volume=state.volume ?? video.volume;video.muted=state.muted ?? video.muted;playbackFill=!!state.fill;updateFitButton();playbackPan=state.pan || {x:0,y:0};instantEnhancement=state.instantPreset || null;updateInstantEnhancementButton();setPlaybackRotation(state.rotation || 0);$('playback-speed').value=String(state.speed || 1);video.playbackRate=Number($('playback-speed').value) || 1;playbackZoom=Math.max(1,Math.min(3,state.zoom || 1));$('playback-zoom').value=String(playbackZoom);for(const key of ['brightness','contrast','sharpness'])$('playback-'+key).value=String(state[key] ?? (key==='sharpness' ? 0:1));applyPlaybackTuning();if(Number.isFinite(video.duration))video.currentTime=Math.max(0,Math.min(state.time || 0,video.duration-.1));}
   const pending=pendingPlaybackPosition;
-  if(pending?.id===id){pendingPlaybackPosition=null;if(Number.isFinite(video.duration))video.currentTime=Math.min(pending.time,Math.max(0,video.duration-.1));if(pending.playing)video.play().catch(error=>$('playback-status').textContent=error.message);}
+  if(pending?.id===id){pendingPlaybackPosition=null;if(pending.view)applyPlaybackView(pending.view);if(Number.isFinite(video.duration))video.currentTime=Math.min(pending.time,Math.max(0,video.duration-.1));if(pending.playing)video.play().catch(error=>$('playback-status').textContent=error.message);}
   playbackReady=true;layoutPlaybackRotation();
  }catch(error){if(generation===playbackGeneration){playbackReady=true;$('playback-status').textContent=error.message;}}
 }
@@ -87,7 +90,7 @@ async function refreshPlaybackVersions(){
  for(const entry of entries.filter(entry=>rootId && root(entry)===rootId)) {const option=document.createElement('option');option.value=entry.id;option.textContent=(entry.id===rootId ? E('原版','Original'):E('处理版','Processed')+' · '+(entry.enhancement || ''))+' · '+entry.name;$('playback-version').append(option);}
  $('playback-version').value=id || '';$('playback-version').disabled=$('playback-version').options.length<2;$('playback-enhance').disabled=!map.has(id);
 }
-$('playback-version').onchange=async()=>{const id=$('playback-version').value,video=$('preview');try{const entry=await readStore('recordings',id);if(!entry || entry.deletedAt)throw new Error(E('此版本已删除。','This version was deleted.'));pendingPlaybackPosition={id,time:video.currentTime,playing:!video.paused};await playRecording(entry);}catch(error){pendingPlaybackPosition=null;$('playback-status').textContent=error.message;}};
+$('playback-version').onchange=async()=>{const id=$('playback-version').value,video=$('preview');try{const entry=await readStore('recordings',id);if(!entry || entry.deletedAt)throw new Error(E('此版本已删除。','This version was deleted.'));pendingPlaybackPosition={id,time:video.currentTime,playing:!video.paused,view:currentPlaybackView()};await playRecording(entry);}catch(error){pendingPlaybackPosition=null;$('playback-status').textContent=error.message;}};
 $('playback-enhance').onclick=async()=>{try{const entry=await readStore('recordings',activePlaybackId);if(entry)await openEnhancement(entry);}catch(error){$('playback-status').textContent=error.message;}};
 $('enhance-panel').addEventListener('close',()=>refreshPlaybackVersions().catch(()=>{}));
 document.addEventListener('keydown',event=>{
@@ -120,7 +123,7 @@ $('playback-instant').onclick=()=>{
 async function completePlaybackAI(task,savedId){
  if(!task.playbackAI || activePlaybackId!==task.sourceId || !$('result').getClientRects().length)return;
  const entry=await readStore('recordings',savedId);if(!entry)return;
- const video=$('preview');pendingPlaybackPosition={id:savedId,time:video.currentTime,playing:!video.paused};await playRecording(entry);
+ const video=$('preview');pendingPlaybackPosition={id:savedId,time:video.currentTime,playing:!video.paused,view:currentPlaybackView()};await playRecording(entry);
  $('playback-status').textContent=E('AI 修复完成，已切换增强版；原视频保留。','AI repair complete. Switched to the enhanced version; original preserved.');
 }
 $('playback-ai').onclick=async()=>{

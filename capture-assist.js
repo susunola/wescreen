@@ -26,9 +26,9 @@ $('next-channel-video').onclick=async()=>{
   const stopped=new Promise(resolve=>previous.recorder.addEventListener('stop',resolve,{once:true}));await saveSegmentAndContinue();if(activeSegment!==previous)activeSegment.awaitingNext=true;await stopped;await previous.savePromise;clearTimeout(segmentTimer);
   if(stopRequested || !recorder || recorder.state==='inactive')return;
   if(!previous.savedId)throw new Error(L('storageFailed'));
-  await completeTelegramRecording(previous);await prepareTelegramChannel();
+  await completeTelegramRecording(previous);await prepareTelegramChannel();recordingGroupId=crypto.randomUUID();
   activeSegment.awaitingNext=true;activeSegment.channelMetadata={...captureChannelContext};activeSegment.index=1;activeSegment.name=`${sanitized()}.${recordingExtension()}`;activeSegment.start=elapsed();
-  await setInProgress({session:activeSegment.session,name:activeSegment.name,mimeType:recordingMime,index:1,...captureChannelContext});
+  await setInProgress({session:activeSegment.session,name:activeSegment.name,mimeType:recordingMime,index:1,recordingGroupId,...captureChannelContext});
   $('recording-alert').hidden=false;$('recording-alert').textContent=E('上一条已保存。在原共享标签页打开下一条消息，准备好后点击“继续”；仍使用同一共享源。','Previous video saved. Open the next message in the ORIGINAL shared tab, then Resume. The same capture source remains shared.');
   const profile=chosenChannel(),item=profile?.plan?.find(item=>item.id===$('channel-plan-item').value);$('copy-next-message').hidden=!item;$('copy-next-message').dataset.url=item ? telegramLink(item.url):'';
  }catch(error){$('recording-alert').hidden=false;$('recording-alert').textContent=error.message;}finally{advancingChannel=false;button.disabled=Boolean(activeSegment?.awaitingNext);}

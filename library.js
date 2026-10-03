@@ -11,6 +11,7 @@ async function updateRecording(id, changes) {
 async function removeRecordings(ids, permanent = false) {
   if (!ids.length) return;
   const groups=recordingGroups(await readStore('recordings'));ids=[...new Set(ids.flatMap(id=>groups.find(e=>e.id===id)?._parts?.map(e=>e.id)||[id]))];
+  if(!permanent && typeof playerLastDeleted!=='undefined')playerLastDeleted=(await readStore('recordings')).filter(e=>ids.includes(e.id)).map(e=>({id:e.id,deletedAt:e.deletedAt}));
   if (permanent && !confirm(L('confirmPermanent', ids.length))) return;
   await runTx(['recordings', 'videos'], 'readwrite', tx => {
     for (const id of ids) {
@@ -40,7 +41,8 @@ function recordingGroups(entries) {
   }
   return groups.map(parts=>{parts.sort((a,b)=>(a.part || Number(a.name.match(/-part-(\d+)/)?.[1]) || 1)-(b.part || Number(b.name.match(/-part-(\d+)/)?.[1]) || 1));const first=parts[0];return parts.length===1 ? first:{...first,name:first.name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,''),_parts:parts,duration:parts.reduce((n,e)=>n+(e.duration||0),0),size:parts.reduce((n,e)=>n+e.size,0)};}).concat(entries.filter(e=>e.enhancedFrom));
 }
-let playbackParts=[],playbackPartIndex=0,partLoadGeneration=0;
+let playbackParts=[],playbackPartIndex=0,partLoadGeneration=0,playbackNextPart=null;
+function preloadRecordingPart(){const next=playbackParts[playbackPartIndex+1];playbackNextPart=next ? {id:next.id,blob:readStore('videos',next.id)}:null;}
 function playbackTimelineTotal(){return playbackParts.length>1 ? playbackParts.reduce((n,e)=>n+(e.duration||0)/1000,0):Number.isFinite($('preview').duration)?$('preview').duration:0;}
 function playbackTimelineTime(){return playbackParts.slice(0,playbackPartIndex).reduce((n,e)=>n+(e.duration||0)/1000,0)+$('preview').currentTime;}
 async function seekRecordingTimeline(time,playing=!$('preview').paused){
@@ -51,17 +53,19 @@ async function seekRecordingTimeline(time,playing=!$('preview').paused){
 }
 async function loadRecordingPart(index,time=null,playing=false){
  const generation=++partLoadGeneration,entry=playbackParts[index];if(!entry)return;
- const blob=await readStore('videos',entry.id);if(generation!==partLoadGeneration)return;if(!blob)throw new Error(L('errEmpty'));
- const rotation=typeof playbackRotation==='number'?playbackRotation:0,speed=$('preview').playbackRate;
- playbackPartIndex=index;finalBlob=blob;finalSize=blob.size;finalId=entry.id;finalName=entry.name;finalDuration=playbackTimelineTotal()*1000;finalMarkers=entry.markers||[];
- if(time!==null)pendingPlaybackPosition={id:entry.id,time,playing};setPreview(blob);
+ const blob=await (playbackNextPart?.id===entry.id ? playbackNextPart.blob:readStore('videos',entry.id));if(generation!==partLoadGeneration)return;if(!blob)throw new Error(L('errEmpty'));
+ const view=playbackReady?currentPlaybackView():null;const rotation=typeof playbackRotation==='number'?playbackRotation:0,speed=$('preview').playbackRate;
+ playbackPartIndex=index;preloadRecordingPart();finalBlob=blob;finalSize=blob.size;finalId=entry.id;finalName=entry.name;finalDuration=playbackTimelineTotal()*1000;finalMarkers=entry.markers||[];
+ if(time!==null)pendingPlaybackPosition={id:entry.id,time,playing,view};setPreview(blob);
  if(playbackParts.length>1){$('playback-name').textContent=playbackParts[0].name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,'')+' · '+(index+1)+' / '+playbackParts.length;$('preview').addEventListener('loadedmetadata',()=>{setPlaybackRotation(rotation);$('preview').playbackRate=speed;$('playback-speed').value=String(speed);},{once:true});}
 }
 async function playRecording(entry) {
+  if(typeof savePlaybackState==='function')savePlaybackState();
   const all=(await readStore('recordings')).filter(e=>!e.deletedAt);
   const group=recordingGroups(all).find(e=>e.id===entry.id || e._parts?.some(p=>p.id===entry.id));
   playbackParts=group?._parts || [entry];playbackPartIndex=0;
-  await loadRecordingPart(0);
+  const resume=playbackParts.length>1 ? await readStore('meta','continuous:'+(playbackParts[0].recordingGroupId || playbackParts[0].id)):null;
+  await loadRecordingPart(resume && playbackParts.some(e=>e.id===resume.partId) ? playbackParts.findIndex(e=>e.id===resume.partId):0,resume?.time ?? null);
   renderRecordingReview(playbackParts[0]).catch(error=>$('review-summary').textContent=error.message);$('result-warning').hidden=true;show('result');
 }
 async function renderRecordingLibrary() {
@@ -107,7 +111,7 @@ async function renderRecordingLibrary() {
     const detail = document.createElement('p'); detail.className = 'hint'; detail.textContent = `${entry.duration ? fmt(entry.duration) : '--:--'} · ${entry.width && entry.height ? `${entry.width}×${entry.height} · ` : ''}${fmtBytes(entry.size)} · ${entry.course || L('uncategorized')} · ${new Date(entry.createdAt).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : 'en')}`; body.append(detail);
     if (entry.enhancedFrom) { const parent = all.find(item => item.id === entry.enhancedFrom); if (parent && !parent.deletedAt) { const original=libraryButton('originalVideo',()=>playRecording(parent),'text');original.classList.add('original-link');detail.append(' · ',original); } else { const version=document.createElement('p');version.className='version-label';version.textContent=L('originalUnavailable');body.append(version); } }
 
-    const location = document.createElement('p'); location.className = 'hint recording-location'; location.textContent = L('localLocation'); body.append(location);
+    const location = document.createElement('p'); location.className = 'hint recording-location'; location.textContent = entry.diskName ? E('磁盘同步：','Disk copy: ')+entry.diskName+' · '+L('localLocation'):L('localLocation'); body.append(location);
     if (entry.downloadPath) { const path = document.createElement('p'); path.className = 'hint recording-location'; path.textContent = L(entry.downloadExists === false ? 'missingDownload' : 'downloadedLocation', entry.downloadPath); body.append(path); }
     if (entry.sourceUrl) { const link = document.createElement('a'); link.href = telegramLink(entry.sourceUrl); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = L('sourceMessage'); body.append(link); }
     const actions = document.createElement('div'); actions.className = 'controls media-actions';
@@ -120,6 +124,7 @@ async function renderRecordingLibrary() {
       if(entry._parts){const parts=document.createElement('details');parts.className='recording-parts';const summary=document.createElement('summary');summary.textContent=LANG==='zh'?'分段文件与单独处理':'Parts and individual processing';parts.append(summary);for(const part of entry._parts){const line=document.createElement('div');line.className='controls';const label=document.createElement('span');label.textContent=part.name;line.append(label,libraryButton('enhanceRecording',()=>openEnhancement(part)),libraryButton('btnDownload',async()=>download(await readStore('videos',part.id),part.name,part.id)));parts.append(line);}body.append(parts);}
       const menu = document.createElement('details'); menu.className = 'row-menu'; const summary = document.createElement('summary'); summary.textContent = '⋯';summary.setAttribute('aria-label',L('more')); menu.append(summary);
       const items = document.createElement('div'); items.className = 'menu-items';
+      if(entry.diskHandle)items.append(libraryButton('btnDownload',async()=>{if(await entry.diskHandle.requestPermission({mode:'read'})!=='granted')throw new Error(E('未授权磁盘文件','Disk file not authorized'));download(await entry.diskHandle.getFile(),entry.diskName,entry.id);}));
       if(!entry._parts)items.append(libraryButton('btnDownload', async () => { const blob = await readStore('videos',entry.id); download(blob,entry.name,entry.id); }));
       if(!entry._parts)items.append(libraryButton('editVideo', () => openVideoEditor(entry)));
       if(!entry._parts)items.append(libraryButton('renameRecording', async () => {

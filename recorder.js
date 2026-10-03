@@ -27,7 +27,7 @@ const I18N = {
     autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '仅按内存自动分段', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
     btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载录像', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '录制下一条',
-    btnRecover: '恢复并下载', btnDiscard: '丢弃',
+    btnRecover: '恢复到录像库', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
     resultTitle: '录制完成', githubDownload: 'GitHub 下载', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}`, courseLibrary: '本地课程库', exportCourse: '导出索引', segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
@@ -69,7 +69,7 @@ const I18N = {
     autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'Memory-based rotation only', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
     btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download video', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'Record next video',
-    btnRecover: 'Recover and download', btnDiscard: 'Discard',
+    btnRecover: 'Restore to library', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
     resultTitle: 'Recording complete', githubDownload: 'GitHub download', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}`, courseLibrary: 'Local course library', exportCourse: 'Export index', segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
@@ -382,7 +382,7 @@ async function applyOutputSize(stream) {
 async function addMic() {
   if (!$('microphone').checked) return;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, ...($('mic-device').value ? { deviceId: { exact: $('mic-device').value } } : {}) } });
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: $('capture-voice')?.checked ?? true, noiseSuppression: $('capture-voice')?.checked ?? true, autoGainControl: false, sampleRate: {ideal:48000}, ...($('mic-device').value ? { deviceId: { exact: $('mic-device').value } } : {}) } });
   } catch { micStream = null; }
 }
 async function addCamera() {
@@ -413,12 +413,8 @@ function mixAudio() {
   if (![displayStream, micStream].some(stream => stream && stream.getAudioTracks().length)) return null;
   const context = new AudioContext();
   const destination = context.createMediaStreamDestination();
-  [displayStream, micStream].filter(Boolean).forEach((stream) => {
-    if (!stream.getAudioTracks().length) return;
-    const gain = context.createGain();
-    gain.gain.value = micStream && displayStream.getAudioTracks().length ? 0.5 : 1;
-    context.createMediaStreamSource(stream).connect(gain).connect(destination);
-  });
+  if(typeof configureCaptureAudio==='function')configureCaptureAudio(context,destination,[displayStream,micStream]);
+  else [displayStream,micStream].filter(Boolean).forEach(stream=>{if(stream.getAudioTracks().length){const gain=context.createGain();gain.gain.value=micStream && displayStream.getAudioTracks().length ? .5:1;context.createMediaStreamSource(stream).connect(gain).connect(destination);}});
   const track = destination.stream.getAudioTracks()[0];
   if (!track) { context.close().catch(() => {}); return null; }
   mixer = context;
@@ -437,7 +433,7 @@ function audioHintKey() {
 function videoBitrate(track) {
   const { width = 1920, height = 1080, frameRate = Number($('framerate').value) || 30 } = track.getSettings();
   const factor = Math.max(0.5, Math.min(8, width * height / (1920 * 1080) * frameRate / 30));
-  return Math.round((BITRATES[$('quality').value] || BITRATES.standard) * factor);
+  const content=$('capture-content')?.value;return Math.round((BITRATES[$('quality').value] || BITRATES.standard) * factor * (content==='detail' ? 1.15:1));
 }
 async function acquireRecordingLock() {
   if (!navigator.locks) return true;
@@ -465,6 +461,7 @@ function armRecorder(stream, type, state) {
   state.recorder = instance;
   instance.ondataavailable = event => {
     if (!event.data?.size) return;
+    if(typeof writeDiskChunk==='function')writeDiskChunk(state,event.data);
     state.chunks.push(event.data); state.bytes += event.data.size;
     const write = saveChunk(event.data, state.session, state.seq++); state.writes.add(write);
     write.then(()=>{lastRecordingWrite=Date.now();},storageError).finally(() => state.writes.delete(write));
@@ -472,7 +469,7 @@ function armRecorder(stream, type, state) {
       chunks = state.chunks; chunkBytes = state.bytes; chunkSeq = state.seq;
       syncMemory();
       if (chunkBytes >= HEAP_LIMIT_BYTES) { setHint('heapCritical', [fmtBytes(chunkBytes)], true); stop(); }
-      else if (chunkBytes >= AUTO_SEGMENT_BYTES && !rollingSegment) { setHint('autoSegment'); saveSegmentAndContinue().catch(error => { setNotice(error.message); stop(); }); }
+      else if (chunkBytes >= (typeof captureDirectory!=='undefined' && captureDirectory ? 256*1024*1024:AUTO_SEGMENT_BYTES) && !rollingSegment) { setHint('autoSegment'); saveSegmentAndContinue().catch(error => { setNotice(error.message); stop(); }); }
     }
   };
   instance.onstop = () => {
@@ -488,7 +485,7 @@ function armRecorder(stream, type, state) {
 }
 let recordingGroupId=null;
 function segmentDetails(state, end = elapsed()) {
-  return { recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
+  return { captureContent:$('capture-content')?.value || 'auto', recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
 }
 function createSegment(index) {
   const settings = displayStream.getVideoTracks()[0].getSettings();
@@ -512,6 +509,7 @@ async function beginRecording(stream) {
   recordingGroupId=crypto.randomUUID();lastRecordingWrite=Date.now();recordingMime = type; stopRequested = false; storageFailure = false; finalName = null; finalId = null;
   recordingStream = stream; markers = []; finalMarkers = []; finalDuration = 0; videoFailure = null;
   startedAt = Date.now(); pausedAt = 0; pausedTotal = 0; lastMemorySync = 0;
+  if(typeof startIndependentAudio==='function')startIndependentAudio();
   const state = createSegment(1); armRecorder(stream, type, state);
   await setInProgress({ session: state.session, recordingGroupId, part:state.index, name: state.name, mimeType: type, index: state.index, course: state.course, episode: state.episode, ...(state.channelMetadata || {}) });
   selectSegment(state); recorder.start(TIMESLICE_MS);
@@ -520,7 +518,7 @@ async function beginRecording(stream) {
   scheduleSegment();
   const audioKey = audioHintKey();
   if (audioKey) setHint(audioKey, [], true); else if (captureNote) setHint(captureNote.key, captureNote.args); else setHint('recordingHint');
-  $('copy-next-message').hidden=true;$('next-channel-video').disabled=false;$('next-channel-video').hidden=!captureChannelContext?.channelId;show('recording'); startLivePreview(stream); syncMemory();
+  $('copy-next-message').hidden=true;$('next-channel-video').disabled=false;$('next-channel-video').hidden=!captureChannelContext?.channelId;show('recording'); startLivePreview(stream);if(typeof startCaptureStats==='function')startCaptureStats(); syncMemory();
   chrome.runtime.sendMessage({ type: 'recording-state', active: true, highlightClicks: $('clicks').checked }).catch(() => {});
 }
 function snapshotSegment() {
@@ -530,6 +528,7 @@ function snapshotSegment() {
 async function saveCompletedSegment(state) {
   const blob = new Blob(state.chunks, { type: state.recorder.mimeType || recordingMime });
   await Promise.allSettled([...state.writes]);
+  if(typeof closeDiskSegment==='function')await closeDiskSegment(state);
   let id = null;
   try { id = await archiveRecording(blob, state.name, state.session, state.index, false, state.details); }
   catch (error) { storageError(); throw error; }
@@ -565,6 +564,7 @@ async function start() {
   setNotice('');
   if($('quiet-tab-audio').checked){$('capture-method').value='tab';$('screen-audio').checked=true;}
   if($('capture-method').value==='tab'){try{if(!await chrome.permissions.request({permissions:['tabCapture']}))throw new Error(E('标签页采集权限未授予，请授权或使用共享选择器。','Tab capture permission denied. Grant it or use the sharing picker.'));}catch(error){setNotice(error.message);resetStart();return;}}
+  if(typeof prepareDiskCapture==='function'){try{await prepareDiskCapture();}catch(error){setNotice(error.message);resetStart();return;}}
   persist();
   if (typeof stopMicTest === 'function') await stopMicTest();
   try {
@@ -583,7 +583,7 @@ async function start() {
   if ($('capture-mode')?.value === 'telegram' && !displayStream.getAudioTracks().length) {
     releaseCapture(); setNotice(L('telegramNoAudio')); resetStart(); return;
   }
-  if ($('capture-mode')?.value === 'telegram') displayStream.getVideoTracks()[0].contentHint = 'motion';
+  const content=$('capture-content')?.value;displayStream.getVideoTracks()[0].contentHint=content==='auto' || !content ? ($('capture-mode')?.value==='telegram'?'motion':'detail'):content;
   const note = await applyOutputSize(displayStream);
   setCaptureNote(note && note.key, (note && note.args) || []);
   await addMic();
@@ -623,11 +623,12 @@ function pause() {
   if (!recorder) return;
   if (recorder.state === 'recording') {
     recorder.pause();
+    if(typeof independentTracks!=='undefined')for(const encoder of independentTracks)if(encoder.state==='recording')encoder.pause();
     pausedAt = Date.now();
     $('pause').textContent = L('btnResume');
     $('pause').dataset.i18n = 'btnResume';
   } else if (recorder.state === 'paused') {
-    const nextPending=activeSegment.awaitingNext;activeSegment.awaitingNext=false;recorder.resume();if(nextPending){$('next-channel-video').disabled=false;$('copy-next-message').hidden=true;scheduleSegment();}
+    const nextPending=activeSegment.awaitingNext;activeSegment.awaitingNext=false;recorder.resume();if(typeof independentTracks!=='undefined')for(const encoder of independentTracks)if(encoder.state==='paused')encoder.resume();if(nextPending){$('next-channel-video').disabled=false;$('copy-next-message').hidden=true;scheduleSegment();}
     pausedTotal += Date.now() - pausedAt;
     pausedAt = 0;
     $('pause').textContent = L('btnPause');
@@ -640,6 +641,9 @@ function markImportant() {
 }
 const stop = () => { stopRequested = true; clearTimeout(segmentTimer); if (!rollingSegment && recorder && recorder.state !== 'inactive') recorder.stop(); };
 function releaseCapture() {
+  if(typeof stopIndependentAudio==='function')stopIndependentAudio();
+  if(typeof captureStatsTimer!=='undefined')clearInterval(captureStatsTimer);
+  if(typeof captureAudioNodes!=='undefined'){captureAudioNodes={};captureAudioMeter=null;captureMonitor=null;}
   clearInterval(timer);
   clearTimeout(stopTimer);
   clearTimeout(segmentTimer);
@@ -676,6 +680,8 @@ function resetStart() {
 async function finish(savedBlob = null, savedName = null, archived = false, savedId = null) {
   if(typeof playbackParts!=='undefined'){playbackParts=[];playbackPartIndex=0;}
   if (!savedBlob) snapshotSegment();
+  if(typeof stopIndependentAudio==='function')stopIndependentAudio();
+  if(typeof closeDiskSegment==='function' && activeSegment)await closeDiskSegment(activeSegment);
   releaseCapture();
   const type = (recorder && recorder.mimeType) || recordingMime;
   finalBlob = savedBlob || new Blob(chunks, { type });
@@ -683,23 +689,19 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   finalSize = finalBlob.size;
 
   if ($('course-enabled').checked) { $('episode-number').value = String(Math.max(1, Number($('episode-number').value) || 1) + 1); persist(); updateCourseFilename(); }
-  setPreview(finalBlob);
   $('result-warning').textContent = videoFailure ? L(videoFailure) : '';
   $('result-warning').hidden = !videoFailure;
   chunks = [];
   // Keep recovery chunks until the completed video has been stored atomically.
   await Promise.allSettled([...pendingWrites]);
   await Promise.allSettled([...segmentSaves]);
-  if (!archived) { try { finalId = await archiveRecording(finalBlob, finalName, activeSegment.session, activeSegment.index, false, segmentDetails(activeSegment, activeSegment.start + finalDuration)); } catch { storageError(); } }
+  if (!archived) { try { finalId = await archiveRecording(finalBlob, finalName, activeSegment.session, activeSegment.index, false, {...segmentDetails(activeSegment, activeSegment.start + finalDuration),...(activeSegment.details || {})}); } catch { storageError(); } }
   if (archived) finalId = savedId;
-  if(typeof attachPlaybackId==='function')attachPlaybackId(finalId);
   if (finalId) await completeTelegramRecording(activeSegment).catch(error => setNotice(error.message));
-  unlockRecording();
   if (storageFailure) { $('result-warning').textContent = L('storageFailed'); $('result-warning').hidden = false; }
-  recorder = null;
   chrome.runtime.sendMessage({ type: 'recording-state', active: false, highlightClicks: false }).catch(() => {});
   show('result');
-  if(finalId){const completed=await readStore('recordings',finalId);if(completed)await playRecording(completed);}
+  try{if(finalId){const completed=await readStore('recordings',finalId);if(completed)await playRecording(completed);else setPreview(finalBlob);}else setPreview(finalBlob);}catch(error){setPreview(finalBlob);setNotice(error.message);}finally{recorder=null;unlockRecording();}
   (finalId ? readStore('recordings',finalId) : Promise.resolve(null)).then(renderRecordingReview).catch(error=>$('review-summary').textContent=error.message);
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);

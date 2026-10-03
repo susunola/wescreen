@@ -36,6 +36,16 @@ Browser tests require Playwright and Chromium; if absent those tests are skipped
 
 [Source](https://github.com/susunola/wescreen) · [Current changes](CHANGELOG.md)
 
+## Professional capture and playback (1.16)
+
+New controls stay inside the existing advanced menus: recording → advanced settings → Professional capture & audio; player → More → Professional playback tools; library → File management. See [feature coverage and verification](docs/professional-1.16.md).
+
+Select a recording folder to write an additional disk copy in safe segments (256 MB threshold), while the original and recovery chunks remain in the browser library. Folder permission must remain granted. This does not trigger browser downloads. Monitoring reports preview frame delivery/drops, not encoder frame statistics. Independent audio is optional and follows recording pauses; download or delete it in File management.
+
+Select one continuous recording and use Merge for compatible-stream copying, or Compatible merge for explicit re-encoding. Results stay in the helper until manually saved or exported. Originals remain available. Large merged files can be exported directly without first importing them into the library; library import still has a 1.6 GB per-file limit.
+
+On macOS, run the helper's `install-launcher.command` once after dependencies are installed. The extension's Start local helper link then launches or updates the managed helper without interrupting an active processing job. The installer retains existing models and recordings. The helper package is separate from the Edge Store extension package.
+
 ## 1.6 workflow additions
 
 Channel workbench supports reorder, skip, rerecord and duplicate links. Recording diagnostics show preview fps/dropped frames, last completed writes and missing audio signals. A persisted sequential enhancement queue supports pause after the current job, resume and retries. Editing supports clockwise/counterclockwise 90° and arbitrary rotation, plus a 1920×1080 landscape canvas, preserving originals and audio. Border suggestions use the current frame only and require visual checking. Channel crop preferences and synchronized detail zoom are available. Token-file import simplifies pairing. Existing Homebrew installations can install missing FFmpeg/Python when starting; other systems still need prerequisites.
