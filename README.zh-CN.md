@@ -4,7 +4,7 @@
 
 ## 安装
 
-在浏览器扩展的开发者页面加载此目录，或解压 `store/wescreen-1.7.1.zip` 后加载。点击 WeScreen 打开录制页面。改动代码后需重新加载扩展；数据库升级前请关闭旧录制页面。
+在浏览器扩展的开发者页面加载此目录，或解压 `store/wescreen-1.8.0.zip` 后加载。点击 WeScreen 打开录制页面。改动代码后需重新加载扩展；数据库升级前请关闭旧录制页面。
 
 ## 使用
 
@@ -26,9 +26,9 @@
 
 ## 剪辑与增强
 
-使用仓库或独立辅助程序包，安装 Python 3.10–3.13 和 FFmpeg，再运行 `bash enhancement/start.sh`；macOS 可双击 `enhancement/start.command`。将 `enhancement/.runtime/token.txt` 的密钥填入连接面板，检测程序与模型状态。
+使用仓库或独立辅助程序包，安装 Python 3.10–3.13 和 FFmpeg，再运行 `bash enhancement/start.sh`；macOS 可双击 `enhancement/start.command`。扩展会自动连接，无需查找密钥；手动密钥仅保留在高级连接设置。
 
-默认自然修复；FSRCNN 提供轻量 2× 放大；SeedVR2 强力修复需另运行 `bash enhancement/install-seedvr.sh`（模型约 7 GB）。支持选择 5 秒片段预览、同步播放/定位/暂停及原尺寸查看。强力模式必须先预览。AI 可能生成错误细节，无法保证恢复到原本清晰度；输出为 SDR，明暗增强不是 HDR。
+默认自然修复；FSRCNN 提供轻量 2× 放大；SeedVR2 强力修复需另运行 `bash enhancement/install-seedvr.sh`（模型约 7 GB）。支持从当前播放位置选择 3／5／10 秒预览、同步播放/定位/暂停及原尺寸查看。强力模式必须先预览。AI 可能生成错误细节，无法保证恢复到原本清晰度；输出为 SDR，明暗增强不是 HDR。
 
 裁剪与剪头尾另存 MP4，原版保留。完整结果和任务存于 `enhancement/.runtime/jobs`，明确删除前一直保留，重启辅助程序后仍可取回。重新打开页面可查看任务、重试存入录像库或直接流式导出文件；处理中断后需从原片重做。每次处理一个任务，完成结果无固定数量上限，受磁盘空间约束。视频不上传外部处理服务。首次安装依赖与模型需要联网。详见 [辅助程序说明](enhancement/README.md) 与 [隐私政策](PRIVACY.zh-CN.md)。
 

@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.7.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.8.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -17,9 +17,9 @@ Load this directory as an unpacked extension from your browser's extension devel
 
 ## Editing and enhancement
 
-Download/extract the separate helper package or use the repository. Install Python 3.10–3.13 and FFmpeg, then run `bash enhancement/start.sh`. Enter the token from `enhancement/.runtime/token.txt` in the local connection panel and check availability. On macOS you can open `enhancement/start.command`.
+Download/extract the separate helper package or use the repository. Install Python 3.10–3.13 and FFmpeg, then run `bash enhancement/start.sh`. The extension connects automatically; manual token entry remains under Advanced connection settings. On macOS you can open `enhancement/start.command`.
 
-Natural restoration is the default. FSRCNN offers lightweight 2× enhancement; SeedVR2 is optional and requires `bash enhancement/install-seedvr.sh` (about 7 GB of weights). Preview a selected 5-second range, compare synchronized playback or native-size detail, then process a full video. AI may invent details; output is SDR, not HDR.
+Natural restoration is the default. FSRCNN offers lightweight 2× enhancement; SeedVR2 is optional and requires `bash enhancement/install-seedvr.sh` (about 7 GB of weights). Preview 3, 5 or 10 seconds from the current playback position, compare synchronized playback or native-size detail, then process a full video. AI may invent details; output is SDR, not HDR.
 
 Crop/trim saves a new MP4. Full results remain in `enhancement/.runtime/jobs` until explicitly deleted. Processing tasks can be reopened, saved to Library again after a failure, or streamed directly to a file. Completed results survive helper restarts; interrupted tasks must be rerun. One task runs at a time. Completed results have no fixed count cap; available disk space limits retention. No videos go to an external processing service. See [helper guide](enhancement/README.md) and [privacy policy](PRIVACY.md).
 

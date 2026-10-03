@@ -34,3 +34,5 @@ Full processing results and task metadata are retained in enhancement/.runtime/j
 Updated policies are published at the same URL with a revised date. Questions: https://github.com/susunola/wescreen/issues . WeScreen is a general utility and collects no personal data from children or adults.
 
 Channel names, channel/message links, recording plans, numbering and relative export folders are stored locally with recording metadata. The application does not read Telegram accounts or automatically download channel content.
+
+The local helper offers automatic connection only to browser-extension origins. The first extension origin is bound locally; ordinary web origins cannot obtain the connection credential. Manual connection remains available in Advanced settings. Preview duration can be selected as 3, 5 or 10 seconds.

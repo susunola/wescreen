@@ -103,6 +103,7 @@ async function renderRecordingLibrary() {
   updateLibrarySelection();
 }
 function updateLibrarySelection() {
+  $('bulk-hint').hidden=librarySelection.size>0;
   $('batch-add').disabled = !librarySelection.size || libraryTrash;$('bulk-delete').disabled = !librarySelection.size; $('bulk-restore').disabled = !librarySelection.size; $('bulk-restore').hidden = !libraryTrash;
   $('bulk-delete').textContent = L(libraryTrash ? 'deletePermanently' : 'moveTrash') + (librarySelection.size ? ` (${librarySelection.size})` : '');
   const checks = [...document.querySelectorAll('.row-select')]; $('select-all').checked = Boolean(checks.length && checks.every(check => check.checked));

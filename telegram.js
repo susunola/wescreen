@@ -25,6 +25,7 @@ async function renderChannelPlan(){
   const records=await readStore('recordings');
   for(const item of profile?.plan || []){const saved=records.some(entry=>entry.channelTaskId===item.id),option=document.createElement('option');option.value=item.id;option.textContent=(saved ? '✓ ':item.status==='skipped' ? '↷ ':'')+item.title;select.append(option);}
   if([...select.options].some(option=>option.value===selected))select.value=selected;
+  $('channel-plan-choice').hidden=!profile?.plan?.length;
   $('channel-plan').value=(profile?.plan || []).map(item=>`${item.title} | ${item.url}`).join('\n');
 }
 async function loadTelegramProfiles(selectedId){
@@ -60,7 +61,7 @@ async function completeTelegramRecording(state){
 async function initTelegramChannels(){
   const {selectedTelegramChannel}=await chrome.storage.local.get('selectedTelegramChannel');await loadTelegramProfiles(selectedTelegramChannel);if(chosenChannel()){fillChannel(chosenChannel());selectNextChannelVideo();$('channel-config').open=false;}
   $('telegram-channel').hidden=$('capture-mode').value!=='telegram';$('course-panel').hidden=$('capture-mode').value==='telegram';
-  $('channel-select').onchange=async()=>{try{$('channel-config').open=!chosenChannel();fillChannel(chosenChannel());$('channel-plan-item').value='';await renderChannelPlan();selectNextChannelVideo();await renderChannelWorkbench();await chrome.storage.local.set({selectedTelegramChannel:$('channel-select').value});persist();}catch(error){$('channel-status').textContent=error.message;}};
+  $('channel-select').onchange=async()=>{try{$('channel-config').open=false;fillChannel(chosenChannel());$('channel-plan-item').value='';await renderChannelPlan();selectNextChannelVideo();await renderChannelWorkbench();await chrome.storage.local.set({selectedTelegramChannel:$('channel-select').value});persist();}catch(error){$('channel-status').textContent=error.message;}};
   $('channel-save').onclick=async()=>{try{await saveTelegramProfile();$('channel-status').textContent=L('channelSaved');}catch(error){$('channel-status').textContent=error.message;}};
   $('channel-open').onclick=()=>{try{const link=telegramLink($('channel-message-url').value) || telegramLink($('channel-url').value) || 'https://web.telegram.org/';window.open(link,'_blank','noopener,noreferrer');}catch(error){$('channel-status').textContent=error.message;}};
   for(const id of ['channel-name','channel-episode','channel-video-title'])$(id).oninput=updateTelegramFilename;
@@ -76,7 +77,7 @@ async function initTelegramChannels(){
 window.addEventListener('wescreen-language',async()=>{if(document.readyState!=='complete')return;const draft=$('channel-plan').value;try{await loadTelegramProfiles($('channel-select').value);$('channel-plan').value=draft;}catch(error){$('channel-status').textContent=error.message;}});
 
 async function renderChannelWorkbench(){
- const profile=chosenChannel(),list=$('channel-plan-rows');list.replaceChildren();if(!profile)return;const records=await readStore('recordings');
+ const profile=chosenChannel(),list=$('channel-plan-rows');list.replaceChildren();$('channel-queue').hidden=!profile?.plan?.length;if(!profile)return;const records=await readStore('recordings');
  for(const [index,item] of profile.plan.entries()){
   const done=records.some(entry=>entry.channelTaskId===item.id),active=recorder && recorder.state!=='inactive' && captureChannelContext?.channelTaskId===item.id;
   const row=document.createElement('li'),label=document.createElement('strong');label.textContent=item.title+' · '+(active ? (recorder.state==='paused' ? E('已暂停','Paused'):E('录制中','Recording')):done ? E('已完成','Complete'):item.status==='skipped' ? E('已跳过','Skipped'):E('待录','Pending'));row.append(label);

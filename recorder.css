@@ -22,7 +22,7 @@ h2 { margin: 0 0 12px; font-size: 24px; }
 .workspace-nav button[aria-pressed="true"] { background: #203d55; color: #d2ebff; border-color: #476d89; }
 #live-return { margin-left: auto; background: #8e2638; color: white; }
 .panel { border: 1px solid var(--line); border-radius: 14px; padding: 28px; background: var(--panel); }
-#setup { max-width: 800px; margin: 0 auto; }
+#setup { width: 100%; margin: 0; }
 p { line-height: 1.6; }
 label > span, legend { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 650; color: var(--muted); }
 input, select { width: 100%; border: 1px solid #4b657a; border-radius: 7px; padding: 10px; background: var(--inset); color: var(--text); font: inherit; }
@@ -90,3 +90,36 @@ textarea { width: 100%; border: 1px solid #4b657a; border-radius: 7px; padding: 
 .brand-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.version-badge{font-size:12px;letter-spacing:normal;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px;white-space:nowrap}
 
 #review-frames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}#review-frames figure{margin:0}#review-frames img{width:100%;max-height:150px;object-fit:contain}#review-frames figcaption{font-size:12px;color:var(--muted)}#preflight-video{width:100%;max-height:340px}
+
+/* Align one-line batch controls independently of stacked form labels. */
+.bulk-controls { align-items: center; gap: 12px; }
+.bulk-controls > .toggle { margin: 0; min-height: 42px; }
+.bulk-controls > button, .bulk-controls select { height: 42px; }
+.batch-mode-field { display: inline-flex; align-items: center; gap: 10px; min-height: 42px; }
+.batch-mode-field > span { margin: 0; white-space: nowrap; }
+.batch-mode-field select { width: 140px; }
+.channel-heading { margin: 0 0 8px; font-size: 18px; }
+.channel-basic { margin-top: 16px; }
+.channel-actions { margin: 16px 0; }
+#channel-plan-choice { display: block; margin-top: 16px; }
+#channel-plan-choice[hidden] { display: none; }
+#channel-workbench .channel-heading { display: none; }
+#channel-plan { margin-bottom: 10px; }
+@media(max-width:650px) { .batch-mode-field { width: 100%; }.batch-mode-field select { flex: 1; min-width: 0; }.bulk-controls > button { flex: 1; }.channel-actions > button { flex: 1; } }
+
+details[open] > summary { margin-bottom: 16px; }
+.advanced > label { display: block; margin-bottom: 16px; }
+.advanced > .controls { margin-top: 16px; }
+.advanced { margin-block: 18px; }
+.library-toolbar { align-items: center; margin-top: 16px; }
+.library-filters { flex: 1; margin: 0; }
+.library-filters .controls { margin-top: 16px; align-items: end; }
+.library-filters .toggle { min-height: 42px; margin: 0; }
+#preview-seconds { width: 160px; }
+#model-availability:empty, #enhance-disabled-reason:empty, #helper-status:empty, #channel-status:empty { display: none; }
+
+#helper-actions[hidden] { display: none; }
+.enhance-comparison:not(.native-size) video { height: clamp(160px, 24vh, 240px); object-fit: contain; }
+.enhance-comparison.native-size video { height: auto; }
+
+#enhance-estimate:empty, #enhance-status:empty { display: none; }

@@ -1,7 +1,7 @@
-# Edge 商店提交 · WeScreen 1.7.1
+# Edge 商店提交 · WeScreen 1.8.0
 
-上传扩展文件：`wescreen-1.7.1.zip`（manifest.json 位于 ZIP 根目录）。
-`wescreen-helper-1.7.1.zip` 是独立的本地增强程序，不能作为扩展包上传。
+上传扩展文件：`wescreen-1.8.0.zip`（manifest.json 位于 ZIP 根目录）。
+`wescreen-helper-1.8.0.zip` 是独立的本地增强程序，不能作为扩展包上传。
 
 ## 商店资料
 
@@ -43,3 +43,5 @@
 
 - 可选 tabCapture：用户选择“原视频标签页直采（停帧兼容模式）”后请求授权，仅采集主动点击扩展的标签页；使用官方 getMediaStreamId / getUserMedia 路径，并恢复本机音频播放。
 - 停帧兼容验证：先在视频标签页点击扩展打开录制器，选择直采；不要从独立录制器标签页重新点击扩展指定目标。
+
+1.8.0 本机程序新增自动连接：POST /connect 仅接受浏览器扩展来源，并首次绑定该来源。普通网页和其他来源无法获取密钥；/health 与处理接口仍需鉴权。手动连接作为高级选项保留。送审复测请同时使用新版 helper 包。

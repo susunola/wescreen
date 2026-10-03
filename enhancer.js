@@ -14,37 +14,51 @@ function clearEnhancementPreview() {
   for(const id of ['enhance-original','enhance-output']){const video=$(id);video.pause();video.removeAttribute('src');video.load();}
   enhancementUrls.forEach(url=>URL.revokeObjectURL(url));enhancementUrls=[];enhancementOutputUrl=null;
 }
-async function connectHelper() {
-  enhancementToken=$('enhance-token').value.trim();helperHealth=null;
-  if(!enhancementToken){$('helper-status').textContent=L('helperOffline');updateEnhancementMode();return null;}
-  try {
-    helperHealth=await(await enhancementRequest('/health')).json();
-    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
-    $('helper-status').textContent=L('connectReady')+` · FSRCNN ${helperHealth.ai ? '✓' : '—'} · SeedVR2 ${helperHealth.strong ? '✓' : '—'}`;
-    $('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
-  }catch(error){$('helper-status').textContent=L('helperOffline')+' '+error.message;updateEnhancementMode();return null;}
+let helperConnecting=null;
+async function discoverHelperToken(){
+ const response=await fetch(ENHANCER_URL+'/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(3000)});
+ if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error || `HTTP ${response.status}`);}
+ const data=await response.json();if(typeof data.token!=='string' || !/^[A-Za-z0-9_-]{20,128}$/.test(data.token))throw new Error(E('本机连接响应无效。','Invalid helper connection response.'));
+ enhancementToken=data.token;$('enhance-token').value=enhancementToken;
+}
+async function connectHelper(){
+ if(helperConnecting)return helperConnecting;
+ helperConnecting=(async()=>{
+  enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');
+  try{
+   if(!enhancementToken)await discoverHelperToken();
+   try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
+   if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
+   $('helper-status').textContent=L('connectReady');$('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
+  }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('本机程序已连接另一扩展。请在原扩展目录更新版本，或使用高级连接设置。','Helper is paired with another extension. Update the original extension directory or use Advanced connection settings.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');updateEnhancementMode();return null;}
+ })();try{return await helperConnecting;}finally{helperConnecting=null;}
 }
 function enhancementControls(busy) {
-  enhancementBusy=busy;
-  for(const id of ['enhance-preview','enhance-full','enhance-mode','enhance-token','enhance-start'])$(id).disabled=busy;
+  enhancementBusy=busy;$('enhance-progress').hidden=!busy;$('enhance-cancel').hidden=!busy;
+  for(const id of ['enhance-preview','enhance-full','enhance-mode','enhance-token','enhance-start','preview-seconds'])$(id).disabled=busy;
   $('enhance-cancel').disabled=!busy || !enhancementJob;
   updateEnhancementMode();
 }
 function updateEnhancementMode() {
-  for(const mode of ['strong','ai'])$('enhance-mode').querySelector(`[value="${mode}"]`).disabled=!helperHealth?.[mode];
+  $('helper-actions').hidden=!!helperHealth;$('helper-auto-hint').hidden=!!helperHealth;$('model-setup-link').hidden=!helperHealth || (helperHealth.ai && helperHealth.strong);
+  for(const [mode,key] of [['strong','modeStrong'],['ai','modeAI']]){const option=$('enhance-mode').querySelector(`[value="${mode}"]`),reason=!helperHealth ? E('先连接本机程序','connect helper first'):!helperHealth[mode] ? E('未安装模型','model not installed'):'';option.disabled=!!reason;option.textContent=L(key)+(reason ? ` (${reason})`:'');}
+  $('model-availability').textContent=!helperHealth ? E('AI 模式暂不可选：尚未连接本机程序。启动后会自动检测模型。','AI modes unavailable: connect the local helper to check installed models.') : [!helperHealth.strong ? E('强力 AI 未安装：打开安装说明，安装 SeedVR2 模型。','Strong AI unavailable: open setup instructions to install SeedVR2.'):'',!helperHealth.ai ? E('轻量 AI 未安装：请使用完整的新版本机程序包。','Lightweight AI unavailable: use the complete updated helper package.'):''].filter(Boolean).join(' ');
+  for(const option of $('preview-seconds').options)option.textContent=option.value+E(' 秒',' seconds');
+  $('enhance-preview').textContent=E('预览 ','Preview ')+$('preview-seconds').value+E(' 秒',' seconds');
   if($('enhance-mode').selectedOptions[0]?.disabled)$('enhance-mode').value='natural';
   const mode=$('enhance-mode').value;
   $('enhance-mode-hint').textContent=mode==='strong' ? E('SeedVR2 可能改变人脸与字幕。处理较慢，先预览确认；输入/输出最高 1080p。','SeedVR2 can alter faces and subtitles. Processing is slow; preview first. Up to 1080p input/output.') : mode==='natural' ? E('保留原分辨率，减少压缩块和噪点，轻度锐化。','Preserves resolution, reduces compression artifacts and noise, and gently sharpens.') : E('先选择片段预览。明暗增强仍为 SDR，AI 无法保证还原丢失细节。','Preview a selected clip first. Brightness output stays SDR; AI cannot guarantee lost details are recovered.');
   $('enhance-preview').disabled=enhancementBusy || !enhancementSource || !helperHealth;
   $('enhance-full').disabled=enhancementBusy || !enhancementSource || !helperHealth || (mode==='strong' && enhancementPreviewMode!=='strong');
+  $('enhance-disabled-reason').textContent=enhancementBusy ? E('正在处理，请等待完成或取消当前任务。','Processing: wait or cancel the current task.') : !enhancementSource ? E('请先从录像库选择一段视频，再使用画质增强。','Select a video in the library to enable enhancement.') : !helperHealth ? E('按钮暂不可用：本机程序尚未连接。','Buttons unavailable: local helper is not connected.') : mode==='strong' && enhancementPreviewMode!=='strong' ? E('整段增强暂不可用：先生成一段强力 AI 预览，确认效果。','Full processing unavailable: generate a Strong AI preview first.') : '';
 }
 async function openEnhancement(entry=null) {
   if(enhancementBusy){navigateWorkspace('tasks');return;}
   enhancementSource=entry;enhancementPreviewMode=null;comparisonActive=false;clearEnhancementPreview();
   $('enhance-title').textContent=entry ? E('画质增强：','Enhance: ')+entry.name : L('helperConnection');
   $('enhance-estimate').textContent='';$('enhance-start').value='0';$('enhance-progress').value=0;
-  $('enhance-panel').showModal();$('helper-connection').open=!$('enhance-token').value.trim();
-  enhancementStatus(E('选择视频片段生成 5 秒预览。任务可关闭弹窗后继续查看。','Select a 5-second preview. Close this dialog to view tasks while processing.'));
+  $('enhance-panel').showModal();$('helper-connection').open=false;
+  enhancementStatus('');
   if(entry){const blob=await readStore('videos',entry.id);if(!blob)throw new Error(L('errEmpty'));const url=URL.createObjectURL(blob);enhancementUrls.push(url);$('enhance-original').src=url;}
   await connectHelper();
 }
@@ -56,6 +70,7 @@ async function submitProcessing(source,options) {
   enhancementToken=$('enhance-token').value.trim();if(!enhancementToken)throw new Error(L('helperOffline'));
   const blob=await readStore('videos',source.id);if(!blob)throw new Error(L('errEmpty'));
   const query=new URLSearchParams({mode:options.mode,preview:options.preview ? '1':'0',start:String(options.start || 0),end:String(options.end || 0),sourceId:source.id,name:source.name});
+  if(options.previewSeconds)query.set('previewSeconds',String(options.previewSeconds));
   if(options.crop)query.set('crop',options.crop.join(','));
   if(options.landscape)query.set('landscape','1');
   if(options.rotation!==undefined)query.set('rotation',String(options.rotation));
@@ -97,11 +112,11 @@ async function exportTask(task) {
 }
 async function enhanceVideo(preview) {
   if(enhancementBusy || !enhancementSource)return;
-  const source=enhancementSource,mode=$('enhance-mode').value,start=preview ? Number($('enhance-start').value):0;
+  const source=enhancementSource,mode=$('enhance-mode').value,start=preview ? Math.max(0,$('enhance-original').currentTime || 0):0,previewSeconds=Number($('preview-seconds').value) || 5;
   if(!Number.isFinite(start) || start<0){enhancementStatus(E('预览起点无效。','Invalid preview start.'));return;}
   const began=performance.now();let task=null;enhancementControls(true);
   try {
-    task=await submitProcessing(source,{mode,preview,start});enhancementJob=task.id;$('enhance-cancel').disabled=false;
+    task=await submitProcessing(source,{mode,preview,start,previewSeconds});enhancementJob=task.id;$('enhance-cancel').disabled=false;
     while(true){
       const info=await(await enhancementRequest(`/jobs/${task.id}`)).json();$('enhance-progress').value=info.progress || 0;
       const phase=info.detail?.phase;enhancementStatus(info.stage==='SeedVR2' ? `SeedVR2 · ${phase || E('加载模型 / 重建细节','Loading / restoring')}${info.detail ? ` ${info.detail.batch}/${info.detail.batches}`:''}` : E('本机处理中：','Processing locally: ')+Math.round((info.progress || 0)*100)+'%');
@@ -179,9 +194,11 @@ $('enhance-go-tasks').onclick=()=>{$('enhance-panel').close();clearEnhancementPr
 $('helper-check').onclick=connectHelper;
 $('enhance-token').oninput=()=>{helperHealth=null;updateEnhancementMode();};
 window.addEventListener('wescreen-language',()=>{updateEnhancementMode();if(workspaceView==='tasks')renderEnhancementTasks().catch(()=>{});});
-if(chrome.storage.session)chrome.storage.session.get('enhancementToken').then(value=>{enhancementToken=value.enhancementToken || '';$('enhance-token').value=enhancementToken;}).catch(()=>{});
+if(chrome.storage.session)chrome.storage.session.get('enhancementToken').then(value=>{enhancementToken=value.enhancementToken || '';$('enhance-token').value=enhancementToken;if(chrome.runtime.id)connectHelper();}).catch(()=>{});
 setInterval(()=>{if(workspaceView==='tasks' && !$('task-items').contains(document.activeElement))renderEnhancementTasks().catch(error=>$('tasks-status').textContent=error.message);},3000);
 
 $('helper-token-file').onchange=async()=>{try{const file=$('helper-token-file').files[0];if(!file)return;if(file.size>1024)throw new Error(E('连接文件过大。','Connection file is too large.'));const token=(await file.text()).trim();if(!/^[A-Za-z0-9_-]{20,128}$/.test(token))throw new Error(E('连接文件无效。','Invalid connection file.'));$('enhance-token').value=token;await connectHelper();}catch(error){$('helper-status').textContent=error.message;}finally{$('helper-token-file').value='';}};
 $('compare-zoom').oninput=()=>{for(const id of ['enhance-original','enhance-output'])$(id).style.width=String(Number($('compare-zoom').value)*100)+'%';};
 const compareSides=document.querySelectorAll('.enhance-comparison > div');for(const side of compareSides)side.addEventListener('scroll',()=>{const other=[...compareSides].find(item=>item!==side);if(!other)return;const x=side.scrollLeft/(side.scrollWidth-side.clientWidth || 1),y=side.scrollTop/(side.scrollHeight-side.clientHeight || 1);if(Math.abs(other.scrollLeft-x*(other.scrollWidth-other.clientWidth))>1)other.scrollLeft=x*(other.scrollWidth-other.clientWidth);if(Math.abs(other.scrollTop-y*(other.scrollHeight-other.clientHeight))>1)other.scrollTop=y*(other.scrollHeight-other.clientHeight);});
+
+$('preview-seconds').onchange=updateEnhancementMode;setInterval(()=>{if($('enhance-panel').open && !helperHealth && !enhancementBusy)connectHelper();},3000);

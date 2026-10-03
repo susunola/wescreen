@@ -30,6 +30,8 @@ SLOT = threading.Lock()
 WORK = Path(os.environ.get('WESCREEN_WORK_DIR') or ROOT / '.runtime' / 'jobs')
 WORK.mkdir(parents=True, exist_ok=True, mode=0o700)
 WORK.chmod(0o700)
+PAIR_FILE = WORK / 'extension-origin.txt'
+PAIR_GUARD = threading.Lock()
 SEED_ROOT = ROOT / '.runtime' / 'seedvr2'
 SEED_PYTHON = ROOT / '.runtime' / 'seedvr-venv' / 'bin' / 'python'
 SEED_MODELS = ROOT / '.runtime' / 'seedvr-models'
@@ -38,7 +40,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -169,7 +171,8 @@ def run_job(job):
                 raise ValueError('Start must be before the end of the video')
             if end and (end <= start or (duration and end > duration + .05)):
                 raise ValueError('Invalid trim range')
-            limit = min(5, duration - start) if job['preview'] and duration else (5 if job['preview'] else (end - start if end else max(0, duration - start)))
+            preview_seconds = job.get('previewSeconds', 5)
+            limit = min(preview_seconds, duration - start) if job['preview'] and duration else (preview_seconds if job['preview'] else (end - start if end else max(0, duration - start)))
             if not job['preview'] and job['mode'] != 'edit':
                 start = 0; limit = duration
             job['seek'] = ['-ss', str(start)] if start else []
@@ -307,6 +310,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204); self.cors_headers(); self.end_headers()
 
     def do_POST(self):
+        if urlparse(self.path).path == '/connect':
+            origin = self.headers.get('Origin', '')
+            if self.headers.get('Host') not in (f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}') or not re.fullmatch(r'chrome-extension://[a-p]{32}', origin):
+                return self.reply(403, {'error': 'Automatic connection is only available to a browser extension'})
+            with PAIR_GUARD:
+                paired = PAIR_FILE.read_text().strip() if PAIR_FILE.exists() else ''
+                if paired and paired != origin:
+                    return self.reply(403, {'error': 'Helper is paired with another extension. Use advanced manual connection.'})
+                if not paired:
+                    PAIR_FILE.write_text(origin); PAIR_FILE.chmod(0o600)
+            return self.reply(200, {'token': TOKEN})
         if not self.authorized():
             return
         parsed = urlparse(self.path); query = parse_qs(parsed.query)
@@ -317,6 +331,9 @@ class Handler(BaseHTTPRequestHandler):
             ticket = secrets.token_urlsafe(32)
             job.update(exportTicket=ticket, exportUntil=time.time()+120)
             return self.reply(200, {'url': f'http://127.0.0.1:{self.server.server_port}/jobs/{job["id"]}/result?ticket={ticket}'})
+        try: preview_seconds = int(query.get('previewSeconds', ['5'])[0])
+        except ValueError: return self.reply(400, {'error': 'Invalid preview duration'})
+        if preview_seconds not in (3, 5, 10): return self.reply(400, {'error': 'Preview duration must be 3, 5 or 10 seconds'})
         mode = query.get('mode', ['basic'])[0]
         if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit'):
             return self.reply(400, {'error': 'Invalid processing mode'})
@@ -359,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             SLOT.release(); shutil.rmtree(directory, ignore_errors=True)
             return self.reply(400, {'error': str(error)})
-        job = dict(id=identifier, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
+        job = dict(id=identifier, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
         try:
             persist_job(job)
             with GUARD: JOBS[identifier] = job
@@ -395,7 +412,7 @@ class Handler(BaseHTTPRequestHandler):
             with job['output'].open('rb') as video:
                 shutil.copyfileobj(video, self.wfile)
             return
-        self.reply(200, {key: job[key] for key in ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'start', 'end', 'sourceId', 'name', 'createdAt') if key in job})
+        self.reply(200, {key: job[key] for key in ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt') if key in job})
 
     def do_DELETE(self):
         if not self.authorized():

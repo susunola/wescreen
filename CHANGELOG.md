@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0 — 2026-10-03
+
+- Simplify Telegram recording to channel selection, name and optional video title; fold links, numbering, export folders and recording lists into optional settings.
+- Align the library bulk toolbar, add spacing to expanded controls, widen the recording panel and simplify navigation/filter menus.
+- Automatically connect to the local helper and reconnect on reload; first connection pins a browser-extension origin and web origins cannot obtain credentials. Keep manual connection under Advanced settings.
+- Select 3, 5 or 10 preview seconds from the current playback position. Fold detailed comparison controls and explain disabled models/buttons.
+
 ## 1.7.1 — 2026-10-03
 
 - Add optional original-tab capture as an explicit compatibility alternative for recordings with frozen video. Request tabCapture only on selection and preserve local audio playback.

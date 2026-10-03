@@ -122,6 +122,38 @@ class EnhancementTest(unittest.TestCase):
                 self.assertFalse(server.SLOT.locked())
         finally: http.shutdown(); http.server_close()
 
+    def test_auto_connection_pins_extension_and_rejects_web_origins(self):
+        http = server.ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
+        threading.Thread(target=http.serve_forever, daemon=True).start()
+        try:
+            with patch.object(server, 'PAIR_FILE', Path(self.temp.name)/'paired.txt'):
+                url = f'http://127.0.0.1:{http.server_port}/connect'
+                for origin in ('', 'https://example.com', 'http://localhost:8000', 'chrome-extension://invalid'):
+                    request = urllib.request.Request(url, data=b'{}', headers={'Origin': origin})
+                    with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(request)
+                    self.assertEqual(error.exception.code, 403)
+                first = 'chrome-extension://' + 'a'*32
+                request = urllib.request.Request(url, data=b'{}', headers={'Origin': first})
+                self.assertEqual(json.load(urllib.request.urlopen(request))['token'], server.TOKEN)
+                self.assertEqual(server.PAIR_FILE.read_text(), first)
+                self.assertEqual(json.load(urllib.request.urlopen(request))['token'], server.TOKEN)
+                request = urllib.request.Request(url, data=b'{}', headers={'Origin': 'chrome-extension://'+'b'*32})
+                with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(request)
+                self.assertEqual(error.exception.code, 403)
+                request = urllib.request.Request(url, data=b'{}', headers={'Origin': first, 'Host': 'evil.example'})
+                with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(request)
+                self.assertEqual(error.exception.code, 403)
+        finally: http.shutdown(); http.server_close()
+
+    def test_selected_preview_duration_is_respected(self):
+        subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=160x90:rate=12','-t','12','-c:v','libx264',str(self.source)],check=True)
+        for seconds in (3, 10):
+            job = self.job('natural'); job.update(start=1, previewSeconds=seconds)
+            copy = Path(self.temp.name)/f'preview-{seconds}.mp4'; copy.write_bytes(self.source.read_bytes()); job['source']=copy
+            server.SLOT.acquire(); server.run_job(job)
+            self.assertEqual(job['state'], 'done', job.get('error'))
+            self.assertAlmostEqual(job['duration'], seconds, delta=.15)
+
     def test_http_requires_token(self):
         http = server.ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
         threading.Thread(target=http.serve_forever, daemon=True).start()

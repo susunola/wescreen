@@ -4,7 +4,7 @@ const batchStateKey='batch-control';
 async function batchItems(){return (await readStore('meta')).filter(item=>item?.batchItem).sort((a,b)=>a.createdAt-b.createdAt);}
 async function batchUpdate(item,patch){await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...item,...patch},'batch:'+item.id));}
 async function renderBatch(){
- const items=await batchItems(),list=$('batch-items');list.replaceChildren();for(const item of items){const row=document.createElement('li');row.textContent=`${item.name} · ${L({waiting:'jobQueued',processing:'jobProcessing',done:'jobSaved',error:'jobError'}[item.state])}${item.error ? ' · '+item.error:''}`;list.append(row);}
+ const items=await batchItems();$('batch-queue-panel').hidden=!items.length;if(items.some(item=>['waiting','processing','error'].includes(item.state)))$('batch-queue-panel').open=true;const list=$('batch-items');list.replaceChildren();for(const item of items){const row=document.createElement('li');row.textContent=`${item.name} · ${L({waiting:'jobQueued',processing:'jobProcessing',done:'jobSaved',error:'jobError'}[item.state])}${item.error ? ' · '+item.error:''}`;list.append(row);}
  $('batch-empty').hidden=items.length>0;const state=await readStore('meta',batchStateKey);$('batch-resume').disabled=batchRunning && !state?.paused;
 }
 async function enqueueBatch(){

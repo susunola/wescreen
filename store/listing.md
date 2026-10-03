@@ -31,3 +31,5 @@ Permissions: storage, unlimitedStorage, downloads, activeTab, scripting and host
 Load the extension zip; choose a capture source and shared audio; record, stop and inspect Library. Optional editing/enhancement requires starting the separately supplied helper and entering its token. Review local helper behavior independently from extension loading. The local privacy page in docs/index.html is updated; publishing it requires deployment of the repository changes.
 
 Optional tabCapture permission: requested only when the user selects original-tab compatibility capture, to record the tab from which WeScreen was invoked. No persistent access to all websites is requested.
+
+1.8.0: Simplified Telegram recording, automatically paired local helper connection, 3/5/10-second previews from the current playback position, and clear explanations for unavailable AI models. Requires the updated local helper for automatic connection.
