@@ -231,3 +231,9 @@ details[open] > summary { margin-bottom: 16px; }
 #rotated-playback-controls[hidden] { display:none; }
 #rotated-seek { flex:1; min-width:100px; width:auto; }
 #playback-shell:fullscreen { background:#050c14; padding:16px; overflow:auto; }
+
+.playback-tools { gap:12px; margin:12px 0; }.playback-tools label { margin:0; font-size:12px; min-width:100px; }.playback-tools select { padding:9px; }.playback-tools label:last-child { flex:1; }.playback-tuning { margin:12px 0; }#playback-stage[data-zoomed=true] { cursor:grab; touch-action:none; }#playback-stage[data-zoomed=true]:active { cursor:grabbing; }
+
+.playback-tools label:last-child { min-width:0; flex:1 1 220px; }.playback-tools select { width:100%; max-width:100%; }
+
+#playback-time { white-space:nowrap; margin:0; font-variant-numeric:tabular-nums; }#playback-volume { width:90px; padding:0; }

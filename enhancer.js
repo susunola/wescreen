@@ -107,7 +107,7 @@ async function saveTaskResult(task) {
         tx.objectStore('recordings').add(entry);tx.objectStore('videos').add(blob,id);tx.objectStore('tasks').put({...task,...info,savedId:id});
       };
     });
-    saveThumbnail(blob,savedId).catch(()=>{});await renderRecordingLibrary();return savedId;
+    saveThumbnail(blob,savedId).catch(()=>{});await renderRecordingLibrary();if(typeof refreshPlaybackVersions==='function')refreshPlaybackVersions().catch(()=>{});return savedId;
   });
 }
 async function exportTask(task) {
