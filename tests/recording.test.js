@@ -138,7 +138,7 @@ test('opening the recorder records the injected tab as the click-highlight targe
   let openRecorder;
   const operations = [];
   const nodes = {
-    '#lead': { textContent: '' }, '#privacy': { textContent: '' },
+    '#lead': { textContent: '' }, '#privacy': { textContent: '' }, '#github-download': { textContent: '' },
     '#open': { textContent: '', addEventListener: (_, callback) => { openRecorder = callback; } },
     '#open-link': { addEventListener: () => {} },
     '#record-url': { addEventListener: () => {} }
