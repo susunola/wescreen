@@ -28,13 +28,10 @@ document.addEventListener('fullscreenchange',layoutPlaybackRotation);
 $('playback-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('playback-shell').requestFullscreen();layoutPlaybackRotation();requestAnimationFrame(layoutPlaybackRotation);}catch(error){setNotice(error.message);}};
 $('rotated-play').onclick=()=>{const video=$('preview');if(video.paused)video.play().catch(error=>setNotice(error.message));else video.pause();};
 $('rotated-mute').onclick=()=>{$('preview').muted=!$('preview').muted;};
-function updateRecordingTimeline(){const total=playbackTimelineTotal(),time=playbackTimelineTime();if(!playbackSeeking && total>0)$('rotated-seek').value=String(time/total);$('playback-time').textContent=fmt(time*1000)+' / '+fmt(total*1000);}
+function updateRecordingTimeline(){const total=playbackTimelineTotal(),time=playbackTimelineTime();if(!playbackSeeking){if(total>0)$('rotated-seek').value=String(time/total);$('playback-time').textContent=fmt(time*1000)+' / '+fmt(total*1000);}}
 $('preview').addEventListener('timeupdate',updateRecordingTimeline);
 $('preview').addEventListener('ended',()=>{if(playbackParts.length>1 && playbackPartIndex<playbackParts.length-1)loadRecordingPart(playbackPartIndex+1,0,true).catch(error=>setNotice(error.message));});
-$('rotated-seek').oninput=()=>{seekRecordingTimeline(Number($('rotated-seek').value)*playbackTimelineTotal()).catch(error=>setNotice(error.message));};
 let playbackSeeking=false;
-$('rotated-seek').addEventListener('pointerdown',()=>{playbackSeeking=true;});
-for(const event of ['pointerup','pointercancel','change','blur'])$('rotated-seek').addEventListener(event,()=>{playbackSeeking=false;savePlaybackState();});
 
 let activePlaybackId=null,playbackReady=false,playbackGeneration=0,lastPlaybackSave=0,pendingPlaybackPosition=null;
 function currentPlaybackView(){const v=$('preview');return {volume:v.volume,muted:v.muted,rotation:playbackRotation,speed:v.playbackRate,zoom:playbackZoom,fill:playbackFill,pan:{...playbackPan},ambient:!!$('playback-ambient-toggle')?.checked,instantPreset:instantEnhancement,brightness:$('playback-brightness').value,contrast:$('playback-contrast').value,sharpness:$('playback-sharpness').value};}
@@ -155,7 +152,7 @@ $('preview').addEventListener('loadedmetadata',()=>{$('playback-time').textConte
 let fullscreenControlsTimer;
 function revealFullscreenControls(){
  const shell=$('playback-shell');shell.classList.remove('controls-hidden');clearTimeout(fullscreenControlsTimer);
- if(!$('preview').paused)fullscreenControlsTimer=setTimeout(()=>{if(!shell.querySelector('details[open]'))shell.classList.add('controls-hidden');},2200);
+ if(!$('preview').paused)fullscreenControlsTimer=setTimeout(()=>{if(!shell.querySelector('details[open]')&&!shell.querySelector(':focus-visible')&&!playbackSeeking)shell.classList.add('controls-hidden');},2200);
 }
 $('playback-shell').addEventListener('pointermove',revealFullscreenControls);
 $('playback-shell').addEventListener('pointerdown',revealFullscreenControls);
@@ -174,15 +171,14 @@ const cinemaMenus=[qualityMenu,rotationMenu];for(const menu of cinemaMenus){menu
 document.addEventListener('pointerdown',event=>{for(const menu of cinemaMenus)if(!menu.contains(event.target))menu.open=false;});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')cinemaMenus.forEach(menu=>menu.open=false);});
 for(const [id,delta] of [['playback-back',-10],['playback-forward',10]]){const button=document.createElement('button');button.id=id;button.type='button';button.title=E(delta<0?'后退 10 秒':'快进 10 秒',delta<0?'Back 10 seconds':'Forward 10 seconds');button.setAttribute('aria-label',button.title);button.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${delta<0?'M6 5 2 9l4 4M2 9h11a8 8 0 1 1-7 12':'M18 5l4 4-4 4m4-4H11a8 8 0 1 0 7 12'}"/><text x="8" y="17" font-size="8" stroke="none" fill="currentColor">10</text></svg>`;button.onclick=()=>seekRecordingTimeline(playbackTimelineTime()+delta).catch(error=>setNotice(error.message));cinemaTransport.insertBefore(button,$('playback-time'));}
-$('playback-shell').addEventListener('pointerleave',()=>{if(!$('preview').paused && !cinemaMenus.some(menu=>menu.open))$('playback-shell').classList.add('controls-hidden');});
+$('playback-shell').addEventListener('pointerleave',()=>{if(!$('preview').paused && !playbackSeeking && !$('playback-shell').querySelector(':focus-visible') && !cinemaMenus.some(menu=>menu.open))$('playback-shell').classList.add('controls-hidden');});
 
 const cinemaThumbnail=document.createElement('div');cinemaThumbnail.className='cinema-thumbnail';cinemaThumbnail.hidden=true;
 const cinemaCanvas=document.createElement('canvas');cinemaCanvas.width=160;cinemaCanvas.height=90;const cinemaTime=document.createElement('span');cinemaThumbnail.append(cinemaCanvas,cinemaTime);document.querySelector('.player-timeline').append(cinemaThumbnail);
 const cinemaScrubVideo=document.createElement('video');cinemaScrubVideo.muted=true;cinemaScrubVideo.preload='metadata';let cinemaHoverTime=0;
 cinemaScrubVideo.addEventListener('seeked',()=>{try{cinemaCanvas.getContext('2d').drawImage(cinemaScrubVideo,0,0,160,90);}catch{}});
 function seekCinemaThumbnail(){if(cinemaScrubVideo.readyState>=1 && !cinemaScrubVideo.seeking)cinemaScrubVideo.currentTime=cinemaHoverTime;}
-cinemaScrubVideo.addEventListener('loadedmetadata',seekCinemaThumbnail);
-$('rotated-seek').addEventListener('pointermove',event=>{const v=$('preview');if(playbackParts.length>1 || !Number.isFinite(v.duration)||v.duration<=0)return;const bounds=event.currentTarget.getBoundingClientRect(),fraction=Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width));cinemaHoverTime=Math.min(v.duration-.01,fraction*v.duration);cinemaTime.textContent=fmt(cinemaHoverTime*1000);cinemaThumbnail.hidden=false;cinemaThumbnail.style.left=`${Math.max(84,Math.min(bounds.width-84,event.clientX-bounds.left))}px`;if(cinemaScrubVideo.src!==v.currentSrc){cinemaScrubVideo.src=v.currentSrc;cinemaScrubVideo.load();}else seekCinemaThumbnail();});
+
 $('rotated-seek').addEventListener('pointerleave',()=>cinemaThumbnail.hidden=true);
 
 $('preview').addEventListener('loadedmetadata',()=>{cinemaScrubVideo.removeAttribute('src');cinemaScrubVideo.load();cinemaThumbnail.hidden=true;});

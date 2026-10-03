@@ -10,7 +10,7 @@ const HEAP_WARN_BYTES = 800 * 1024 * 1024;
 const AUTO_SEGMENT_BYTES = HEAP_WARN_BYTES;
 const HEAP_LIMIT_BYTES = 1600 * 1024 * 1024;
 const STORAGE_FLOOR_BYTES = 500 * 1024 * 1024;
-const OPEN_QUALITIES = new Set(['source', '1080', '720']);
+const OPEN_QUALITIES = new Set(['source', '2160', '1440', '1080', '720']);
 
 const I18N = {
   zh: {
@@ -22,7 +22,7 @@ const I18N = {
     setupLead: '录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。',
     upgradePreserves: '更新现有扩展会保留录像；请勿先卸载，手动更新请保持原目录。', smartRealtime: '智能最佳画质 · 实时 AI', cinemaMode: '影院模式', enhancementEnabled: '增强已开启', repairCaption: '生成高清新版本，保留原视频', enhanceMore: '更多增强设置 ›', originalPicture: '原画', instantViewing: '即时增强', playerView: '旋转与视图', instantEnhance: '一键画质增强', aiRepair: 'AI 高清修复', playbackSpeed: '倍速', playbackPip: '画中画', playbackVersion: '视频版本', playbackTuning: '画面缩放与实时调节', playbackZoom: '缩放（拖动画面移动，双击复位）', playbackBrightness: '亮度', playbackContrast: '对比度', playbackSharpness: '轻度锐化', playbackResetTuning: '恢复画质调节', playbackTuningHint: '实时调节仅影响当前观看；AI 修复通过画质增强生成新版本。', playbackKeys: '空格暂停 · ←/→ 跳转 5 秒 · R 旋转 · F 全屏 · M 静音', playbackAngle: '播放角度', playbackReset: '恢复方向', playbackFullscreen: '全屏', playbackPlay: '播放 / 暂停', playbackMute: '声音开关', quietTabAudio: '静音录制（仍保存视频声音）', quietTabAudioHint: '自动使用原视频标签页直采；临时开启网页播放器声音，但不播放到扬声器。停止后恢复原静音与音量。请先在视频标签页点击 WeScreen。', labelMode: '录制场景', modeGeneral: '普通录屏', modeTelegram: 'Telegram 频道视频', openTelegram: '打开 Telegram Web', telegramGuide: '先打开频道视频并暂停。开始录制时选择 Telegram 标签页并勾选共享音频；倒计时结束后切回视频播放，可进入全屏减少界面遮挡。桌面版请选择窗口，声音支持取决于系统。', telegramNoAudio: '没有采集到 Telegram 视频声音。请重新选择 Telegram 标签页并勾选共享音频。', telegramWebM: '当前浏览器不支持 MP4，已使用 WebM 视频预设。', labelFormat: '录制格式', formatMP4: 'MP4（H.264 + AAC，兼容优先）', formatWebM: 'WebM（VP9 / VP8）', errMP4: '当前浏览器不支持 H.264 + AAC 的 MP4 录制，请更新浏览器或选择 WebM。', labelFilename: '文件名', labelResolution: '分辨率', labelQuality: '画质', labelFrameRate: '帧率', labelCountdown: '倒计时', labelAutoStop: '自动停止', labelSegment: '长录制分段', advancedSettings: '高级录制设置',
     resSource: '原始分辨率', res1080: '1080p', res720: '720p',
-    qualityStandard: '标准', qualityHigh: '高画质', qualityCompact: '节省空间',
+    qualityStandard: '标准码率', qualityHigh: '高码率', qualityCompact: '省空间码率',
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
     autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '仅按内存自动分段', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
@@ -64,7 +64,7 @@ const I18N = {
     setupLead: 'Record your entire screen, a window, or a tab. All media is processed on your device only.',
     upgradePreserves: 'Update the existing extension to retain recordings. Do not uninstall; keep the same folder for unpacked updates.', smartRealtime: 'Smart quality · Realtime AI', cinemaMode: 'Cinema mode', enhancementEnabled: 'Enhancement on', repairCaption: 'Creates a new version; preserves the original', enhanceMore: 'More enhancement settings ›', originalPicture: 'Original', instantViewing: 'Instant enhancement', playerView: 'Rotation & view', instantEnhance: 'Instant enhancement', aiRepair: 'AI HD repair', playbackSpeed: 'Speed', playbackPip: 'Picture in picture', playbackVersion: 'Video version', playbackTuning: 'Zoom and live adjustments', playbackZoom: 'Zoom (drag to pan, double-click to reset)', playbackBrightness: 'Brightness', playbackContrast: 'Contrast', playbackSharpness: 'Gentle sharpening', playbackResetTuning: 'Reset adjustments', playbackTuningHint: 'Live adjustments affect viewing only. AI enhancement creates a new version.', playbackKeys: 'Space pause · ←/→ seek 5s · R rotate · F fullscreen · M mute', playbackAngle: 'Angle', playbackReset: 'Reset rotation', playbackFullscreen: 'Fullscreen', playbackPlay: 'Play / Pause', playbackMute: 'Toggle sound', quietTabAudio: 'Silent recording (save video audio)', quietTabAudioHint: 'Uses original-tab capture. Temporarily enables the web player audio without playing through speakers; restores mute and volume on stop. Open WeScreen from the video tab first.', labelMode: 'Recording scenario', modeGeneral: 'General screen recording', modeTelegram: 'Telegram channel video', openTelegram: 'Open Telegram Web', telegramGuide: 'Open and pause the channel video first. Select the Telegram tab and enable shared audio in the capture picker. After the countdown, return and play the video; fullscreen reduces UI clutter. For the desktop app select its window; audio support varies by system.', telegramNoAudio: 'No Telegram audio was captured. Select the Telegram browser tab again and enable shared audio.', telegramWebM: 'MP4 is unavailable in this browser. The video preset uses WebM.', labelFormat: 'Recording format', formatMP4: 'MP4 (H.264 + AAC, compatible)', formatWebM: 'WebM (VP9 / VP8)', errMP4: 'This browser cannot record H.264 + AAC MP4. Update your browser or select WebM.', labelFilename: 'File name', labelResolution: 'Resolution', labelQuality: 'Quality', labelFrameRate: 'Frame rate', labelCountdown: 'Countdown', labelAutoStop: 'Auto stop', labelSegment: 'Long-recording segments', advancedSettings: 'Advanced recording settings',
     resSource: 'Source resolution', res1080: '1080p', res720: '720p',
-    qualityStandard: 'Standard', qualityHigh: 'High', qualityCompact: 'Space saver',
+    qualityStandard: 'Standard bitrate', qualityHigh: 'High bitrate', qualityCompact: 'Space-saving bitrate',
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
     autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'Memory-based rotation only', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
@@ -705,6 +705,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   (finalId ? readStore('recordings',finalId) : Promise.resolve(null)).then(renderRecordingReview).catch(error=>$('review-summary').textContent=error.message);
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
+  if (finalId && $('auto-static-tail')?.checked && typeof queueSmartTail==='function') queueSmartTail(finalId).catch(error=>setNotice(error.message));
 }
 async function download(blob = finalBlob, explicitName = null, recordingId = finalId) {
   if (!blob || !blob.size) { setNotice(L('errEmpty')); return; }
@@ -800,12 +801,15 @@ async function handleRecovery(keep) {
   try {
     // Read after acquiring the lock, never use the snapshot from page load.
     const sessions = await pendingSessions();
+    let recoveredCount=0;
+    if(typeof updateRecoveryProgress==='function')updateRecoveryProgress(0,sessions.length);
     for (const state of sessions) {
       const stored = await loadChunks(state.session);
       if (keep && stored.length) {
         const blob = new Blob(stored, { type: state.mimeType || 'video/webm' });
         await archiveRecording(blob, state.name || 'recovered-recording.webm', state.session, state.index || 1, true, { recordingGroupId:state.recordingGroupId,part:state.part || state.index, course: state.course || '', episode: state.episode, channelId: state.channelId, channelName: state.channelName, channelUrl: state.channelUrl, sourceUrl: state.sourceUrl, sourceTitle: state.sourceTitle, exportFolder: state.exportFolder, recovered: true });
       } else await discardSession(state.session);
+      if(typeof updateRecoveryProgress==='function')updateRecoveryProgress(++recoveredCount,sessions.length);
     }
     await refreshRecovery();
   } catch (error) { setNotice(L('storageFailed') + ' ' + error.message); }

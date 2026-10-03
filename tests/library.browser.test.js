@@ -38,7 +38,7 @@ test('stale recovery never overwrites a completed recording, and new starts rere
   const after=await b.evaluate(async()=>{const e=(await readStore('recordings'))[0];return {id:e.id,size:e.size,duration:e.duration};});assert.deepEqual(after,before);assert.ok(before.duration>2500);
   await b.evaluate(async()=>{const e=(await readStore('recordings'))[0];const blob=await readStore('videos',e.id);await runTx(['chunks','meta'],'readwrite',tx=>{tx.objectStore('chunks').put(blob,'legacy-000000');tx.objectStore('meta').put({session:'legacy',name:'recovered.mp4',mimeType:'video/mp4'},'inProgress');});});
   // A's recovery UI is stale/hidden: start must still refuse unresolved data.
-  await a.evaluate(()=>start());assert.match(await a.locator('#notice').textContent(),/恢复/);await a.locator('#recover').click();await waitForStorage(a,async()=>(await readStore('recordings')).length===2);
+  await a.evaluate(()=>start());assert.match(await a.locator('#notice').textContent(),/恢复/);await a.evaluate(()=>{window.recoverySteps=[];const update=updateRecoveryProgress;updateRecoveryProgress=(done,total)=>{recoverySteps.push({done,total});return update(done,total);};});await a.locator('#recover').click();await waitForStorage(a,async()=>(await readStore('recordings')).length===2);await a.waitForFunction(()=>/已恢复|Restored safely/.test($('recovery-status').textContent));assert.ok(await a.evaluate(()=>recoverySteps.some(step=>step.done===step.total&&step.total>0)));assert.equal(await a.locator('#recovery-progress').isVisible(),false);
   await a.evaluate(()=>navigateWorkspace('library'));await a.getByRole('button',{name:'打开播放',exact:true}).first().click();await a.waitForFunction(()=>$('preview').readyState>=2);
 }));
 test('slow archival never delays the next encoder; stop during rollover keeps every completed part',options,async()=>harness(async(cx,url)=>{
@@ -166,4 +166,20 @@ test('saved MP4 contains changing frames while the recorder is in the background
 }));
 test('direct-tab capture permission denial never starts another source',options,async()=>harness(async(cx,url)=>{
  const p=await pageReady(cx,url);await p.evaluate(()=>{$('capture-method').value='tab';chrome.permissions={request:async()=>false};navigator.mediaDevices.getDisplayMedia=async()=>{throw new Error('Unexpected sharing fallback');};});await p.locator('#start').click();await p.waitForFunction(()=>$('notice').textContent.includes('权限'));assert.equal(await p.evaluate(()=>recorder),null);assert.equal(await p.locator('#start').isDisabled(),false);assert.equal(await p.evaluate(async()=>(await pendingSessions()).length),0);
+}));
+
+test('playlist persists, resumes playback, groups parts and removes deleted entries across pages',options,async()=>harness(async(cx,url)=>{
+  const p=await pageReady(cx,url),errors=[];p.on('pageerror',e=>errors.push(e.message));
+  await capture(p);await p.waitForTimeout(1200);await stopCapture(p);await p.waitForFunction(()=>playbackReady);
+  const first=await p.evaluate(()=>finalId);
+  await p.evaluate(async first=>{const entry=await readStore('recordings',first),blob=await readStore('videos',first);await updateRecording(first,{recordingGroupId:'playlist-group',part:1});await runTx(['recordings','videos'],'readwrite',tx=>{for(const id of ['playlist-part2','playlist-other']){tx.objectStore('recordings').put({...entry,id,name:id+'.mp4',recordingGroupId:id==='playlist-part2'?'playlist-group':null,part:id==='playlist-part2'?2:1,createdAt:entry.createdAt+1000});tx.objectStore('videos').put(blob,id);}});await playRecording(await readStore('recordings','playlist-part2'));},first);
+  await p.waitForFunction(()=>playbackReady);
+  await p.evaluate(async()=>{$('preview').pause();$('preview').currentTime=.5;await savePlaybackState();await playRecording(await readStore('recordings','playlist-other'));await refreshPlayerPlaylist();});
+  assert.equal(await p.locator('.player-playlist-item').count(),2);
+  await p.reload();await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');await p.evaluate(()=>refreshPlayerPlaylist());assert.equal(await p.locator('.player-playlist-item').count(),2);
+  await p.evaluate(async()=>{await playRecording(await readStore('recordings','playlist-other'));$('player-playlist-menu').open=true;});await p.waitForFunction(()=>playbackReady);await p.locator('.player-playlist-item').filter({hasText:'段连续播放'}).click();await p.waitForFunction(()=>playbackReady&&$('preview').currentTime>.4);assert.equal(await p.evaluate(()=>playbackParts.length),2);
+  const other=await pageReady(cx,url);await other.evaluate(()=>removeRecordings(['playlist-other']));await p.waitForFunction(()=>document.querySelectorAll('.player-playlist-item').length===1);
+  await other.evaluate(first=>removeRecordings([first]),first);await p.waitForFunction(()=>document.querySelectorAll('.player-playlist-item').length===0);
+  assert.deepEqual(await p.evaluate(()=>readStore('meta','player-history')),[]);
+  await p.reload();await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');await p.evaluate(()=>refreshPlayerPlaylist());assert.equal(await p.locator('.player-playlist-item').count(),0);assert.deepEqual(errors,[]);
 }));

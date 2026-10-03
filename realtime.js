@@ -17,7 +17,7 @@ function scheduleRealtimeAI(){
  realtimeAI.callback=video.requestVideoFrameCallback ? video.requestVideoFrameCallback(callback):requestAnimationFrame(callback);
 }
 async function processRealtimeFrame(mediaTime){
- const video=$('preview');if(!realtimeAI.enabled || realtimeAI.busy || video.readyState<2 || document.hidden || !$('result').getClientRects().length)return;
+ const video=$('preview');if(!realtimeAI.enabled || realtimeAI.busy || playbackSeeking || video.readyState<2 || document.hidden || !$('result').getClientRects().length)return;
  const generation=realtimeAI.generation,request=++realtimeAI.request;realtimeAI.busy=true;const started=performance.now();
  const scale=Math.min(1,realtimeAI.edge/Math.max(video.videoWidth,video.videoHeight),540/Math.min(video.videoWidth,video.videoHeight));
  realtimeCapture.width=Math.max(2,Math.round(video.videoWidth*scale));realtimeCapture.height=Math.max(2,Math.round(video.videoHeight*scale));

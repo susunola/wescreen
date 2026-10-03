@@ -7,6 +7,7 @@ async function updateRecording(id, changes) {
     const store = tx.objectStore('recordings'), request = store.get(id);
     request.onsuccess = () => { if (request.result) store.put({ ...request.result, ...changes }); };
   });
+  if (typeof notifyPlaybackLibraryChanged === 'function') notifyPlaybackLibraryChanged();
 }
 async function removeRecordings(ids, permanent = false) {
   if (!ids.length) return;
@@ -19,6 +20,7 @@ async function removeRecordings(ids, permanent = false) {
       else { const request = tx.objectStore('recordings').get(id); request.onsuccess = () => { if (request.result) tx.objectStore('recordings').put({ ...request.result, deletedAt: Date.now() }); }; }
     }
   });
+  if (typeof notifyPlaybackLibraryChanged === 'function') notifyPlaybackLibraryChanged();
   if (ids.includes(finalId)) { clearPreview(); finalBlob = null; finalId = null; finalSize = 0; recordingView = 'setup'; navigateWorkspace(workspaceView); }
   librarySelection.clear(); await renderRecordingLibrary(); renderStorageHint();
 }
@@ -63,10 +65,14 @@ async function playRecording(entry) {
   if(typeof savePlaybackState==='function')savePlaybackState();
   const all=(await readStore('recordings')).filter(e=>!e.deletedAt);
   const group=recordingGroups(all).find(e=>e.id===entry.id || e._parts?.some(p=>p.id===entry.id));
+  if (!group) throw new Error(E('此录像已删除。','This recording was deleted.'));
   playbackParts=group?._parts || [entry];playbackPartIndex=0;
   const resume=playbackParts.length>1 ? await readStore('meta','continuous:'+(playbackParts[0].recordingGroupId || playbackParts[0].id)):null;
   await loadRecordingPart(resume && playbackParts.some(e=>e.id===resume.partId) ? playbackParts.findIndex(e=>e.id===resume.partId):0,resume?.time ?? null);
   renderRecordingReview(playbackParts[0]).catch(error=>$('review-summary').textContent=error.message);$('result-warning').hidden=true;show('result');
+  if (typeof rememberPlaylistRecording === 'function') await rememberPlaylistRecording(group).catch(error => {
+    $('playback-status').textContent=E('录像已打开，但播放列表保存失败，请检查存储空间。','Recording opened, but playlist could not be saved. Check available storage.');
+  });
 }
 async function renderRecordingLibrary() {
   const generation = ++libraryRenderGeneration;
