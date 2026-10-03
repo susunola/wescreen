@@ -16,6 +16,8 @@ from urllib.parse import parse_qs, urlparse
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from realtime import enhance_frame
+from pairing import connect_origin
+from tail import trim_static_tail
 from merge import handle_media_post
 
 ROOT = Path(__file__).resolve().parent
@@ -57,7 +59,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -213,7 +215,9 @@ def run_job(job):
                 raise ValueError('Not enough disk space for this job. Trim the video or free space first.')
             trim = ['-t', str(limit)] if limit else []
             encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart']
-            if job['mode']=='audio':
+            if job['mode']=='trimstatic':
+                trim_static_tail(job,source,output,duration,globals())
+            elif job['mode']=='audio':
                 preset=job.get('audioPreset','level')
                 audio_filter={'voice':'highpass=f=90,equalizer=f=2200:t=q:w=1:g=3,afftdn=nf=-25','night':'acompressor=threshold=0.08:ratio=6:attack=10:release=200:makeup=2,alimiter=limit=0.9','level':'loudnorm=I=-16:TP=-1.5:LRA=11'}[preset]
                 if preset=='level':
@@ -231,7 +235,8 @@ def run_job(job):
             elif job['mode'] == 'strong':
                 run_seed(job, source, output, width, height, trim, encode)
             elif job['mode'] != 'ai':
-                command = ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-map', '0:a:0?', '-vf', edit_filter(job, width, height) if job['mode'] == 'edit' else enhancement_filter(job['mode'],job.get('strength',1)) + ',pad=ceil(iw/2)*2:ceil(ih/2)*2', *encode, '-progress', 'pipe:1', str(output)]
+                video_filter=watermark_filter(job,width,height) if job['mode']=='watermark' else edit_filter(job,width,height) if job['mode']=='edit' else enhancement_filter(job['mode'],job.get('strength',1)) + ',pad=ceil(iw/2)*2:ceil(ih/2)*2'
+                command = ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-map', '0:a:0?', '-vf',video_filter, *encode, '-progress', 'pipe:1', str(output)]
                 process = checked_process(job, command, stdout=subprocess.PIPE, text=True)
                 for line in process.stdout:
                     update_ffmpeg_progress(job, line, limit)
@@ -304,6 +309,14 @@ def run_job(job):
             SLOT.release()
 
 
+def watermark_filter(job,width,height):
+    region=job.get('watermark')
+    if not region or len(region)!=4: raise ValueError('Select a watermark region first')
+    x,y,w,h=region
+    if x<1 or y<1 or w<4 or h<4 or x+w>=width or y+h>=height:
+        raise ValueError('Watermark region needs a border inside the image. Use crop for edge watermarks.')
+    return f'delogo=x={x}:y={y}:w={w}:h={h},pad=ceil(iw/2)*2:ceil(ih/2)*2'
+
 def edit_filter(job, width, height):
     filters = []
     crop = job.get('crop')
@@ -361,11 +374,11 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get('Host') not in (f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}') or not re.fullmatch(r'chrome-extension://[a-p]{32}', origin):
                 return self.reply(403, {'error': 'Automatic connection is only available to a browser extension'})
             with PAIR_GUARD:
-                paired = PAIR_FILE.read_text().strip() if PAIR_FILE.exists() else ''
-                if paired and paired != origin:
-                    return self.reply(403, {'error': 'Helper is paired with another extension. Use advanced manual connection.'})
-                if not paired:
-                    PAIR_FILE.write_text(origin); PAIR_FILE.chmod(0o600)
+                nonce = parse_qs(urlparse(self.path).query).get('challenge', [''])[0]
+                try: approved=connect_origin(PAIR_FILE, origin, nonce)
+                except (OSError,ValueError): return self.reply(503,{'error':'Pairing metadata could not be read; check local file permissions.'})
+                if not approved:
+                    return self.reply(403, {'error': 'Helper is paired with another extension. Approve this extension in the local launcher.', 'code': 'PAIRING_REQUIRED', 'nativePairing': True})
             return self.reply(200, {'token': TOKEN})
         if not self.authorized():
             return
@@ -406,7 +419,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError: return self.reply(400, {'error': 'Invalid preview duration'})
         if preview_seconds not in (3, 5, 10): return self.reply(400, {'error': 'Preview duration must be 3, 5 or 10 seconds'})
         mode = query.get('mode', ['basic'])[0]
-        if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit','audio'):
+        if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit','audio','trimstatic','watermark'):
             return self.reply(400, {'error': 'Invalid processing mode'})
         if mode == 'strong' and not seed_ready():
             return self.reply(503, {'error': 'SeedVR2 is not installed. Run enhancement/install-seedvr.sh first.'})
@@ -433,6 +446,8 @@ class Handler(BaseHTTPRequestHandler):
             crop = [int(value) for value in query['crop'][0].split(',')] if query.get('crop') else None
             if crop and (len(crop) != 4 or any(value < 0 or value > 8192 for value in crop)):
                 raise ValueError('Invalid crop')
+            watermark = [int(value) for value in query['watermark'][0].split(',')] if query.get('watermark') else None
+            if mode=='watermark' and (not watermark or len(watermark)!=4 or any(v<1 or v>8192 for v in watermark)): raise ValueError('Invalid watermark region')
             identifier = secrets.token_hex(16)
             directory = WORK / identifier; directory.mkdir(mode=0o700)
         except Exception as error:
@@ -451,7 +466,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             SLOT.release(); shutil.rmtree(directory, ignore_errors=True)
             return self.reply(400, {'error': str(error)})
-        job = dict(id=identifier, audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
+        job = dict(id=identifier,watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
         try:
             persist_job(job)
             with GUARD: JOBS[identifier] = job
@@ -474,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'version':'1.16.0','merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.17.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None
@@ -487,7 +502,7 @@ class Handler(BaseHTTPRequestHandler):
             with job['output'].open('rb') as video:
                 shutil.copyfileobj(video, self.wfile)
             return
-        self.reply(200, {key: job[key] for key in ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt') if key in job})
+        self.reply(200, {key: job[key] for key in PUBLIC_KEYS if key in job})
 
     def do_DELETE(self):
         if not self.authorized():

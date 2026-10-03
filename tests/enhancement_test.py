@@ -40,6 +40,36 @@ class EnhancementTest(unittest.TestCase):
         server.update_ffmpeg_progress(job, 'out_time_us=9000000\n', 5)
         self.assertEqual(job['progress'], .99)
 
+    def test_static_tail_trim_and_audio_protection(self):
+        master=Path(self.temp.name)/'master.mp4'
+        for audible in (False,True):
+            subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=160x90:rate=5:duration=3','-f','lavfi','-i','sine=frequency=440:sample_rate=48000' if audible else 'anullsrc=r=48000:cl=mono','-vf','tpad=stop_mode=clone:stop_duration=75','-t','78','-c:v','libx264','-c:a','aac',str(master)],check=True)
+            before=master.read_bytes();self.source.write_bytes(before)
+            job=self.job('trimstatic');job.update(preview=False,requireSilence=True)
+            server.SLOT.acquire();server.run_job(job)
+            self.assertEqual(job['state'],'done',job.get('error'))
+            self.assertEqual(master.read_bytes(),before)
+            if audible:self.assertEqual(job['tailRemoved'],0);self.assertGreater(job['duration'],77)
+            else:self.assertGreater(job['tailRemoved'],70);self.assertLess(job['duration'],5)
+
+    def test_static_tail_preserves_whole_still_and_internal_hold(self):
+        from tail import analyze_tail
+        master=Path(self.temp.name)/'protected.mp4'
+        for internal in (False,True):
+            inputs=['-f','lavfi','-i','testsrc2=size=160x90:rate=5:duration=3'] if internal else ['-f','lavfi','-i','color=c=blue:size=160x90:rate=5:duration=78']
+            filters=['-vf','tpad=start_mode=clone:start_duration=75'] if internal else []
+            subprocess.run(['ffmpeg','-v','error','-y',*inputs,*filters,'-c:v','libx264',str(master)],check=True)
+            before=master.read_bytes();job=self.job('trimstatic');job.update(preview=False,requireSilence=True,log=None)
+            cut,reason=analyze_tail(job,master,78,vars(server))
+            self.assertIsNone(cut,reason);self.assertEqual(master.read_bytes(),before)
+
+    def test_watermark_patch_preserves_dimensions_audio_and_rejects_edges(self):
+        for region in ([20,20,20,12],[0,10,20,10],[150,10,20,10]):
+            self.source.write_bytes(subprocess.check_output(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=160x90:rate=12','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','1','-c:v','libx264','-c:a','aac','-movflags','frag_keyframe+empty_moov','-f','mp4','pipe:1']))
+            job=self.job('watermark');job['watermark']=region;server.SLOT.acquire();server.run_job(job)
+            self.assertEqual(job['state'],'done' if region[0]==20 else 'error',job.get('error'))
+            if region[0]==20:self.assertEqual((job['width'],job['height']),(160,90));self.assertGreater(job['size'],0)
+
     def test_basic_and_light_preserve_size_and_audio(self):
         for mode in ('basic', 'natural', 'light'):
             with self.subTest(mode=mode):
@@ -155,6 +185,18 @@ class EnhancementTest(unittest.TestCase):
                 request = urllib.request.Request(url, data=b'{}', headers={'Origin': first, 'Host': 'evil.example'})
                 with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(request)
                 self.assertEqual(error.exception.code, 403)
+                from pairing import grant_pairing
+                second='chrome-extension://'+'b'*32
+                nonce='c'*64
+                grant_pairing(server.PAIR_FILE, second, nonce)
+                wrong=urllib.request.Request(url+'?challenge='+nonce,data=b'{}',headers={'Origin':'chrome-extension://'+'d'*32})
+                with self.assertRaises(urllib.error.HTTPError): urllib.request.urlopen(wrong)
+                approved=urllib.request.Request(url+'?challenge='+nonce,data=b'{}',headers={'Origin':second})
+                self.assertEqual(json.load(urllib.request.urlopen(approved))['token'],server.TOKEN)
+                for origin in (first,second):
+                    request=urllib.request.Request(url,data=b'{}',headers={'Origin':origin})
+                    self.assertEqual(json.load(urllib.request.urlopen(request))['token'],server.TOKEN)
+                self.assertFalse((server.PAIR_FILE.parent/'pair-grants'/(nonce+'.json')).exists())
         finally: http.shutdown(); http.server_close()
 
     def test_selected_preview_duration_is_respected(self):

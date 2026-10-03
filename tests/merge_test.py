@@ -10,8 +10,8 @@ class MergeTest(unittest.TestCase):
  def request(self,path,data=None,token=True):
   headers={'X-WeScreen-Token':server.TOKEN} if token else {};req=urllib.request.Request(self.url+path,data=data,headers=headers);return urllib.request.urlopen(req,timeout=30)
  def upload(self,path=None):return json.load(self.request('/uploads',(path or self.clip).read_bytes()))['id']
- def job(self,ids,compatible=False):
-  result=json.load(self.request('/jobs/merge',json.dumps({'parts':ids,'compatible':compatible,'name':'test.mp4'}).encode()));identifier=result['id'];deadline=time.time()+30
+ def job(self,ids,compatible=False,smart=False):
+  result=json.load(self.request('/jobs/merge',json.dumps({'parts':ids,'compatible':compatible,'name':'test.mp4','smartTail':smart,'requireSilence':True}).encode()));identifier=result['id'];deadline=time.time()+30
   while time.time()<deadline:
    job=json.load(self.request('/jobs/'+identifier))
    if job['state'] in ('done','error','cancelled'):return identifier,job
@@ -30,6 +30,15 @@ class MergeTest(unittest.TestCase):
  def test_invalid_media_not_retained(self):
   with self.assertRaises(urllib.error.HTTPError):self.request('/uploads',b'not video')
   self.assertEqual(list((server.WORK/'uploads').iterdir()),[])
+ def test_static_tail_crosses_parts_and_originals_remain(self):
+  first=server.WORK/'first.mp4';second=server.WORK/'second.mp4'
+  subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=160x90:rate=5:duration=3','-f','lavfi','-i','anullsrc=r=48000:cl=mono','-vf','tpad=stop_mode=clone:stop_duration=75','-t','78','-c:v','libx264','-g','5','-c:a','aac',str(first)],check=True)
+  subprocess.run(['ffmpeg','-v','error','-i',str(first),'-ss','40','-c','copy',str(second)],check=True)
+  # Same signature, with a terminal hold continuing into the second part.
+  before=[p.read_bytes() for p in (first,second)]
+  _,job=self.job([self.upload(first),self.upload(second)],smart=True)
+  self.assertEqual(job['state'],'done',job);self.assertGreater(job['tailRemoved'],60);self.assertLess(job['duration'],5)
+  self.assertEqual([p.read_bytes() for p in (first,second)],before)
 
 class AudioRepairTest(unittest.TestCase):
  def test_loudness_repair_preserves_encoded_video(self):

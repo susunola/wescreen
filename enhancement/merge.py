@@ -50,7 +50,7 @@ def handle_media_post(handler, path, api):
             parts = []
             for index, source in enumerate(sources):
                 target = directory / f'part-{index:03d}'; source.rename(target); parts.append(target)
-            job = dict(id=identifier,mode='merge',name=str(data.get('name','video'))[:150],sourceId=str(data.get('sourceId',''))[:150],createdAt=int(time.time()*1000),preview=False,compatible=bool(data.get('compatible')),state='queued',progress=0,source=parts[0],output=directory/'enhanced.mp4',cancel=threading.Event(),processes=[])
+            job = dict(id=identifier,mode='merge',batchRef=str(data.get('batchRef',''))[:150],smartTail=bool(data.get('smartTail')),requireSilence=data.get('requireSilence') is not False,name=str(data.get('name','video'))[:150],sourceId=str(data.get('sourceId',''))[:150],createdAt=int(time.time()*1000),preview=False,compatible=bool(data.get('compatible')),state='queued',progress=0,source=parts[0],output=directory/'enhanced.mp4',cancel=threading.Event(),processes=[])
             api['persist_job'](job)
             with guard: jobs[identifier] = job
             worker = threading.Thread(target=run_merge,args=(job,parts,bool(data.get('compatible')),api),daemon=True); job['worker']=worker;worker.start()
@@ -103,7 +103,16 @@ def run_merge(job, parts, compatible, api):
             process=api['checked_process'](job,['ffmpeg','-nostdin','-y','-v','error','-protocol_whitelist','file,pipe','-f','concat','-safe','1','-i',str(manifest),'-map','0:v:0','-map','0:a:0?','-c','copy','-movflags','+faststart',str(output)])
             if process.wait()!=0: raise RuntimeError('Merge failed; try compatibility encoding')
             if job['cancel'].is_set(): raise InterruptedError('Cancelled')
-            width,height,_,duration=api['probe'](output);job.update(state='done',progress=1,width=width,height=height,duration=duration,size=output.stat().st_size,stage='lossless-merge' if same else 'compatible-merge')
+            width,height,_,duration=api['probe'](output)
+            if job.get('smartTail'):
+                from tail import trim_static_tail
+                trimmed=directory/'tail-trimmed.mp4'
+                try:
+                    trim_static_tail(job,output,trimmed,duration,api)
+                    trimmed.replace(output)
+                finally: trimmed.unlink(missing_ok=True)
+                width,height,_,duration=api['probe'](output)
+            job.update(state='done',progress=1,width=width,height=height,duration=duration,size=output.stat().st_size,stage='smart-tail' if job.get('smartTail') else 'lossless-merge' if same else 'compatible-merge')
     except Exception as error:
         job.update(state='cancelled' if job['cancel'].is_set() else 'error',error=str(error));output.unlink(missing_ok=True)
     finally:
