@@ -39,4 +39,3 @@ document.querySelector('#open-link').addEventListener('click', async () => {
   }
 });
 urlInput.addEventListener('input', () => urlInput.setCustomValidity(''));
-
