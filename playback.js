@@ -182,3 +182,12 @@ $('rotated-seek').addEventListener('pointerleave',()=>cinemaThumbnail.hidden=tru
 $('preview').addEventListener('loadedmetadata',()=>{cinemaScrubVideo.removeAttribute('src');cinemaScrubVideo.load();cinemaThumbnail.hidden=true;});
 const cinemaFooter=document.createElement('div');cinemaFooter.className='cinema-footer';const cinemaMetadata=document.createElement('span');cinemaMetadata.textContent=E('本地视频 · 原文件保留','Local video · Original preserved');cinemaFooter.append(cinemaMetadata,$('download'));$('playback-shell').append(cinemaFooter);
 $('preview').addEventListener('loadedmetadata',()=>{const v=$('preview');cinemaMetadata.textContent=`${v.videoWidth} × ${v.videoHeight} · ${E('本地视频','Local video')}`;});
+
+// Fine visual hierarchy for the cinema controls; existing media actions stay bound.
+const playerBrand=document.createElement('img');playerBrand.src='assets/logo.png';playerBrand.alt='';playerBrand.className='cinema-brand';document.querySelector('.player-topbar>div').prepend(playerBrand);
+const qualityHeading=document.createElement('div');qualityHeading.className='cinema-menu-heading';qualityHeading.dataset.i18n='labelQuality';qualityHeading.textContent=L('labelQuality');qualityPanel.prepend(qualityHeading);
+const repairCaption=document.createElement('p');repairCaption.className='cinema-repair-caption';repairCaption.dataset.i18n='repairCaption';repairCaption.textContent=E('生成高清新版本，保留原视频','Creates a new version; preserves the original');$('playback-ai').after(repairCaption);
+$('playback-enhance').dataset.i18n='enhanceMore';$('playback-enhance').textContent=E('更多增强设置 ›','More enhancement settings ›');
+cinemaTransport.insertBefore($('rotated-mute'),$('playback-time'));cinemaTransport.insertBefore($('playback-volume'),$('playback-time'));
+function paintCinemaRanges(){for(const input of [$('rotated-seek'),$('playback-volume')]){const fraction=(Number(input.value)-Number(input.min))/(Number(input.max)-Number(input.min));input.style.setProperty('--played',`${Math.max(0,Math.min(1,fraction))*100}%`);}}
+$('preview').addEventListener('timeupdate',paintCinemaRanges);$('preview').addEventListener('loadedmetadata',paintCinemaRanges);$('rotated-seek').addEventListener('input',paintCinemaRanges);$('playback-volume').addEventListener('input',paintCinemaRanges);paintCinemaRanges();
