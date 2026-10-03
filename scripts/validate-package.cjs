@@ -14,6 +14,7 @@ const {chromium}=require('playwright');const fs=require('fs'),os=require('os'),p
   if(await page.locator('.github-link').getAttribute('href')!=='https://github.com/susunola/wescreen/releases/latest')throw new Error('Missing download link');
   await page.evaluate(async()=>{await chrome.storage.local.set({settings:{'course-enabled':true,'course-name':'Old course'}});await loadSettings();});
   if(await page.locator('#course-enabled').isChecked())throw new Error('Old course setting changes new recording');
+  await page.evaluate(()=>applyLang('zh'));if(process.env.WESCREEN_RECORD_SCREENSHOT)await page.screenshot({path:process.env.WESCREEN_RECORD_SCREENSHOT,fullPage:true});
   for(const lang of ['zh','en']){await page.evaluate(lang=>applyLang(lang),lang);await page.setViewportSize({width:390,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error(lang+' narrow layout overflow');}
   await page.setViewportSize({width:1280,height:800});
   await page.evaluate(async()=>{const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const drawing=canvas.getContext('2d');window.testFrames=setInterval(()=>{drawing.fillStyle='blue';drawing.fillRect(0,0,320,180);},33);navigator.mediaDevices.getDisplayMedia=async()=>canvas.captureStream(30);$('preflight-enabled').checked=false;$('countdown').value='0';$('screen-audio').checked=false;$('clicks').checked=false;await start();});
@@ -46,6 +47,15 @@ const {chromium}=require('playwright');const fs=require('fs'),os=require('os'),p
   if(process.env.WESCREEN_LIBRARY_SCREENSHOT)await page.screenshot({path:process.env.WESCREEN_LIBRARY_SCREENSHOT,fullPage:true});
   for(const lang of ['zh','en']){await page.evaluate(lang=>applyLang(lang),lang);await page.setViewportSize({width:390,height:844});for(const view of ['library','about']){await page.evaluate(view=>navigateWorkspace(view),view);if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error(view+' narrow overflow '+lang);}}
   checks.aboutPage=true;checks.libraryRedesign=true;
+  await page.setViewportSize({width:1280,height:1000});await page.evaluate(()=>applyLang('zh'));
+  await page.evaluate(async()=>{const profile={id:'design-channel',name:'摄影学习',url:'https://t.me/example',channelProfile:true,nextEpisode:3,exportFolder:'WeScreen/Telegram/摄影学习',plan:[{id:'sample-one',title:'光线与曝光',url:'https://t.me/example/1'},{id:'sample-two',title:'镜头运动',url:'https://t.me/example/2',status:'skipped'},{id:'sample-three',title:'构图基础',url:'https://t.me/example/3'}]};await runTx('meta','readwrite',tx=>tx.objectStore('meta').put(profile,'channel:'+profile.id));await updateRecording(finalId,{channelTaskId:'sample-one'});await loadTelegramProfiles(profile.id);fillChannel(chosenChannel());$('channel-plan-item').value='sample-three';$('channel-plan-item').dispatchEvent(new Event('change'));navigateWorkspace('channels');await renderChannelWorkbench();});
+  if(await page.locator('[data-view]').count()!==5)throw new Error('Expected five peer tabs');
+  if(!await page.locator('.channel-plan-row.selected').textContent().then(text=>text.includes('构图基础')))throw new Error('Selected video missing');
+  if(process.env.WESCREEN_TELEGRAM_SCREENSHOT)await page.screenshot({path:process.env.WESCREEN_TELEGRAM_SCREENSHOT,fullPage:true});
+  await page.locator('#channel-add-video').click();if(!await page.locator('#channel-plan-dialog').isVisible())throw new Error('Plan editor did not open');await page.locator('#channel-plan-close').click();
+  page.once('dialog',dialog=>dialog.accept());await page.locator('#channel-clear-completed').click();await page.waitForFunction(()=>document.querySelectorAll('#channel-plan-rows>li').length===2);if(!await page.evaluate(async()=>!!(await readStore('recordings',finalId))))throw new Error('Clearing completed plan removed video');
+  for(const lang of ['zh','en']){await page.evaluate(lang=>applyLang(lang),lang);await page.setViewportSize({width:390,height:844});for(const view of ['channels','capture']){await page.evaluate(view=>{navigateWorkspace(view);if(view==='capture')show('setup');},view);if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error(view+' redesign narrow overflow '+lang);}}
+  checks.recordingRedesign=true;checks.telegramRedesign=true;
   console.log(JSON.stringify({package:path.basename(zip),...checks,errors,narrowLanguages:['zh','en']}));
  }finally{if(context)await context.close();fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exitCode=1;});

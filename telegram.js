@@ -1,5 +1,5 @@
 // Channel profiles and a user-managed recording plan; capture still uses the browser picker.
-let telegramProfiles=[], captureChannelContext=null;
+let telegramProfiles=[], captureChannelContext=null, channelRenderGeneration=0;
 function safePart(value){return String(value||'').trim().replace(/[\\/:*?"<>|]/g,'-').replace(/^\.+$/,'').slice(0,80);}
 function telegramLink(value){
   if(!value?.trim())return '';
@@ -11,6 +11,8 @@ function relativeFolder(value){return String(value||'').split(/[\\/]/).map(safeP
 async function refreshTelegramProfiles(){telegramProfiles=(await readStore('meta')).filter(value=>value?.channelProfile);return telegramProfiles;}
 function chosenChannel(){return telegramProfiles.find(profile=>profile.id===$('channel-select').value);}
 function updateTelegramFilename(){
+  $('channel-number-summary').textContent=E('自动编号 ','Next number ')+String(Math.max(1,Number($('channel-episode').value)||1)).padStart(3,'0')+E(' · 保存到本机录像库',' · Saved in the local library');
+  $('channel-name-field').hidden=!!chosenChannel() && !$('channel-name-field').dataset.editing;
   if($('capture-mode').value!=='telegram')return;
   const name=safePart($('channel-name').value)||'Telegram',number=Math.max(1,Number($('channel-episode').value)||1),title=safePart($('channel-video-title').value);
   $('filename').value=`${name}-${String(number).padStart(3,'0')}${title ? '-'+title:''}`.slice(0,120);
@@ -59,36 +61,44 @@ async function completeTelegramRecording(state){
   if($('channel-select').value===info.channelId){$('channel-episode').value=String(chosenChannel().nextEpisode);$('channel-video-title').value='';$('channel-message-url').value='';await renderChannelPlan();const records=await readStore('recordings'),next=chosenChannel().plan.find(item=>item.status!=='skipped' && !records.some(entry=>entry.channelTaskId===item.id));$('channel-plan-item').value=next?.id || '';if(next){$('channel-video-title').value=next.title;$('channel-message-url').value=next.url;}updateTelegramFilename();persist();}
 }
 async function initTelegramChannels(){
+  const openPlan=()=>{$('channel-plan-dialog').showModal();$('channel-plan').focus();};
+  $('channel-add-video').onclick=$('channel-edit-plan').onclick=openPlan;
+  $('channel-plan-close').onclick=()=>$('channel-plan-dialog').close();
+  $('channel-new').onclick=async()=>{$('channel-select').value='';$('channel-select').dispatchEvent(new Event('change'));$('channel-name-field').hidden=false;$('channel-name').focus();};
+  $('channel-manage').onclick=()=>{$('channel-name-field').dataset.editing='true';$('channel-name-field').hidden=false;$('channel-config').open=true;$('channel-name').focus();};
+  $('channel-clear-completed').onclick=async()=>{try{const profile=chosenChannel();if(!profile)return;const records=await readStore('recordings'),completed=new Set(records.map(record=>record.channelTaskId));const plan=profile.plan.filter(item=>!completed.has(item.id));if(plan.length===profile.plan.length)return;if(!confirm(E('从清单移除已完成项？已保存的录像保留。','Remove completed plan items? Saved recordings are preserved.')))return;await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,plan},'channel:'+profile.id));await refreshTelegramProfiles();await renderChannelPlan();await renderChannelWorkbench();}catch(error){$('channel-status').textContent=error.message;}};
   const {selectedTelegramChannel}=await chrome.storage.local.get('selectedTelegramChannel');await loadTelegramProfiles(selectedTelegramChannel);if(chosenChannel()){fillChannel(chosenChannel());selectNextChannelVideo();$('channel-config').open=false;}
   $('telegram-channel').hidden=$('capture-mode').value!=='telegram';$('course-panel').hidden=true;
-  $('channel-select').onchange=async()=>{try{$('channel-config').open=false;fillChannel(chosenChannel());$('channel-plan-item').value='';await renderChannelPlan();selectNextChannelVideo();await renderChannelWorkbench();await chrome.storage.local.set({selectedTelegramChannel:$('channel-select').value});persist();}catch(error){$('channel-status').textContent=error.message;}};
+  $('channel-select').onchange=async()=>{try{delete $('channel-name-field').dataset.editing;$('channel-config').open=false;fillChannel(chosenChannel());$('channel-plan-item').value='';await renderChannelPlan();selectNextChannelVideo();await renderChannelWorkbench();await chrome.storage.local.set({selectedTelegramChannel:$('channel-select').value});persist();}catch(error){$('channel-status').textContent=error.message;}};
   $('channel-save').onclick=async()=>{try{await saveTelegramProfile();$('channel-status').textContent=L('channelSaved');}catch(error){$('channel-status').textContent=error.message;}};
   $('channel-open').onclick=()=>{try{const link=telegramLink($('channel-message-url').value) || telegramLink($('channel-url').value) || 'https://web.telegram.org/';window.open(link,'_blank','noopener,noreferrer');}catch(error){$('channel-status').textContent=error.message;}};
   for(const id of ['channel-name','channel-episode','channel-video-title'])$(id).oninput=updateTelegramFilename;
-  $('channel-plan-item').onchange=()=>{const item=chosenChannel()?.plan?.find(item=>item.id===$('channel-plan-item').value);$('channel-video-title').value=item?.title || '';$('channel-message-url').value=item?.url || '';updateTelegramFilename();};
+  $('channel-plan-item').onchange=()=>{const item=chosenChannel()?.plan?.find(item=>item.id===$('channel-plan-item').value);$('channel-video-title').value=item?.title || '';$('channel-message-url').value=item?.url || '';updateTelegramFilename();renderChannelWorkbench().catch(error=>$('channel-status').textContent=error.message);};
   $('channel-save-plan').onclick=async()=>{const planText=$('channel-plan').value;try{
     const old=chosenChannel()?.plan || [];
     const seen=new Set();
     const plan=planText.split('\n').filter(line=>line.trim()).map(line=>{const split=line.indexOf('|');if(split<0)throw new Error(L('planInvalid'));const title=line.slice(0,split).trim(),url=telegramLink(line.slice(split+1).trim());if(!title || !url)throw new Error(L('planInvalid'));if(seen.has(url))throw new Error(E('清单含重复的消息链接。','Duplicate message link in the plan.'));seen.add(url);return {id:old.find(item=>item.url===url)?.id || crypto.randomUUID(),title:title.slice(0,120),url,status:old.find(item=>item.url===url)?.status || 'waiting'};});
     const profile=await saveTelegramProfile();
-    await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,plan},`channel:${profile.id}`));await loadTelegramProfiles(profile.id);selectNextChannelVideo();$('channel-status').textContent=L('channelSaved');
+    await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,plan},`channel:${profile.id}`));await loadTelegramProfiles(profile.id);selectNextChannelVideo();$('channel-status').textContent=L('channelSaved');$('channel-plan-dialog').close();await renderChannelWorkbench();
   }catch(error){$('channel-plan').value=planText;$('channel-status').textContent=error.message;}};
 }
 window.addEventListener('wescreen-language',async()=>{if(document.readyState!=='complete')return;const draft=$('channel-plan').value;try{await loadTelegramProfiles($('channel-select').value);$('channel-plan').value=draft;}catch(error){$('channel-status').textContent=error.message;}});
 
 async function renderChannelWorkbench(){
- const profile=chosenChannel(),list=$('channel-plan-rows');list.replaceChildren();$('channel-queue').hidden=!profile?.plan?.length;if(!profile)return;const records=await readStore('recordings');
+ const generation=++channelRenderGeneration,profile=chosenChannel(),list=$('channel-plan-rows');const records=await readStore('recordings');if(generation!==channelRenderGeneration)return;list.replaceChildren();$('channel-queue').hidden=false;$('channel-plan-empty').hidden=!!profile?.plan?.length;$('channel-plan-progress').textContent=`${(profile?.plan || []).filter(item=>records.some(record=>record.channelTaskId===item.id)).length} / ${profile?.plan?.length || 0} `+E('已完成','complete');if(!profile)return;
  for(const [index,item] of profile.plan.entries()){
   const done=records.some(entry=>entry.channelTaskId===item.id),active=recorder && recorder.state!=='inactive' && captureChannelContext?.channelTaskId===item.id;
-  const row=document.createElement('li'),label=document.createElement('strong');label.textContent=item.title+' · '+(active ? (recorder.state==='paused' ? E('已暂停','Paused'):E('录制中','Recording')):done ? E('已完成','Complete'):item.status==='skipped' ? E('已跳过','Skipped'):E('待录','Pending'));row.append(label);
+  const row=document.createElement('li');row.className='channel-plan-row';row.classList.toggle('selected',item.id===$('channel-plan-item').value);const number=document.createElement('span');number.className='plan-number';number.textContent=String(index+1).padStart(3,'0');row.append(number);const info=document.createElement('div');info.className='plan-info';const title=document.createElement('strong');title.textContent=item.title;info.append(title);const link=document.createElement('a');link.href=telegramLink(item.url);link.target='_blank';link.rel='noopener noreferrer';link.textContent=new URL(item.url).host+new URL(item.url).pathname;info.append(link);row.append(info);const label=document.createElement('span');label.className='plan-status';label.dataset.state=active ? 'active':done ? 'done':item.status==='skipped' ? 'skipped':'waiting';label.textContent=(active ? (recorder.state==='paused' ? E('已暂停','Paused'):E('录制中','Recording')):done ? E('已完成','Complete'):item.status==='skipped' ? E('已跳过','Skipped'):E('待录','Pending'));row.append(label);
   const controls=document.createElement('div');controls.className='controls';
   const button=(text,action)=>{const b=document.createElement('button');b.className='quiet';b.textContent=text;b.onclick=async()=>{try{await action();await renderChannelWorkbench();}catch(error){$('channel-status').textContent=error.message;}};controls.append(b);return b;};
   button(E('打开视频','Open video'),()=>window.open(telegramLink(item.url),'_blank','noopener,noreferrer'));
+  const menu=document.createElement('details');menu.className='row-menu';const summary=document.createElement('summary');summary.textContent='⋯';summary.setAttribute('aria-label',L('more'));menu.append(summary);const menuItems=document.createElement('div');menuItems.className='menu-items';
+  const openButton=controls.firstElementChild;
   button(E('选择 / 重录','Select / rerecord'),()=>{$('channel-plan-item').value=item.id;$('channel-plan-item').dispatchEvent(new Event('change'));});
   const save=async plan=>{await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,plan},'channel:'+profile.id));await refreshTelegramProfiles();const draft=$('channel-plan').value;await renderChannelPlan();$('channel-plan').value=draft;};
   button(item.status==='skipped' ? E('恢复待录','Restore'):E('跳过','Skip'),()=>save(profile.plan.map(value=>value.id===item.id ? {...value,status:item.status==='skipped' ? 'waiting':'skipped'}:value)));
   const up=button('↑',()=>{const plan=[...profile.plan];[plan[index-1],plan[index]]=[plan[index],plan[index-1]];return save(plan);});up.disabled=index===0;up.setAttribute('aria-label',E('上移','Move up'));
   const down=button('↓',()=>{const plan=[...profile.plan];[plan[index+1],plan[index]]=[plan[index],plan[index+1]];return save(plan);});down.disabled=index===profile.plan.length-1;down.setAttribute('aria-label',E('下移','Move down'));
-  row.append(controls);list.append(row);
+  while(controls.children.length>1)menuItems.append(controls.children[1]);menu.append(menuItems);controls.append(menu);row.append(controls);list.append(row);
  }
 }

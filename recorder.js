@@ -324,6 +324,7 @@ function renderCourseLibrary(entries) {
 
 // ---- capture --------------------------------------------------------------
 function applyCapturePreset() {
+  queueMicrotask(()=>window.dispatchEvent(new Event('wescreen-capture-settings')));
   const telegram = $('capture-mode').value === 'telegram';
   $('telegram-guide').hidden = !telegram;$('preflight-enabled').checked=telegram;
   $('telegram-channel').hidden = !telegram; $('course-panel').hidden = true;
