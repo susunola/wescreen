@@ -1,13 +1,14 @@
 // Playback-only rotation. Export rotation remains in the editor.
-let playbackRotation=0,playbackZoom=1,playbackPan={x:0,y:0};
+let playbackRotation=0,playbackZoom=1,playbackPan={x:0,y:0},playbackFill=false;
 function layoutPlaybackRotation() {
  const video=$('preview'),stage=$('playback-stage');
  if(!video.videoWidth || !video.videoHeight || !stage.clientWidth)return;
  const radians=playbackRotation*Math.PI/180,c=Math.abs(Math.cos(radians)),s=Math.abs(Math.sin(radians));
  const boundsWidth=video.videoWidth*c+video.videoHeight*s,boundsHeight=video.videoWidth*s+video.videoHeight*c;
  const maxHeight=document.fullscreenElement===$('playback-shell') ? Math.max(120,innerHeight):(document.body.classList.contains('cinema-mode') ? Math.max(120,innerHeight-120):540);
- const scale=Math.min(stage.clientWidth/boundsWidth,maxHeight/boundsHeight);
- stage.style.height=`${boundsHeight*scale}px`;video.style.width=`${video.videoWidth*scale*playbackZoom}px`;video.style.height=`${video.videoHeight*scale*playbackZoom}px`;
+ const expanded=document.fullscreenElement===$('playback-shell') || document.body.classList.contains('cinema-mode');
+ const scale=playbackFill && expanded ? Math.max(stage.clientWidth/boundsWidth,maxHeight/boundsHeight):Math.min(stage.clientWidth/boundsWidth,maxHeight/boundsHeight);
+ stage.style.height=`${expanded ? maxHeight:boundsHeight*scale}px`;video.style.width=`${video.videoWidth*scale*playbackZoom}px`;video.style.height=`${video.videoHeight*scale*playbackZoom}px`;
  const maxX=boundsWidth*scale*(playbackZoom-1)/2,maxY=boundsHeight*scale*(playbackZoom-1)/2;playbackPan.x=Math.max(-maxX,Math.min(maxX,playbackPan.x));playbackPan.y=Math.max(-maxY,Math.min(maxY,playbackPan.y));stage.dataset.zoomed=String(playbackZoom>1);
  video.style.transform=`translate(calc(-50% + ${playbackPan.x}px), calc(-50% + ${playbackPan.y}px)) rotate(${playbackRotation}deg)`;
  video.controls=false;$('rotated-playback-controls').hidden=false;
@@ -27,8 +28,10 @@ document.addEventListener('fullscreenchange',layoutPlaybackRotation);
 $('playback-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('playback-shell').requestFullscreen();}catch(error){setNotice(error.message);}};
 $('rotated-play').onclick=()=>{const video=$('preview');if(video.paused)video.play().catch(error=>setNotice(error.message));else video.pause();};
 $('rotated-mute').onclick=()=>{$('preview').muted=!$('preview').muted;};
-$('preview').addEventListener('timeupdate',()=>{const video=$('preview');if(!playbackSeeking && Number.isFinite(video.duration) && video.duration>0)$('rotated-seek').value=String(video.currentTime/video.duration);$('playback-time').textContent=fmt(video.currentTime*1000)+' / '+fmt((Number.isFinite(video.duration) ? video.duration:0)*1000);});
-$('rotated-seek').oninput=()=>{const video=$('preview');if(Number.isFinite(video.duration))video.currentTime=Number($('rotated-seek').value)*video.duration;};
+function updateRecordingTimeline(){const total=playbackTimelineTotal(),time=playbackTimelineTime();if(!playbackSeeking && total>0)$('rotated-seek').value=String(time/total);$('playback-time').textContent=fmt(time*1000)+' / '+fmt(total*1000);}
+$('preview').addEventListener('timeupdate',updateRecordingTimeline);
+$('preview').addEventListener('ended',()=>{if(playbackParts.length>1 && playbackPartIndex<playbackParts.length-1)loadRecordingPart(playbackPartIndex+1,0,true).catch(error=>setNotice(error.message));});
+$('rotated-seek').oninput=()=>{seekRecordingTimeline(Number($('rotated-seek').value)*playbackTimelineTotal()).catch(error=>setNotice(error.message));};
 let playbackSeeking=false;
 $('rotated-seek').addEventListener('pointerdown',()=>{playbackSeeking=true;});
 for(const event of ['pointerup','pointercancel','change','blur'])$('rotated-seek').addEventListener(event,()=>{playbackSeeking=false;savePlaybackState();});
@@ -92,8 +95,8 @@ document.addEventListener('keydown',event=>{
  const video=$('preview');if(!video.videoWidth)return;
  switch(event.key.toLowerCase()){
   case ' ':$('rotated-play').click();break;
-  case 'arrowleft':video.currentTime=Math.max(0,video.currentTime-5);break;
-  case 'arrowright':video.currentTime=Math.min(video.duration,video.currentTime+5);break;
+  case 'arrowleft':seekRecordingTimeline(playbackTimelineTime()-5).catch(error=>setNotice(error.message));break;
+  case 'arrowright':seekRecordingTimeline(playbackTimelineTime()+5).catch(error=>setNotice(error.message));break;
   case 'r':setPlaybackRotation(playbackRotation+(event.shiftKey ? -90:90));break;
   case 'f':$('playback-fullscreen').click();break;
   case 'm':video.muted=!video.muted;break;
@@ -167,7 +170,7 @@ const rotationMenu=$('playback-rotation-menu');rotationMenu.classList.add('cinem
 const cinemaMenus=[qualityMenu,rotationMenu];for(const menu of cinemaMenus){menu.querySelector(':scope > summary').addEventListener('click',()=>{cinemaMenus.filter(other=>other!==menu).forEach(other=>other.open=false);revealFullscreenControls();});menu.addEventListener('toggle',revealFullscreenControls);}
 document.addEventListener('pointerdown',event=>{for(const menu of cinemaMenus)if(!menu.contains(event.target))menu.open=false;});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')cinemaMenus.forEach(menu=>menu.open=false);});
-for(const [id,delta] of [['playback-back',-10],['playback-forward',10]]){const button=document.createElement('button');button.id=id;button.type='button';button.title=E(delta<0?'后退 10 秒':'快进 10 秒',delta<0?'Back 10 seconds':'Forward 10 seconds');button.setAttribute('aria-label',button.title);button.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${delta<0?'M6 5 2 9l4 4M2 9h11a8 8 0 1 1-7 12':'M18 5l4 4-4 4m4-4H11a8 8 0 1 0 7 12'}"/><text x="8" y="17" font-size="8" stroke="none" fill="currentColor">10</text></svg>`;button.onclick=()=>{const v=$('preview');v.currentTime=Math.max(0,Math.min(Number.isFinite(v.duration)?v.duration:Infinity,v.currentTime+delta));};cinemaTransport.insertBefore(button,$('playback-time'));}
+for(const [id,delta] of [['playback-back',-10],['playback-forward',10]]){const button=document.createElement('button');button.id=id;button.type='button';button.title=E(delta<0?'后退 10 秒':'快进 10 秒',delta<0?'Back 10 seconds':'Forward 10 seconds');button.setAttribute('aria-label',button.title);button.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${delta<0?'M6 5 2 9l4 4M2 9h11a8 8 0 1 1-7 12':'M18 5l4 4-4 4m4-4H11a8 8 0 1 0 7 12'}"/><text x="8" y="17" font-size="8" stroke="none" fill="currentColor">10</text></svg>`;button.onclick=()=>seekRecordingTimeline(playbackTimelineTime()+delta).catch(error=>setNotice(error.message));cinemaTransport.insertBefore(button,$('playback-time'));}
 $('playback-shell').addEventListener('pointerleave',()=>{if(!$('preview').paused && !cinemaMenus.some(menu=>menu.open))$('playback-shell').classList.add('controls-hidden');});
 
 const cinemaThumbnail=document.createElement('div');cinemaThumbnail.className='cinema-thumbnail';cinemaThumbnail.hidden=true;
@@ -176,7 +179,7 @@ const cinemaScrubVideo=document.createElement('video');cinemaScrubVideo.muted=tr
 cinemaScrubVideo.addEventListener('seeked',()=>{try{cinemaCanvas.getContext('2d').drawImage(cinemaScrubVideo,0,0,160,90);}catch{}});
 function seekCinemaThumbnail(){if(cinemaScrubVideo.readyState>=1 && !cinemaScrubVideo.seeking)cinemaScrubVideo.currentTime=cinemaHoverTime;}
 cinemaScrubVideo.addEventListener('loadedmetadata',seekCinemaThumbnail);
-$('rotated-seek').addEventListener('pointermove',event=>{const v=$('preview');if(!Number.isFinite(v.duration)||v.duration<=0)return;const bounds=event.currentTarget.getBoundingClientRect(),fraction=Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width));cinemaHoverTime=Math.min(v.duration-.01,fraction*v.duration);cinemaTime.textContent=fmt(cinemaHoverTime*1000);cinemaThumbnail.hidden=false;cinemaThumbnail.style.left=`${Math.max(84,Math.min(bounds.width-84,event.clientX-bounds.left))}px`;if(cinemaScrubVideo.src!==v.currentSrc){cinemaScrubVideo.src=v.currentSrc;cinemaScrubVideo.load();}else seekCinemaThumbnail();});
+$('rotated-seek').addEventListener('pointermove',event=>{const v=$('preview');if(playbackParts.length>1 || !Number.isFinite(v.duration)||v.duration<=0)return;const bounds=event.currentTarget.getBoundingClientRect(),fraction=Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width));cinemaHoverTime=Math.min(v.duration-.01,fraction*v.duration);cinemaTime.textContent=fmt(cinemaHoverTime*1000);cinemaThumbnail.hidden=false;cinemaThumbnail.style.left=`${Math.max(84,Math.min(bounds.width-84,event.clientX-bounds.left))}px`;if(cinemaScrubVideo.src!==v.currentSrc){cinemaScrubVideo.src=v.currentSrc;cinemaScrubVideo.load();}else seekCinemaThumbnail();});
 $('rotated-seek').addEventListener('pointerleave',()=>cinemaThumbnail.hidden=true);
 
 $('preview').addEventListener('loadedmetadata',()=>{cinemaScrubVideo.removeAttribute('src');cinemaScrubVideo.load();cinemaThumbnail.hidden=true;});
@@ -207,3 +210,7 @@ const enhancementBadge=document.createElement('span');enhancementBadge.id='playb
 $('playback-instant').addEventListener('click',()=>enhancementBadge.hidden=!instantEnhancement);
 $('preview').addEventListener('loadedmetadata',()=>enhancementBadge.hidden=!instantEnhancement);
 document.addEventListener('fullscreenchange',()=>{$('playback-fullscreen').querySelector('svg').innerHTML=document.fullscreenElement ? '<path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/>' : '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>';});
+
+const fitButton=document.createElement('button');fitButton.type='button';fitButton.id='playback-fit';
+function updateFitButton(){fitButton.textContent=playbackFill?E('恢复完整画面','Show entire frame'):E('铺满屏幕（裁切）','Fill screen (crop)');fitButton.setAttribute('aria-pressed',String(playbackFill));}
+fitButton.onclick=()=>{playbackFill=!playbackFill;updateFitButton();layoutPlaybackRotation();};updateFitButton();rotationMenu.querySelector('.playback-toolbar').prepend(fitButton);

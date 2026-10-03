@@ -486,8 +486,9 @@ function armRecorder(stream, type, state) {
   instance.onerror = () => { videoFailure = 'errRecorder'; stop(); };
   return instance;
 }
+let recordingGroupId=null;
 function segmentDetails(state, end = elapsed()) {
-  return { duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
+  return { recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
 }
 function createSegment(index) {
   const settings = displayStream.getVideoTracks()[0].getSettings();
@@ -508,11 +509,11 @@ function scheduleSegment() {
 async function beginRecording(stream) {
   const type = mediaType();
   if (!type) throw new Error(L(selectedExtension() === 'mp4' ? 'errMP4' : 'errUnsupported'));
-  lastRecordingWrite=Date.now();recordingMime = type; stopRequested = false; storageFailure = false; finalName = null; finalId = null;
+  recordingGroupId=crypto.randomUUID();lastRecordingWrite=Date.now();recordingMime = type; stopRequested = false; storageFailure = false; finalName = null; finalId = null;
   recordingStream = stream; markers = []; finalMarkers = []; finalDuration = 0; videoFailure = null;
   startedAt = Date.now(); pausedAt = 0; pausedTotal = 0; lastMemorySync = 0;
   const state = createSegment(1); armRecorder(stream, type, state);
-  await setInProgress({ session: state.session, name: state.name, mimeType: type, index: state.index, course: state.course, episode: state.episode, ...(state.channelMetadata || {}) });
+  await setInProgress({ session: state.session, recordingGroupId, part:state.index, name: state.name, mimeType: type, index: state.index, course: state.course, episode: state.episode, ...(state.channelMetadata || {}) });
   selectSegment(state); recorder.start(TIMESLICE_MS);
   timer = setInterval(tick, 250);
   const auto = Number($('autostop').value); if (auto) stopTimer = setTimeout(stop, auto * 1000);
@@ -542,7 +543,7 @@ async function saveSegmentAndContinue() {
   try {
     const next = createSegment(previous.index + 1); armRecorder(recordingStream, recordingMime, next);
     // Persist the new session while the old encoder is STILL RUNNING. Disk latency cannot cause a capture gap.
-    await setInProgress({ session: next.session, name: next.name, mimeType: recordingMime, index: next.index, course: next.course, episode: next.episode, ...(next.channelMetadata || {}) });
+    await setInProgress({ session: next.session, recordingGroupId, part:next.index, name: next.name, mimeType: recordingMime, index: next.index, course: next.course, episode: next.episode, ...(next.channelMetadata || {}) });
     if (stopRequested || previous.recorder.state === 'inactive') { await discardSession(next.session); if (previous.recorder.state !== 'inactive') previous.recorder.stop(); return; }
     next.start = elapsed();
     await new Promise((resolve, reject) => { next.recorder.addEventListener('start', resolve, { once: true }); next.recorder.addEventListener('error', reject, { once: true }); next.recorder.start(TIMESLICE_MS); });
@@ -673,6 +674,7 @@ function resetStart() {
   syncMemory();
 }
 async function finish(savedBlob = null, savedName = null, archived = false, savedId = null) {
+  if(typeof playbackParts!=='undefined'){playbackParts=[];playbackPartIndex=0;}
   if (!savedBlob) snapshotSegment();
   releaseCapture();
   const type = (recorder && recorder.mimeType) || recordingMime;
@@ -697,6 +699,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   recorder = null;
   chrome.runtime.sendMessage({ type: 'recording-state', active: false, highlightClicks: false }).catch(() => {});
   show('result');
+  if(finalId){const completed=await readStore('recordings',finalId);if(completed)await playRecording(completed);}
   (finalId ? readStore('recordings',finalId) : Promise.resolve(null)).then(renderRecordingReview).catch(error=>$('review-summary').textContent=error.message);
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
@@ -799,7 +802,7 @@ async function handleRecovery(keep) {
       const stored = await loadChunks(state.session);
       if (keep && stored.length) {
         const blob = new Blob(stored, { type: state.mimeType || 'video/webm' });
-        await archiveRecording(blob, state.name || 'recovered-recording.webm', state.session, state.index || 1, true, { course: state.course || '', episode: state.episode, channelId: state.channelId, channelName: state.channelName, channelUrl: state.channelUrl, sourceUrl: state.sourceUrl, sourceTitle: state.sourceTitle, exportFolder: state.exportFolder, recovered: true });
+        await archiveRecording(blob, state.name || 'recovered-recording.webm', state.session, state.index || 1, true, { recordingGroupId:state.recordingGroupId,part:state.part || state.index, course: state.course || '', episode: state.episode, channelId: state.channelId, channelName: state.channelName, channelUrl: state.channelUrl, sourceUrl: state.sourceUrl, sourceTitle: state.sourceTitle, exportFolder: state.exportFolder, recovered: true });
       } else await discardSession(state.session);
     }
     await refreshRecovery();

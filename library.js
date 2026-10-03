@@ -10,6 +10,7 @@ async function updateRecording(id, changes) {
 }
 async function removeRecordings(ids, permanent = false) {
   if (!ids.length) return;
+  const groups=recordingGroups(await readStore('recordings'));ids=[...new Set(ids.flatMap(id=>groups.find(e=>e.id===id)?._parts?.map(e=>e.id)||[id]))];
   if (permanent && !confirm(L('confirmPermanent', ids.length))) return;
   await runTx(['recordings', 'videos'], 'readwrite', tx => {
     for (const id of ids) {
@@ -25,10 +26,43 @@ function libraryButton(label, action, kind = 'quiet') {
   button.onclick = async () => { button.disabled = true; try { await action(); } catch (error) { $(workspaceView === 'tasks' ? 'tasks-status' : 'library-status').textContent = error.message; } finally { button.disabled = false; } };
   return button;
 }
+// Group metadata without changing or concatenating the original video blobs.
+function recordingGroups(entries) {
+  const groups=[], explicit=new Map();
+  const original=entries.filter(e=>!e.enhancedFrom).sort((a,b)=>a.createdAt-b.createdAt);
+  for(const entry of original){
+    const match=entry.name.match(/-part-(\d+)(?=\.(?:mp4|webm)$)/i);
+    const part=entry.part || (match ? Number(match[1]):1);
+    const base=entry.name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,'');
+    let group=entry.recordingGroupId ? explicit.get(entry.recordingGroupId):null;
+    if(!group && !entry.recordingGroupId && part>1){group=groups.findLast(g=>!g[0].recordingGroupId && g[0].name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,'')===base && (g.at(-1).part || Number(g.at(-1).name.match(/-part-(\d+)/)?.[1]) || 1)===part-1 && g[0].channelId===entry.channelId && g[0].width===entry.width && g[0].height===entry.height && entry.createdAt-g.at(-1).createdAt <= (entry.duration || 0)+120000);}
+    if(!group){group=[];groups.push(group);if(entry.recordingGroupId)explicit.set(entry.recordingGroupId,group);}group.push(entry);
+  }
+  return groups.map(parts=>{parts.sort((a,b)=>(a.part || Number(a.name.match(/-part-(\d+)/)?.[1]) || 1)-(b.part || Number(b.name.match(/-part-(\d+)/)?.[1]) || 1));const first=parts[0];return parts.length===1 ? first:{...first,name:first.name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,''),_parts:parts,duration:parts.reduce((n,e)=>n+(e.duration||0),0),size:parts.reduce((n,e)=>n+e.size,0)};}).concat(entries.filter(e=>e.enhancedFrom));
+}
+let playbackParts=[],playbackPartIndex=0,partLoadGeneration=0;
+function playbackTimelineTotal(){return playbackParts.length>1 ? playbackParts.reduce((n,e)=>n+(e.duration||0)/1000,0):Number.isFinite($('preview').duration)?$('preview').duration:0;}
+function playbackTimelineTime(){return playbackParts.slice(0,playbackPartIndex).reduce((n,e)=>n+(e.duration||0)/1000,0)+$('preview').currentTime;}
+async function seekRecordingTimeline(time,playing=!$('preview').paused){
+ const total=playbackTimelineTotal();time=Math.max(0,Math.min(time,total));let index=0,offset=0;
+ while(index<playbackParts.length-1 && time>=offset+(playbackParts[index].duration||0)/1000){offset+=(playbackParts[index].duration||0)/1000;index++;}
+ if(index===playbackPartIndex){partLoadGeneration++;$('preview').currentTime=Math.max(0,time-offset);return;}
+ await loadRecordingPart(index,time-offset,playing);
+}
+async function loadRecordingPart(index,time=null,playing=false){
+ const generation=++partLoadGeneration,entry=playbackParts[index];if(!entry)return;
+ const blob=await readStore('videos',entry.id);if(generation!==partLoadGeneration)return;if(!blob)throw new Error(L('errEmpty'));
+ const rotation=typeof playbackRotation==='number'?playbackRotation:0,speed=$('preview').playbackRate;
+ playbackPartIndex=index;finalBlob=blob;finalSize=blob.size;finalId=entry.id;finalName=entry.name;finalDuration=playbackTimelineTotal()*1000;finalMarkers=entry.markers||[];
+ if(time!==null)pendingPlaybackPosition={id:entry.id,time,playing};setPreview(blob);
+ if(playbackParts.length>1){$('playback-name').textContent=playbackParts[0].name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,'')+' · '+(index+1)+' / '+playbackParts.length;$('preview').addEventListener('loadedmetadata',()=>{setPlaybackRotation(rotation);$('preview').playbackRate=speed;$('playback-speed').value=String(speed);},{once:true});}
+}
 async function playRecording(entry) {
-  const blob = await readStore('videos', entry.id); if (!blob) throw new Error(L('errEmpty'));
-  finalBlob = blob; finalSize = blob.size; finalName = entry.name; finalId = entry.id; finalMarkers = entry.markers || []; finalDuration = entry.duration || 0;
-  renderRecordingReview(entry).catch(error=>$('review-summary').textContent=error.message);setPreview(blob); $('result-warning').hidden = true; show('result');
+  const all=(await readStore('recordings')).filter(e=>!e.deletedAt);
+  const group=recordingGroups(all).find(e=>e.id===entry.id || e._parts?.some(p=>p.id===entry.id));
+  playbackParts=group?._parts || [entry];playbackPartIndex=0;
+  await loadRecordingPart(0);
+  renderRecordingReview(playbackParts[0]).catch(error=>$('review-summary').textContent=error.message);$('result-warning').hidden=true;show('result');
 }
 async function renderRecordingLibrary() {
   const generation = ++libraryRenderGeneration;
@@ -42,7 +76,7 @@ async function renderRecordingLibrary() {
   for (const choice of choices) { const option = document.createElement('option'); option.value = choice.value; option.textContent = choice.text; courseSelect.append(option); }
   courseSelect.value = [...courseSelect.options].some(option => option.value === selectedCourse) ? selectedCourse : '';
   const query = $('library-search').value.trim().toLocaleLowerCase();
-  const entries = active.filter(entry => (!$('library-kind').value || ($('library-kind').value==='enhanced' ? !!entry.enhancedFrom : !entry.enhancedFrom)) && (!courseSelect.value || (courseSelect.value.startsWith('channel:') ? entry.channelId === courseSelect.value.slice(8) : !entry.channelId && entry.course === courseSelect.value)) && `${entry.name} ${entry.course || ''}`.toLocaleLowerCase().includes(query));
+  const entries = recordingGroups(active).filter(entry => (!$('library-kind').value || ($('library-kind').value==='enhanced' ? !!entry.enhancedFrom : !entry.enhancedFrom)) && (!courseSelect.value || (courseSelect.value.startsWith('channel:') ? entry.channelId === courseSelect.value.slice(8) : !entry.channelId && entry.course === courseSelect.value)) && `${entry.name} ${entry.course || ''}`.toLocaleLowerCase().includes(query));
   const sort = $('library-sort')?.value || 'newest';
   entries.sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name) : sort === 'size' ? b.size-a.size : b.createdAt-a.createdAt);
   if ($('library-group').checked) {
@@ -56,7 +90,7 @@ async function renderRecordingLibrary() {
   $('library-page').textContent = `${libraryPage + 1} / ${pageCount}`; $('library-prev').disabled = libraryPage === 0; $('library-next').disabled = libraryPage >= pageCount - 1;
   const entryIds = new Set(visibleEntries.map(entry => entry.id));
   for (const id of librarySelection) if (!entryIds.has(id)) librarySelection.delete(id);
-  $('library-total').textContent = L('libraryTotal', active.length, fmtBytes(all.reduce((n,e) => n+e.size,0)));
+  $('library-total').textContent = L('libraryTotal', recordingGroups(active).length, fmtBytes(all.reduce((n,e) => n+e.size,0)));
   $('library-empty').textContent = L(active.length ? 'noMatches' : libraryTrash ? 'trashEmpty' : 'libraryEmpty');
   $('library-empty').hidden = entries.length > 0; $('library-status').textContent = '';
   $('library-trash').textContent = L(libraryTrash ? 'backLibrary' : 'trash');
@@ -68,7 +102,7 @@ async function renderRecordingLibrary() {
     const image = document.createElement('img'); image.src = entry.thumbnail || 'assets/logo.png'; image.alt = ''; image.className = 'recording-thumbnail'; const thumbnail=document.createElement('button');thumbnail.type='button';thumbnail.className='thumbnail-play';thumbnail.setAttribute('aria-label',L('openRecording')+' '+entry.name);thumbnail.onclick=()=>playRecording(entry).catch(workspaceError);thumbnail.append(image);const overlay=document.createElement('span');overlay.className='thumbnail-overlay';overlay.textContent='▶';thumbnail.append(overlay);const duration=document.createElement('span');duration.className='thumbnail-duration';duration.textContent=entry.duration ? fmt(entry.duration) : '--:--';thumbnail.append(duration);row.append(thumbnail);
     const body = document.createElement('div'); body.className = 'media-body';
     const title = document.createElement('strong'); title.textContent = entry.sourceTitle || entry.name.replace(/\.(mp4|webm)$/i,''); body.append(title);
-    const badge=document.createElement('span');badge.className='recording-badge'+(entry.enhancedFrom ? ' enhanced-badge':'');badge.textContent=L(entry.enhancedFrom ? 'enhancedBadge':'originalBadge');title.append(badge);
+    const badge=document.createElement('span');badge.className='recording-badge'+(entry.enhancedFrom ? ' enhanced-badge':'');badge.textContent=L(entry.enhancedFrom ? 'enhancedBadge':'originalBadge');title.append(badge);if(entry._parts){const count=document.createElement('span');count.className='recording-badge';count.textContent=LANG==='zh'?`连续录像 · ${entry._parts.length} 段`:`Continuous · ${entry._parts.length} parts`;title.append(count);}
     const filename=document.createElement('p');filename.className='recording-filename hint';filename.textContent=entry.name;body.append(filename);
     const detail = document.createElement('p'); detail.className = 'hint'; detail.textContent = `${entry.duration ? fmt(entry.duration) : '--:--'} · ${entry.width && entry.height ? `${entry.width}×${entry.height} · ` : ''}${fmtBytes(entry.size)} · ${entry.course || L('uncategorized')} · ${new Date(entry.createdAt).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : 'en')}`; body.append(detail);
     if (entry.enhancedFrom) { const parent = all.find(item => item.id === entry.enhancedFrom); if (parent && !parent.deletedAt) { const original=libraryButton('originalVideo',()=>playRecording(parent),'text');original.classList.add('original-link');detail.append(' · ',original); } else { const version=document.createElement('p');version.className='version-label';version.textContent=L('originalUnavailable');body.append(version); } }
@@ -78,16 +112,17 @@ async function renderRecordingLibrary() {
     if (entry.sourceUrl) { const link = document.createElement('a'); link.href = telegramLink(entry.sourceUrl); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = L('sourceMessage'); body.append(link); }
     const actions = document.createElement('div'); actions.className = 'controls media-actions';
     if (libraryTrash) {
-      actions.append(libraryButton('restore', async () => { await updateRecording(entry.id,{ deletedAt: null }); await renderRecordingLibrary(); }));
+      actions.append(libraryButton('restore', async () => { for(const part of entry._parts || [entry])await updateRecording(part.id,{ deletedAt: null }); await renderRecordingLibrary(); }));
       actions.append(libraryButton('deletePermanently', () => removeRecordings([entry.id],true), 'danger'));
     } else {
       actions.append(libraryButton('openRecording', () => playRecording(entry), 'primary'));
-      actions.append(libraryButton('enhanceRecording', () => openEnhancement(entry)));
+      if(!entry._parts)actions.append(libraryButton('enhanceRecording', () => openEnhancement(entry)));
+      if(entry._parts){const parts=document.createElement('details');parts.className='recording-parts';const summary=document.createElement('summary');summary.textContent=LANG==='zh'?'分段文件与单独处理':'Parts and individual processing';parts.append(summary);for(const part of entry._parts){const line=document.createElement('div');line.className='controls';const label=document.createElement('span');label.textContent=part.name;line.append(label,libraryButton('enhanceRecording',()=>openEnhancement(part)),libraryButton('btnDownload',async()=>download(await readStore('videos',part.id),part.name,part.id)));parts.append(line);}body.append(parts);}
       const menu = document.createElement('details'); menu.className = 'row-menu'; const summary = document.createElement('summary'); summary.textContent = '⋯';summary.setAttribute('aria-label',L('more')); menu.append(summary);
       const items = document.createElement('div'); items.className = 'menu-items';
-      items.append(libraryButton('btnDownload', async () => { const blob = await readStore('videos',entry.id); download(blob,entry.name,entry.id); }));
-      items.append(libraryButton('editVideo', () => openVideoEditor(entry)));
-      items.append(libraryButton('renameRecording', async () => {
+      if(!entry._parts)items.append(libraryButton('btnDownload', async () => { const blob = await readStore('videos',entry.id); download(blob,entry.name,entry.id); }));
+      if(!entry._parts)items.append(libraryButton('editVideo', () => openVideoEditor(entry)));
+      if(!entry._parts)items.append(libraryButton('renameRecording', async () => {
         const input = prompt(L('renamePrompt'),entry.name.replace(/\.(mp4|webm)$/i,'')); if (!input?.trim()) return;
         const name = input.trim().replace(/[\\/:*?"<>|]/g,'-').replace(/\.(mp4|webm)$/i,'').slice(0,120)+(entry.name.endsWith('.mp4') ? '.mp4' : '.webm');
         await updateRecording(entry.id,{name}); if (finalId === entry.id) finalName = name; await renderRecordingLibrary();

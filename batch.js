@@ -9,7 +9,9 @@ async function renderBatch(){
 }
 async function enqueueBatch(){
  const mode=$('batch-mode').value;if(!['natural','ai','light'].includes(mode))return;
- for(const id of librarySelection){const source=await readStore('recordings',id);if(!source || source.deletedAt)continue;const idQueue=crypto.randomUUID();await batchUpdate({id:idQueue,batchItem:true,sourceId:id,name:source.name,mode,state:'waiting',createdAt:Date.now()},{ });}
+ const groups=recordingGroups((await readStore('recordings')).filter(e=>!e.deletedAt));
+ const ids=[...new Set([...librarySelection].flatMap(id=>groups.find(e=>e.id===id)?._parts?.map(e=>e.id)||[id]))];
+ for(const id of ids){const source=await readStore('recordings',id);if(!source || source.deletedAt)continue;const idQueue=crypto.randomUUID();await batchUpdate({id:idQueue,batchItem:true,sourceId:id,name:source.name,mode,state:'waiting',createdAt:Date.now()},{ });}
  navigateWorkspace('tasks');await renderBatch();await runBatch();
 }
 async function runBatch(){

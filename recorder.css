@@ -321,3 +321,5 @@ body.cinema-mode{background:#090b0e;}body.cinema-mode .app{width:100%;max-width:
 #playback-stage #preview{max-height:none;border-radius:0;}
 
 #realtime-ai-canvas{position:absolute;left:50%;top:50%;z-index:1;transform-origin:center;pointer-events:none;}#realtime-ai-canvas[hidden]{display:none;}#rotated-playback-controls #playback-realtime{color:#7eb7ff;}#playback-realtime[aria-pressed=true]{background:#2583ff18!important;}#realtime-ai-status{margin:0 14px 8px;font-size:10px;}
+
+.recording-parts{margin-top:12px}.recording-parts>.controls{padding:10px 0;gap:12px}.recording-parts>.controls>span{flex:1;overflow-wrap:anywhere;font-size:12px}#playback-shell:fullscreen #playback-stage{height:100vh!important}#playback-shell:fullscreen .player-control-deck{max-width:1040px;margin:auto}#playback-shell:fullscreen .player-topbar{display:none}
