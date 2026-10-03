@@ -28,6 +28,18 @@ class EnhancementTest(unittest.TestCase):
     def job(self, mode):
         return dict(source=self.source, output=Path(self.temp.name)/'output.mp4', mode=mode, preview=True, state='queued', progress=0, cancel=threading.Event(), processes=[])
 
+    def test_ffmpeg_unavailable_timestamp_does_not_abort_or_reset_progress(self):
+        job = {'progress': .2}
+        for line in ('out_time_us=N/A\n', 'out_time_us=\n', 'out_time_us=-1\n', 'progress=continue\n'):
+            server.update_ffmpeg_progress(job, line, 5)
+            self.assertEqual(job['progress'], .2)
+        server.update_ffmpeg_progress(job, 'out_time_us=2500000\n', 5)
+        self.assertEqual(job['progress'], .5)
+        server.update_ffmpeg_progress(job, 'out_time_us=1000000\n', 5)
+        self.assertEqual(job['progress'], .5)
+        server.update_ffmpeg_progress(job, 'out_time_us=9000000\n', 5)
+        self.assertEqual(job['progress'], .99)
+
     def test_basic_and_light_preserve_size_and_audio(self):
         for mode in ('basic', 'natural', 'light'):
             with self.subTest(mode=mode):

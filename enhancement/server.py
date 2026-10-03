@@ -131,6 +131,16 @@ def probe(path):
     return width, height, fps, duration
 
 
+def update_ffmpeg_progress(job, line, duration):
+    # FFmpeg can emit N/A before the first output timestamp is available.
+    if not duration or not line.startswith('out_time_us='):
+        return
+    value = line.partition('=')[2].strip()
+    if not re.fullmatch(r'[0-9]+', value):
+        return
+    job['progress'] = max(job.get('progress', 0), min(0.99, int(value) / 1e6 / duration))
+
+
 def checked_process(job, command, **kwargs):
     if job['cancel'].is_set():
         raise InterruptedError('Cancelled')
@@ -191,8 +201,7 @@ def run_job(job):
                 command = ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-map', '0:a:0?', '-vf', edit_filter(job, width, height) if job['mode'] == 'edit' else FILTERS[job['mode']] + ',pad=ceil(iw/2)*2:ceil(ih/2)*2', *encode, '-progress', 'pipe:1', str(output)]
                 process = checked_process(job, command, stdout=subprocess.PIPE, text=True)
                 for line in process.stdout:
-                    if line.startswith('out_time_us=') and limit:
-                        job['progress'] = min(0.99, int(line.split('=')[1]) / 1e6 / limit)
+                    update_ffmpeg_progress(job, line, limit)
                 if process.wait() != 0:
                     raise RuntimeError('Video processing failed; see the local ffmpeg.log')
             else:
