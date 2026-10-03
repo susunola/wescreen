@@ -3,7 +3,7 @@
   <head><meta charset="utf-8"><link rel="stylesheet" href="popup.css"></head>
   <body>
     <main>
-      <strong>WeScreen</strong>
+      <div class="brand-title"><strong>WeScreen</strong><span class="version-badge" data-app-version hidden></span></div>
       <p id="lead">选择录制范围并保存视频。</p>
       <p class="privacy" id="privacy"></p>
       <label for="record-url" id="url-label">Open a link to record</label>
@@ -11,6 +11,7 @@
       <p class="link-hint" id="link-hint">After it opens, click WeScreen in that tab and start recording.</p>
       <button id="open">打开录制器</button>
     </main>
+    <script src="version.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

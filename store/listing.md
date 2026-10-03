@@ -1,4 +1,4 @@
-# WeScreen 1.6.0 — listing copy
+# WeScreen 1.6.1 — listing copy
 
 ## English
 

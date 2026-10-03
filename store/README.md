@@ -1,9 +1,9 @@
-# WeScreen 1.6.0 submission artifacts
+# WeScreen 1.6.1 submission artifacts
 
 Build from the repository root: `python3 scripts/build-package.py`.
 
-- Extension: `store/wescreen-1.6.0.zip`.
-- Optional processing helper: `store/wescreen-helper-1.6.0.zip` (not part of the extension upload).
+- Extension: `store/wescreen-1.6.1.zip`.
+- Optional processing helper: `store/wescreen-helper-1.6.1.zip` (not part of the extension upload).
 - Current listing: `store/listing.md`.
 - Current privacy sources: `PRIVACY.md`, `PRIVACY.zh-CN.md`, `docs/index.html`.
 - Six current 1280×800 screenshots are produced by `scripts/capture-product.cjs` with Playwright/Chromium. These use synthetic demonstration video.

@@ -86,3 +86,5 @@ textarea { width: 100%; border: 1px solid #4b657a; border-radius: 7px; padding: 
 #rotation-preview{display:block;max-width:100%;max-height:280px;margin:12px auto;background:black}
 
 .enhance-comparison>div{overflow:auto;max-height:420px}.enhance-comparison video{max-width:none!important}.bulk-controls{flex-wrap:wrap}
+
+.brand-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.version-badge{font-size:12px;letter-spacing:normal;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 7px;white-space:nowrap}

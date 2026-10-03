@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1 — 2026-10-03
+
+- Display the installed manifest version beside the name in the recorder and popup.
+
 ## 1.6.0 — 2026-10-03
 
 - Shorten the English manifest description to meet the 132-character store limit and validate every locale before packaging.
