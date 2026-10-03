@@ -4,6 +4,7 @@ const root=path.resolve(__dirname,'..');fs.mkdirSync(path.resolve(root,'../audit
 (async()=>{
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'wescreen-extension-'));
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:1280,height:800},args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`]});
+  await context.route('http://127.0.0.1:8765/**',route=>route.abort());
   try {
     const worker=context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
     const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`chrome-extension://${id}/recorder.html`);await page.waitForFunction(()=>document.documentElement.dataset.ready==='true');

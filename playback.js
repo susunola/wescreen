@@ -5,7 +5,7 @@ function layoutPlaybackRotation() {
  if(!video.videoWidth || !video.videoHeight || !stage.clientWidth)return;
  const radians=playbackRotation*Math.PI/180,c=Math.abs(Math.cos(radians)),s=Math.abs(Math.sin(radians));
  const boundsWidth=video.videoWidth*c+video.videoHeight*s,boundsHeight=video.videoWidth*s+video.videoHeight*c;
- const maxHeight=document.fullscreenElement===$('playback-shell') ? Math.max(120,innerHeight-360):540;
+ const maxHeight=document.fullscreenElement===$('playback-shell') ? Math.max(120,innerHeight):540;
  const scale=Math.min(stage.clientWidth/boundsWidth,maxHeight/boundsHeight);
  stage.style.height=`${boundsHeight*scale}px`;video.style.width=`${video.videoWidth*scale*playbackZoom}px`;video.style.height=`${video.videoHeight*scale*playbackZoom}px`;
  const maxX=boundsWidth*scale*(playbackZoom-1)/2,maxY=boundsHeight*scale*(playbackZoom-1)/2;playbackPan.x=Math.max(-maxX,Math.min(maxX,playbackPan.x));playbackPan.y=Math.max(-maxY,Math.min(maxY,playbackPan.y));stage.dataset.zoomed=String(playbackZoom>1);
@@ -42,7 +42,7 @@ function savePlaybackState() {
 }
 function beginPlaybackSource(id) {
  instantEnhancement=null;updateInstantEnhancementButton();savePlaybackState();activePlaybackId=id;playbackReady=false;playbackGeneration++;lastPlaybackSave=0;
- $('playback-status').textContent='';resetPlaybackTuning();$('preview').playbackRate=1;$('playback-speed').value='1';
+ $('playback-status').textContent='';$('playback-name').textContent=finalName || E('视频播放','Video playback');resetPlaybackTuning();$('preview').playbackRate=1;$('playback-speed').value='1';
  refreshPlaybackVersions().catch(error=>$('playback-status').textContent=error.message);
 }
 async function restorePlaybackState() {
@@ -141,3 +141,18 @@ $('playback-ai').onclick=async()=>{
  }catch(error){if(activePlaybackId===sourceId)$('playback-status').textContent=E('AI 修复未完成：','AI repair did not finish: ')+error.message+(task ? E('；可在视频处理页查看或导出结果。','; inspect or export the result from Processing.'):'');}
  finally{playbackAIBusy=false;$('playback-ai').disabled=false;renderEnhancementTasks().catch(()=>{});}
 };
+
+function updatePlayerTransport(){const video=$('preview');$('rotated-play').querySelector('svg').innerHTML=video.paused ? '<path d="m8 5 10 7-10 7Z"/>':'<path d="M8 5v14M16 5v14"/>';$('rotated-play').title=video.paused ? E('播放（空格）','Play (Space)'):E('暂停（空格）','Pause (Space)');$('rotated-play').setAttribute('aria-label',$('rotated-play').title);$('rotated-mute').dataset.muted=String(video.muted);}
+for(const event of ['play','pause','volumechange'])$('preview').addEventListener(event,updatePlayerTransport);
+$('preview').addEventListener('loadedmetadata',()=>{$('playback-time').textContent=fmt($('preview').currentTime*1000)+' / '+fmt((Number.isFinite($('preview').duration) ? $('preview').duration:0)*1000);updatePlayerTransport();});
+
+let fullscreenControlsTimer;
+function revealFullscreenControls(){
+ const shell=$('playback-shell');shell.classList.remove('controls-hidden');clearTimeout(fullscreenControlsTimer);
+ if(document.fullscreenElement===shell && !$('preview').paused)fullscreenControlsTimer=setTimeout(()=>{shell.classList.add('controls-hidden');},2200);
+}
+$('playback-shell').addEventListener('pointermove',revealFullscreenControls);
+$('playback-shell').addEventListener('pointerdown',revealFullscreenControls);
+$('preview').addEventListener('play',revealFullscreenControls);
+$('preview').addEventListener('pause',revealFullscreenControls);
+document.addEventListener('fullscreenchange',revealFullscreenControls);

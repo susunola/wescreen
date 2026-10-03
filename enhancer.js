@@ -1,3 +1,7 @@
+function enhancementErrorText(message){
+ if(/SeedVR2 currently supports up to/.test(message))return E('这段视频超过强力 AI 的 1080p 输入上限。请选择“自然修复”保留原分辨率；强力 AI 支持横版 1920×1080 或竖版 1080×1920。','This video exceeds the Strong AI 1080p input limit. Choose Natural restoration to preserve its original resolution.');
+ return message;
+}
 // Authenticated loopback client. Full results are retained until explicit deletion.
 const ENHANCER_URL = 'http://127.0.0.1:8765';
 const E = (zh,en) => LANG === 'zh' ? zh : en;
@@ -30,13 +34,13 @@ async function discoverHelperToken(){
 async function connectHelper(){
  if(helperConnecting)return helperConnecting;
  helperConnecting=(async()=>{
-  $('helper-check').disabled=true;$('helper-check').textContent=E('连接中…','Connecting…');enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');
+  $('helper-check').disabled=true;$('helper-check').textContent=E('连接中…','Connecting…');enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');$('tasks-status').textContent=$('helper-status').textContent;
   try{
    if(!enhancementToken)await discoverHelperToken();
    try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
-   $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
-  }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('旧扩展配对阻止了连接。在本机增强包中双击 reset-connection.command，再点击自动连接。录像和处理结果会保留。','Old extension pairing blocks this connection. Open reset-connection.command in the local helper package, then retry. Videos and results are preserved.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');updateEnhancementMode();return null;}
+   $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();renderEnhancementTasks().catch(()=>{});return helperHealth;
+  }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('旧扩展配对阻止了连接。在本机增强包中双击 reset-connection.command，再点击自动连接。录像和处理结果会保留。','Old extension pairing blocks this connection. Open reset-connection.command in the local helper package, then retry. Videos and results are preserved.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
  })();try{return await helperConnecting;}finally{helperConnecting=null;$('helper-check').disabled=false;$('helper-check').textContent=L('autoConnect');updateTaskConnection(!!helperHealth);}
 }
 function enhancementControls(busy) {
@@ -146,7 +150,7 @@ async function enhanceVideo(preview) {
       }
       await new Promise(resolve=>setTimeout(resolve,700));
     }
-  }catch(error){enhancementStatus(E('处理未完成或保存失败：','Processing or saving failed: ')+error.message+(task ? E(' 任务结果仍可在“处理任务”中查看或导出。',' Inspect or export the retained result in Tasks.') : ''));}
+  }catch(error){enhancementStatus(E('处理未完成或保存失败：','Processing or saving failed: ')+enhancementErrorText(error.message)+(task ? E(' 任务结果仍可在“处理任务”中查看或导出。',' Inspect or export the retained result in Tasks.') : ''));}
   finally{enhancementJob=null;enhancementControls(false);renderEnhancementTasks().catch(()=>{});}
 }
 async function renderEnhancementTasks() {
@@ -161,14 +165,14 @@ async function renderEnhancementTasks() {
     const list=$('task-items');list.replaceChildren();
     $('tasks-empty').hidden=merged.size>0;list.hidden=merged.size===0;
     for(const task of [...merged.values()].sort((a,b)=>b.createdAt-a.createdAt)){
-      const row=document.createElement('li');row.className='task-row';
+      const row=document.createElement('li');row.className='task-row';row.dataset.state=task.state;const icon=document.createElement('span');icon.className='task-media-icon';icon.innerHTML='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4Z"/></svg>';row.append(icon);
       const title=document.createElement('strong');title.textContent=task.name || task.id;row.append(title);
       let saved=records.find(entry=>entry.helperJobId===task.id);const remote=jobs.some(job=>job.id===task.id);
       if(task.playbackAI && task.state==='done' && remote && !saved){try{const id=await saveTaskResult(task);saved={id};if(typeof completePlaybackAI==='function')await completePlaybackAI(task,id);}catch(error){$('tasks-status').textContent=error.message;}}
-      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
-      if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error || L('taskLost');row.append(error);}
-      if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);}
-      const buttons=document.createElement('div');buttons.className='controls';
+      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
+      if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error ? enhancementErrorText(task.error) : L('taskLost');row.append(error);}
+      if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);const percent=document.createElement('span');percent.className='task-percent';percent.textContent=Math.round((task.progress || 0)*100)+'%';row.append(percent);}
+      const buttons=document.createElement('div');buttons.className='controls task-actions';
       if(task.state==='done' && remote){if(!saved)buttons.append(libraryButton('saveLibrary',async()=>{await saveTaskResult(task);await renderEnhancementTasks();}));buttons.append(libraryButton('exportResult',()=>exportTask(task)));}
       if(['queued','processing'].includes(task.state) && remote)buttons.append(libraryButton('cancelTask',async()=>{await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await renderEnhancementTasks();}));
       else buttons.append(libraryButton('deleteTask',async()=>{
