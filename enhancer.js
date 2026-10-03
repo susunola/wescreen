@@ -35,7 +35,7 @@ async function connectHelper(){
    if(!enhancementToken)await discoverHelperToken();
    try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
-   $('helper-status').textContent=L('connectReady');$('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
+   $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
   }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('旧扩展配对阻止了连接。在本机增强包中双击 reset-connection.command，再点击自动连接。录像和处理结果会保留。','Old extension pairing blocks this connection. Open reset-connection.command in the local helper package, then retry. Videos and results are preserved.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');updateEnhancementMode();return null;}
  })();try{return await helperConnecting;}finally{helperConnecting=null;$('helper-check').disabled=false;$('helper-check').textContent=L('autoConnect');updateTaskConnection(!!helperHealth);}
 }
@@ -53,10 +53,10 @@ function updateEnhancementMode() {
   $('enhance-preview').textContent=E('预览 ','Preview ')+$('preview-seconds').value+E(' 秒',' seconds');
   if($('enhance-mode').selectedOptions[0]?.disabled)$('enhance-mode').value='natural';
   const mode=$('enhance-mode').value;
-  $('enhance-mode-hint').textContent=mode==='strong' ? E('SeedVR2 可能改变人脸与字幕。处理较慢，先预览确认；输入/输出最高 1080p。','SeedVR2 can alter faces and subtitles. Processing is slow; preview first. Up to 1080p input/output.') : mode==='natural' ? E('保留原分辨率，减少压缩块和噪点，轻度锐化。','Preserves resolution, reduces compression artifacts and noise, and gently sharpens.') : E('先选择片段预览。明暗增强仍为 SDR，AI 无法保证还原丢失细节。','Preview a selected clip first. Brightness output stays SDR; AI cannot guarantee lost details are recovered.');
+  $('enhance-mode-hint').textContent=mode==='strong' ? E('SeedVR2 可能改变人脸与字幕。处理较慢，建议先预览，也可直接增强整段；输入/输出最高 1080p。','SeedVR2 can alter faces and subtitles. Processing is slow; preview is recommended, or process the full video directly. Up to 1080p input/output.') : mode==='natural' ? E('保留原分辨率，减少压缩块和噪点，轻度锐化。','Preserves resolution, reduces compression artifacts and noise, and gently sharpens.') : E('先选择片段预览。明暗增强仍为 SDR，AI 无法保证还原丢失细节。','Preview a selected clip first. Brightness output stays SDR; AI cannot guarantee lost details are recovered.');
   $('enhance-preview').disabled=enhancementBusy || !enhancementSource || !helperHealth;
-  $('enhance-full').disabled=enhancementBusy || !enhancementSource || !helperHealth || (mode==='strong' && enhancementPreviewMode!=='strong');
-  $('enhance-disabled-reason').textContent=enhancementBusy ? E('正在处理，请等待完成或取消当前任务。','Processing: wait or cancel the current task.') : !enhancementSource ? E('请先从录像库选择一段视频，再使用画质增强。','Select a video in the library to enable enhancement.') : !helperHealth ? E('按钮暂不可用：本机程序尚未连接。','Buttons unavailable: local helper is not connected.') : mode==='strong' && enhancementPreviewMode!=='strong' ? E('整段增强暂不可用：先生成一段强力 AI 预览，确认效果。','Full processing unavailable: generate a Strong AI preview first.') : '';
+  $('enhance-full').disabled=enhancementBusy || !enhancementSource || !helperHealth;
+  $('enhance-disabled-reason').textContent=enhancementBusy ? E('正在处理，请等待完成或取消当前任务。','Processing: wait or cancel the current task.') : !enhancementSource ? E('请先从录像库选择一段视频，再使用画质增强。','Select a video in the library to enable enhancement.') : !helperHealth ? E('按钮暂不可用：本机程序尚未连接。','Buttons unavailable: local helper is not connected.') : '';
 }
 async function openEnhancement(entry=null) {
   if(enhancementBusy){navigateWorkspace('tasks');return;}

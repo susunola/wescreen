@@ -18,7 +18,7 @@ function captureContext({ camera = false, clicks = true, state = 'live' } = {}) 
   const stream = { getVideoTracks: () => [video] };
   const seen = { notices: [], recordings: [], compositions: 0, releases: 0 };
   const fields = {
-    'capture-method': { value: 'shared' },
+    'quiet-tab-audio': { checked: false }, 'capture-method': { value: 'shared' },
     'screen-audio': { checked: true }, camera: { checked: camera }, clicks: { checked: clicks },
     recovery: { classList: { contains: () => true } }, countdown: { value: '0' }, start: { disabled: false, textContent: '' }
   };
@@ -220,9 +220,10 @@ test('video bitrate scales with actual pixels and frame rate', () => {
 });
 
 test('audio mixing is reused across segments and preserves headroom for two sources', () => {
-  let contexts = 0; const gains = [];
+  let contexts = 0, resumes = 0; const gains = [];
   const context = { mixedAudio: null, mixer: null, displayStream: { getAudioTracks: () => [{}] }, micStream: { getAudioTracks: () => [{}] }, AudioContext: class {
     constructor() { contexts++; }
+    resume() { resumes++; return Promise.resolve(); }
     createMediaStreamDestination() { return { stream: { getAudioTracks: () => [this] } }; }
     createMediaStreamSource() { return { connect: gain => gain }; }
     createGain() { const node = { gain: {}, connect() {} }; gains.push(node); return node; }
@@ -231,6 +232,7 @@ test('audio mixing is reused across segments and preserves headroom for two sour
   const first = context.mixAudio();
   assert.equal(context.mixAudio(), first);
   assert.equal(contexts, 1);
+  assert.equal(resumes, 1);
   assert.deepEqual(gains.map(node => node.gain.value), [0.5, 0.5]);
 });
 
