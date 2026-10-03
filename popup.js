@@ -7,8 +7,14 @@ document.querySelector('#open').textContent = t('popupOpen', '打开录制器');
 document.querySelector('#open').addEventListener('click', async () => {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && /^https?:/i.test(tab.url || '')) await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['pointer-tracker.js'] });
-  } catch { /* The page may be protected or an extension page; recording still works. */ }
+    if (tab && /^https?:/i.test(tab.url || '')) {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['pointer-tracker.js'] });
+      await chrome.storage.session.set({ pointerTargetTabId: tab.id });
+    } else await chrome.storage.session.remove('pointerTargetTabId');
+  } catch {
+    // Protected pages cannot host the highlight overlay; screen recording still works.
+    await chrome.storage.session.remove('pointerTargetTabId').catch(() => {});
+  }
   await chrome.tabs.create({ url: chrome.runtime.getURL('recorder.html') });
   window.close();
 });

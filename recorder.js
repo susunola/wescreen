@@ -44,6 +44,7 @@ const I18N = {
     errPickerCanceled: '已取消屏幕选择。',
     errNoSource: '没有找到可录制的画面源。',
     errSourceEnded: '共享的屏幕或窗口已被关闭，录制已停止。',
+    errVideoStalled: '摄像头画中画合成画面已停止更新，录制已自动停止。可关闭“摄像头画中画”，直接录制屏幕，避免后台停帧。',
     errRecorder: '录制过程中浏览器报告了错误，已停止录制。',
     errUnsupported: '当前浏览器不支持 WebM 录制。',
     errStart: (msg) => `无法开始录制：${msg}`,
@@ -83,6 +84,7 @@ const I18N = {
     errPickerCanceled: 'Screen selection was cancelled.',
     errNoSource: 'No capturable screen source was found.',
     errSourceEnded: 'The shared screen or window was closed, so recording stopped.',
+    errVideoStalled: 'Camera picture-in-picture stopped updating. Recording was stopped to avoid a frozen video. Turn off camera picture-in-picture to record the screen directly in the background.',
     errRecorder: 'The browser reported an error while recording, so recording stopped.',
     errUnsupported: 'This browser does not support WebM recording.',
     errStart: (msg) => `Could not start recording: ${msg}`,
@@ -96,8 +98,8 @@ const L = (key, ...args) => {
   return typeof value === 'function' ? value(...args) : value;
 };
 
-let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null, clicks = [], markers = [];
-let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, segmentTimer = null, finalBlob = null, finalSize = 0, recordingStream = null, segmentIndex = 1, rollingSegment = false;
+let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null, markers = [];
+let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, segmentTimer = null, finalBlob = null, finalSize = 0, recordingStream = null, segmentIndex = 1, rollingSegment = false, videoFailure = null;
 let sessionStartedAt = 0, lastMemorySync = 0, chunkSeq = 0;
 let hintKey = null, hintArgs = [], hintAlerts = false, captureNote = null;
 const pendingWrites = new Set();
@@ -197,6 +199,7 @@ function applyLang(next) {
   }
   if (hintKey) setHint(hintKey, hintArgs, hintAlerts);
   if (finalSize && !$('result').classList.contains('hidden')) setHint('resultSize', [fmtBytes(finalSize)]);
+  if (videoFailure && !$('result').classList.contains('hidden')) $('result-warning').textContent = L(videoFailure);
   syncMemory();
   renderStorageHint();
   if ($('course-enabled')) updateCourseFilename();
@@ -313,16 +316,31 @@ async function composeOutput() {
   const canvas = document.createElement('canvas');
   canvas.width = source.width || 1280; canvas.height = source.height || 720;
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D is unavailable');
   const draw = () => {
-    ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-    if (cameraStream) { const width = Math.round(canvas.width * .23), height = Math.round(width * 9 / 16), pad = Math.round(canvas.width * .025); ctx.save(); ctx.beginPath(); ctx.roundRect(canvas.width - width - pad, canvas.height - height - pad, width, height, Math.round(width * .08)); ctx.clip(); ctx.drawImage(cameraVideo, canvas.width - width - pad, canvas.height - height - pad, width, height); ctx.restore(); ctx.lineWidth = Math.max(2, Math.round(canvas.width / 500)); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeRect(canvas.width - width - pad, canvas.height - height - pad, width, height); }
-    const now = Date.now(); clicks = clicks.filter((point) => now - point.at < 650);
-    if ($('clicks').checked) clicks.forEach((point) => { const age = now - point.at, scale = 1 + age / 120, radius = Math.max(15, canvas.width * .018) * scale; ctx.beginPath(); ctx.arc(point.x * canvas.width, point.y * canvas.height, radius, 0, Math.PI * 2); ctx.fillStyle = `rgba(255, 69, 82, ${Math.max(0, .7 - age / 900)})`; ctx.fill(); });
-    compositor.frame = requestAnimationFrame(draw);
+    try {
+      ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+      const width = Math.round(canvas.width * .23), height = Math.round(width * 9 / 16), pad = Math.round(canvas.width * .025);
+      ctx.save(); ctx.beginPath(); ctx.roundRect(canvas.width - width - pad, canvas.height - height - pad, width, height, Math.round(width * .08)); ctx.clip(); ctx.drawImage(cameraVideo, canvas.width - width - pad, canvas.height - height - pad, width, height); ctx.restore(); ctx.lineWidth = Math.max(2, Math.round(canvas.width / 500)); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeRect(canvas.width - width - pad, canvas.height - height - pad, width, height);
+      compositor.lastFrameAt = Date.now();
+      compositor.frame = requestAnimationFrame(draw);
+    } catch (error) {
+      if (!recorder || recorder.state === 'inactive') throw error;
+      videoFailure = 'errVideoStalled';
+      stop();
+    }
   };
-  compositor = { frame: 0, screenVideo, cameraVideo };
+  compositor = { frame: 0, watch: null, lastFrameAt: Date.now(), screenVideo, cameraVideo };
   draw();
-  return canvas.captureStream(Number($('framerate').value) || 30);
+  const stream = canvas.captureStream(Number($('framerate').value) || 30);
+  const composition = compositor;
+  composition.watch = setInterval(() => {
+    if (recorder && recorder.state === 'recording' && Date.now() - composition.lastFrameAt > 3000) {
+      videoFailure = 'errVideoStalled';
+      stop();
+    }
+  }, 1000);
+  return stream;
 }
 function mixAudio() {
   const context = new AudioContext();
@@ -345,8 +363,10 @@ function audioHintKey() {
 
 // ---- recording lifecycle ---------------------------------------------------
 function armRecorder(stream, type) {
+  const videoTracks = stream.getVideoTracks();
+  if (!videoTracks.length || videoTracks[0].readyState !== 'live') throw new Error(L('errNoSource'));
   const audio = mixAudio();
-  const tracks = [...stream.getVideoTracks(), ...(audio ? [audio] : [])];
+  const tracks = [...videoTracks, ...(audio ? [audio] : [])];
   recorder = new MediaRecorder(new MediaStream(tracks), {
     mimeType: type,
     videoBitsPerSecond: BITRATES[$('quality').value],
@@ -374,6 +394,7 @@ function beginRecording(stream) {
   recordingStream = stream;
   segmentIndex = 1;
   markers = [];
+  videoFailure = null;
   armRecorder(stream, type);
   sessionStartedAt = Date.now();
   startedAt = sessionStartedAt;
@@ -393,7 +414,7 @@ function beginRecording(stream) {
   else setHint('recordingHint');
   show('recording');
   syncMemory();
-  chrome.runtime.sendMessage({ type: 'recording-state', active: true }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'recording-state', active: true, highlightClicks: $('clicks').checked }).catch(() => {});
 }
 async function saveSegmentAndContinue() {
   const part = new Blob(chunks, { type: (recorder && recorder.mimeType) || 'video/webm' });
@@ -442,9 +463,16 @@ async function start() {
     $('start').textContent = L('btnStart');
   }
   const video = displayStream.getVideoTracks()[0];
-  if (video) video.onended = () => stop();
+  if (!video || video.readyState !== 'live') {
+    releaseCapture();
+    setNotice(L('errNoSource'));
+    resetStart();
+    return;
+  }
+  video.onended = () => stop();
   try {
-    beginRecording((cameraStream || $('clicks').checked) ? await composeOutput() : displayStream);
+    // Click rings are drawn inside the shared tab; only camera PiP needs a canvas.
+    beginRecording(cameraStream ? await composeOutput() : displayStream);
   } catch (error) {
     releaseCapture();
     setNotice(error && error.message ? error.message : L('errStart', 'unknown error'));
@@ -478,7 +506,7 @@ function releaseCapture() {
   timer = null;
   stopTimer = null;
   segmentTimer = null;
-  if (compositor) { cancelAnimationFrame(compositor.frame); compositor.screenVideo.pause(); compositor.cameraVideo.pause(); compositor = null; }
+  if (compositor) { clearInterval(compositor.watch); cancelAnimationFrame(compositor.frame); compositor.screenVideo.pause(); compositor.cameraVideo.pause(); compositor = null; }
   [displayStream, micStream, cameraStream].filter(Boolean).forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
   if (mixer) { mixer.close().catch(() => {}); mixer = null; }
 }
@@ -497,6 +525,7 @@ function resetStart() {
   chunks = [];
   chunkBytes = 0;
   captureNote = null;
+  videoFailure = null;
   setHint(null);
   syncMemory();
 }
@@ -510,11 +539,13 @@ function finish() {
   const url = URL.createObjectURL(finalBlob);
   $('preview').src = url;
   $('preview').onloadeddata = () => URL.revokeObjectURL(url);
+  $('result-warning').textContent = videoFailure ? L(videoFailure) : '';
+  $('result-warning').hidden = !videoFailure;
   recorder = null;
   chunks = [];
   // Chunks stay in IndexedDB so the recovery banner can still offer them after a reload.
   Promise.all([...pendingWrites]).finally(() => setInProgress(false));
-  chrome.runtime.sendMessage({ type: 'recording-state', active: false }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'recording-state', active: false, highlightClicks: false }).catch(() => {});
   show('result');
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
@@ -548,7 +579,6 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'stop-recording') stop();
   if (message.type === 'pause-recording') pause();
   if (message.type === 'mark-important') markImportant();
-  if (message.type === 'pointer-event' && isRecording()) clicks.push({ x: Math.min(1, Math.max(0, message.x)), y: Math.min(1, Math.max(0, message.y)), at: Date.now() });
 });
 $('start').addEventListener('click', () => {
   if ($('start').dataset.i18n === 'btnStop') stop();

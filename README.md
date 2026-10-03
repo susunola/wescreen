@@ -73,7 +73,10 @@ The full policy is in [`PRIVACY.md`](PRIVACY.md) ([中文](PRIVACY.zh-CN.md)), p
 5. Preview the result and download it as WebM.
 
 With the countdown set, the recorder waits 3 or 5 seconds after you confirm the shared source, so
-you have time to switch to the window you want to demonstrate.
+you have time to switch to the window you want to demonstrate. Click highlights are drawn inside
+the webpage that was active when you opened the recorder; choose that webpage in the share picker
+to include them. Ordinary screen recordings always use the original display video track. Reloading
+the target webpage requires opening the recorder from the toolbar again to re-inject highlights.
 
 <p align="center">
   <img src="assets/screenshot-setup-en.png" alt="WeScreen setup screen" width="620">
@@ -128,12 +131,14 @@ Rebind them at `edge://extensions/shortcuts`.
 - **WebM only.** That is what the browser records natively. Convert to MP4 with ffmpeg, HandBrake, or 剪映 if you need it.
 - **A ~1.6 GB soft ceiling per take.** Chunks are persisted to disk while recording, but stopping still assembles the whole take into a single in-memory Blob. The recorder warns at 800 MB and turns red at 1.6 GB; for longer sessions, record in parts.
 - **Crash recovery is best-effort.** Whatever chunks reached IndexedDB before a crash can be recovered; the last second or so may be missing.
-- **No editing yet.** No trimming, no annotations, no camera overlay, no MP4/GIF export.
+- **Camera picture-in-picture can stall in the background.** This mode still composites frames in the recorder tab; if the canvas has not updated for more than 3 seconds, recording stops with a warning. For extended background recordings, disable camera picture-in-picture and record the shared source directly.
+- **No post-recording editing yet.** No trimming or MP4/GIF export.
 
 ## Development
 
 There is nothing to build. Edit a file, then press **Reload** on the extension card at
-`edge://extensions/`.
+`edge://extensions/`. Run the dependency-free capture regression tests with
+`node --test tests/recording.test.js`.
 
 ```
 manifest.json   Extension manifest, permissions, and keyboard commands
