@@ -23,10 +23,10 @@ ASSETS = ROOT / "assets"
 STORE = ROOT / "store"
 
 # Pulled from recorder.css: linear-gradient(115deg, #101617, #142523 62%, #0d1918)
-GRADIENT = [(16, 22, 23), (20, 37, 35), (13, 25, 24)]
+GRADIENT = [(12, 20, 32), (19, 33, 49), (13, 25, 39)]
 INK = (237, 243, 238)
 MUTED = (156, 175, 170)
-ACCENT = (41, 165, 109)
+ACCENT = (37, 142, 233)
 
 FONT_CANDIDATES = {
     "bold": [
@@ -135,28 +135,6 @@ def build_tile(size, logo, name_size, tagline_size, pad_ratio):
     return target
 
 
-def build_screenshot(source, target):
-    canvas = gradient_canvas((1280, 800)).convert("RGBA")
-    ui = Image.open(source).convert("RGBA")
-    # Leave an even margin so the store's own chrome never overlaps the UI.
-    max_width, max_height = 1080, 660
-    scale = min(max_width / ui.width, max_height / ui.height)
-    ui = ui.resize((round(ui.width * scale), round(ui.height * scale)), Image.LANCZOS)
-
-    shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    shadow_draw = ImageDraw.Draw(shadow)
-    x = (canvas.width - ui.width) // 2
-    y = (canvas.height - ui.height) // 2
-    shadow_draw.rounded_rectangle(
-        [x - 4, y + 10, x + ui.width + 4, y + ui.height + 18], radius=18, fill=(0, 0, 0, 110)
-    )
-    shadow = shadow.filter(__import__("PIL.ImageFilter", fromlist=["ImageFilter"]).GaussianBlur(14))
-    canvas = Image.alpha_composite(canvas, shadow)
-    canvas.paste(ui, (x, y), rounded(ui, 14))
-    canvas.convert("RGB").save(target, optimize=True)
-    return target
-
-
 def main():
     STORE.mkdir(exist_ok=True)
     logo = build_logo()
@@ -167,21 +145,9 @@ def main():
     build_tile((1400, 560), logo, name_size=104, tagline_size=28, pad_ratio=0.30)
     print("store/tile-large-1400x560.png          1400x560  (optional, exact size)")
 
-    plan = [
-        ("1-setup-en", ASSETS / "screenshot-setup-en.png"),
-        ("2-recording-en", ASSETS / "screenshot-recording-en.png"),
-        ("3-result-en", ASSETS / "screenshot-result-en.png"),
-        ("4-setup-zh", ASSETS / "screenshot-setup-zh.png"),
-        ("5-recording-zh", ASSETS / "screenshot-recording-zh.png"),
-        ("6-result-zh", ASSETS / "screenshot-result-zh.png"),
-    ]
-    for name, source in plan:
-        if not source.exists():
-            print(f"  SKIP {name}: missing {source.relative_to(ROOT)}")
-            continue
-        target = STORE / f"screenshot-{name}-1280x800.png"
-        build_screenshot(source, target)
-        print(f"store/{target.name:38s}1280x800  (max 6, exact size)")
+    import subprocess
+    subprocess.run(['node', str(ROOT / 'scripts' / 'capture-product.cjs')], check=True)
+
 
 
 if __name__ == "__main__":

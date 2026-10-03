@@ -1,0 +1,28 @@
+// Capture actual extension pages in an isolated profile; all videos are synthetic demo fixtures.
+const {chromium}=require('playwright');const fs=require('fs');const os=require('os');const path=require('path');
+const root=path.resolve(__dirname,'..');fs.mkdirSync(path.resolve(root,'../audit-2026-10-03'),{recursive:true});
+(async()=>{
+  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'wescreen-extension-'));
+  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:1280,height:800},args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`]});
+  try {
+    const worker=context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
+    const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(`chrome-extension://${id}/recorder.html`);await page.waitForFunction(()=>document.documentElement.dataset.ready==='true');
+    const permission=await page.evaluate(()=>chrome.permissions.contains({permissions:['unlimitedStorage']}));if(!permission)throw new Error('unlimitedStorage was not granted');
+    await page.evaluate(()=>applyLang('en'));await page.screenshot({path:path.join(root,'store/screenshot-1-setup-en-1280x800.png')});
+    await page.evaluate(async()=>{
+      $('format').value='mp4';$('countdown').value='0';$('clicks').checked=false;$('filename').value='Telegram-demo';
+      const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const paint=canvas.getContext('2d');let n=0;
+      window.demoTimer=setInterval(()=>{paint.fillStyle='#17374d';paint.fillRect(0,0,640,360);paint.fillStyle='#63cdbf';paint.fillRect(30+n++%300,90,80,80);paint.fillStyle='white';paint.font='22px system-ui';paint.fillText('WeScreen — synthetic demonstration',35,48);},33);
+      navigator.mediaDevices.getDisplayMedia=async()=>canvas.captureStream(30);await start();
+    });await page.waitForTimeout(1500);await page.screenshot({path:path.join(root,'store/screenshot-2-recording-en-1280x800.png')});await page.evaluate(()=>stop());await page.waitForFunction(()=>!recorder && finalId);await page.waitForFunction(()=>$('preview').readyState>=2);await page.screenshot({path:path.join(root,'store/screenshot-3-result-en-1280x800.png')});
+    await page.evaluate(async()=>{applyLang('zh');await renderRecordingLibrary();show('setup');});await page.screenshot({path:path.join(root,'store/screenshot-4-setup-zh-1280x800.png')});
+    await page.evaluate(()=>navigateWorkspace('library'));await page.screenshot({path:path.join(root,'store/screenshot-5-library-zh-1280x800.png')});
+    await page.evaluate(async()=>openEnhancement((await readStore('recordings'))[0]));await page.screenshot({path:path.join(root,'store/screenshot-6-enhancement-zh-1280x800.png')});await page.evaluate(()=>$('enhance-panel').close());
+    await page.evaluate(()=>{show('setup');$('capture-mode').value='telegram';applyCapturePreset();$('channel-name').value='设计与影像';$('channel-url').value='https://t.me/example';$('channel-video-title').value='频道视频演示';updateTelegramFilename();});await page.screenshot({path:path.resolve(root,'../audit-2026-10-03/telegram-channel-repaired.png'),fullPage:true});
+    await page.evaluate(async()=>{navigateWorkspace('channels');const profile=await saveTelegramProfile();await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,plan:[{id:'demo-1',title:'视频一：频道录制演示',url:'https://t.me/example/1'},{id:'demo-2',title:'视频二：竖版观看演示',url:'https://t.me/example/2'}]},'channel:'+profile.id));await refreshTelegramProfiles();await renderChannelWorkbench();});await page.screenshot({path:path.resolve(root,'../audit-2026-10-03/channel-workbench-1.6.png'),fullPage:true});
+    await page.evaluate(async()=>{navigateWorkspace('capture');$('capture-mode').value='general';applyCapturePreset();$('countdown').value='0';$('screen-audio').checked=false;$('filename').value='portrait-demo';const canvas=document.createElement('canvas');canvas.width=360;canvas.height=640;const ctx=canvas.getContext('2d');ctx.translate(360,0);ctx.rotate(Math.PI/2);ctx.fillStyle='#17374d';ctx.fillRect(0,0,640,360);ctx.fillStyle='#63cdbf';ctx.fillRect(80,100,100,100);ctx.fillStyle='white';ctx.font='24px system-ui';ctx.fillText('Portrait source — rotate to landscape',30,48);window.portraitTimer=setInterval(()=>{ctx.fillStyle='#63cdbf';ctx.fillRect(80,100,100,100);},33);navigator.mediaDevices.getDisplayMedia=async()=>canvas.captureStream(30);await start();});await page.waitForTimeout(1200);await page.evaluate(()=>stop());await page.waitForFunction(()=>!recorder && finalId);await page.evaluate(async()=>openVideoEditor(await readStore('recordings',finalId)));await page.waitForFunction(()=>editorSize && $('rotation-preview').width>0);await page.locator('[data-rotate="270"]').click();await page.screenshot({path:path.resolve(root,'../audit-2026-10-03/rotation-editor-1.6.png')});await page.evaluate(()=>$('edit-panel').close());
+    await page.setViewportSize({width:390,height:844});const narrow=await page.evaluate(()=>({viewport:innerWidth,width:document.documentElement.scrollWidth}));if(narrow.width>narrow.viewport)throw new Error('Narrow layout overflow');
+    if(errors.length)throw new Error(errors.join('\n'));
+    console.log(JSON.stringify({extensionLoaded:true,unlimitedStorage:permission,narrow,errors,screenshots:6}));
+  }finally{await context.close();fs.rmSync(profile,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});

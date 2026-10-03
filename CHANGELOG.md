@@ -1,4 +1,31 @@
-# 1.1.0
+# Changelog
+
+## 1.6.0 — 2026-10-03
+
+- Add clockwise/counterclockwise portrait rotation, arbitrary 0–360° angles and an optional 1920×1080 landscape canvas, preserving audio and the original video.
+- Add recording write/audio warnings and preview frame diagnostics.
+- Add a channel workbench with reorder, skip and rerecord actions, duplicate message detection and remembered crop regions.
+- Add a persisted sequential enhancement queue with pause, resume and retry.
+- Add synchronized detail zoom, suggested black-border cropping and token-file import.
+- Check/install missing FFmpeg/Python through an existing Homebrew installation; include all SeedVR2 installer dependencies in helper packages.
+
+## 1.5.0 — 2026-10-03
+
+- Prevent stale recovery from overwriting completed recordings; reread state under the recording lock and archive with non-overwriting keys.
+- Rotate encoders before stopping the previous segment; automatically segment near 800 MB to bound memory, with a possible small overlap.
+- Compose camera picture-in-picture in a frame-processing worker, with explicit capability/error handling.
+- Separate Record, Library and Processing tasks; add import, sorting, bulk selection, Trash and restoration.
+- Use recording records for course views; keep rename/deletion consistent.
+- Retain full processing results across page/helper restarts; support save retries and authenticated streaming export.
+- Add crop/trim, selected-range enhancement previews and synchronized comparison.
+- Preserve channel selection and the next planned video on reload; retain invalid plan drafts and show library errors in the active view; distinguish offline helpers from missing tasks.
+- Add Telegram channel profiles, per-channel numbering, message recording plans, channel library filters and export subfolders.
+- Add unlimitedStorage and persistent-storage request; remove a fixed 10 GB total-library assumption.
+- Update languages, privacy, listing, packaging and regression scenarios.
+
+
+
+## 1.1.0
 
 P0 收尾：把 1.0 里"看起来有、实际没有"的能力补齐，并让录制过程的资源占用可见。
 

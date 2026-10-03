@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WeScreen",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "default_locale": "en",
   "description": "__MSG_extDescription__",
   "icons": {
@@ -20,11 +20,40 @@
       "128": "icons/icon128.png"
     }
   },
-  "background": { "service_worker": "background.js" },
-  "permissions": ["storage", "downloads", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "downloads",
+    "activeTab",
+    "scripting",
+    "unlimitedStorage"
+  ],
   "commands": {
-    "stop-recording": { "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" }, "description": "__MSG_commandStop__" },
-    "pause-recording": { "suggested_key": { "default": "Ctrl+Shift+U", "mac": "Command+Shift+U" }, "description": "__MSG_commandPause__" }
-    ,"mark-important": { "suggested_key": { "default": "Ctrl+Shift+M", "mac": "Command+Shift+M" }, "description": "Mark an important learning moment" }
-  }
+    "stop-recording": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "__MSG_commandStop__"
+    },
+    "pause-recording": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U",
+        "mac": "Command+Shift+U"
+      },
+      "description": "__MSG_commandPause__"
+    },
+    "mark-important": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "Mark an important learning moment"
+    }
+  },
+  "host_permissions": [
+    "http://127.0.0.1:8765/*"
+  ]
 }

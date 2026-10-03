@@ -1,169 +1,44 @@
-<p align="center">
-  <img src="assets/logo.png" alt="WeScreen" width="150">
-</p>
+# WeScreen
 
-<h1 align="center">WeScreen</h1>
-
-<p align="center">
-  <strong>为 Edge 打造的录屏扩展，录像从不离开你的电脑。</strong><br>
-  无账号 · 无上传 · 无追踪
-</p>
-
-<p align="center">
-  <a href="README.md">English</a> ·
-  <a href="#安装">安装</a> ·
-  <a href="#使用">使用</a> ·
-  <a href="#功能">功能</a> ·
-  <a href="#已知限制">已知限制</a> ·
-  <a href="PRIVACY.zh-CN.md">隐私</a> ·
-  <a href="CHANGELOG.md">更新日志</a>
-</p>
-
-<p align="center">
-  <img alt="完全本地" src="https://img.shields.io/badge/处理-100%25%20本地-29a56d">
-  <img alt="无需账号" src="https://img.shields.io/badge/账号-不需要-29a56d">
-  <img alt="Manifest V3" src="https://img.shields.io/badge/Edge-Manifest%20V3-0b6bcb">
-  <img alt="输出 WebM" src="https://img.shields.io/badge/输出-WebM-8957e5">
-  <img alt="无需构建" src="https://img.shields.io/badge/构建-无需构建-6e7781">
-</p>
-
----
-
-WeScreen 可以录制整个屏幕、单个窗口或浏览器标签页，并保存为 WebM 文件。录制、音频混音和存储
-全部在你的浏览器内完成——没有服务器、不需要登录、不含遥测。它是一个普通的解压缩 Manifest V3
-扩展：无需构建步骤、无打包工具、无第三方依赖。
-
-## 为什么"本地优先"重要
-
-大多数录屏工具要求你先上传，才能对录像做任何事。WeScreen 反过来：文件只写入你的磁盘，不去别处。
-
-- **无账号** —— 根本没有需要登录的后端。
-- **无上传** —— 视频从不离开这台设备，不存在服务器，也就无从泄露。
-- **无追踪** —— 没有分析脚本、没有远程代码、没有与录制无关的权限。
-
-WeScreen 只申请两项权限：
-
-| 权限 | 用途 |
-| --- | --- |
-| `storage` | 保存你的偏好设置，以及为崩溃恢复而缓存在本机的录制分片 |
-| `downloads` | 把录制完成的 WebM 写入下载目录 |
-
-录什么完全由浏览器自带的共享选择器决定。除非你主动选择共享源，WeScreen 无法读取你的屏幕，
-也看不到任何你没有共享的内容。
-
-完整政策见 [`PRIVACY.zh-CN.md`](PRIVACY.zh-CN.md)（[English](PRIVACY.md)），线上地址：
-<https://susunola.github.io/wescreen/>。
+[English](README.md) · Chrome / Microsoft Edge 本地录屏与视频管理工具。
 
 ## 安装
 
-1. 在 Microsoft Edge 打开 `edge://extensions/`。
-2. 打开左侧的**开发人员模式**。
-3. 点击**加载解压缩的扩展**。
-4. 选择本仓库根目录。
-5. 点击工具栏上的 WeScreen 图标，再点击**开始录制**。
+在浏览器扩展的开发者页面加载此目录，或解压 `store/wescreen-1.6.0.zip` 后加载。点击 WeScreen 打开录制页面。改动代码后需重新加载扩展；数据库升级前请关闭旧录制页面。
 
 ## 使用
 
-1. 设置文件名、分辨率、帧率、画质预设、倒计时，以及可选的自动停止。
-2. 选择音频来源：系统/标签页音频、麦克风旁白，或两者都要。
-3. 点击**开始录制**，并在 Edge 的选择器中决定共享什么。
-4. 通过录制页面、工具栏徽标或快捷键来暂停、继续或停止。
-5. 预览结果，然后下载为 WebM。
+- Telegram 频道档案可保存频道链接、独立编号、待录消息清单和下载子文件夹；录制完成后推进到下一条，录像可按频道筛选并回到原消息。浏览器共享选择器仍需手动确认，不会后台抓取频道。
+- 选择屏幕、窗口或标签页录制。MP4 需浏览器支持 H.264 + AAC；也可选 WebM。共享声音由浏览器选择器控制。
+- 录像库支持播放、搜索、排序、课程信息、导入、下载路径、批量选择、回收站和永久删除。永久删除浏览器录像不会删除导出的磁盘文件。
+- 使用扩展 IndexedDB、unlimitedStorage 和持久存储请求，没有固定 10 GB 总量限制，容量受磁盘空间约束。长录制在约 800 MB 自动分段以控制内存，单段约 1.6 GB 是保护阈值，不是录像库总量限制。新段先开始、旧段再停止，边界可能存在极短重叠。
+- 摄像头画中画在工作线程处理视频帧，不依赖页面动画。不支持相应接口的浏览器会明确提示，关闭摄像头仍可直接录屏。
+- Telegram 模式：先暂停视频，选择 Telegram 标签页并勾选共享声音，倒计时结束后播放。桌面窗口声音取决于系统；可用裁剪与剪头尾保留播放器区域并去掉等待时间。
 
-设置倒计时后，录制器会在你确认共享源之后等待 3 或 5 秒，方便你切换到要演示的窗口。点击高亮绘制在打开录制器时的当前网页内，普通录屏始终直录共享源的视频轨；如果需要高亮，请在共享选择器中选择该网页，网页刷新后需重新从工具栏打开录制器以重新注入高亮。
+## 1.6 新增
 
-<p align="center">
-  <img src="assets/screenshot-setup-zh.png" alt="WeScreen 设置界面" width="620">
-</p>
+- 频道工作台：待录、完成、跳过、选择重录、顺序调整与重复消息检查。
+- 录制监测：预览帧率/丢帧、最近写入、待写片段、长时间无音频提示。预览统计不是编码器掉帧统计。
+- 多选录像加入持久队列，顺序增强；暂停在当前任务完成后生效，重开页面可继续，失败项支持重试。批量强力修复暂不开放，需要逐片预览确认。
+- 剪辑支持左右 90° 与任意角度旋转，另可输出 1920×1080 横屏画布；先裁剪后旋转，保留音轨与原片。
+- 当前帧黑边建议、频道裁剪记忆与同步局部放大对比。
+- 支持导入 token.txt 自动检测连接；macOS 已有 Homebrew 时，启动脚本可安装缺少的 FFmpeg/Python。未装 Homebrew 的电脑仍需安装依赖。
 
-录制过程中，顶部会持续显示本次录制已写入的体积与软上限：
+## 剪辑与增强
 
-<p align="center">
-  <img src="assets/screenshot-recording-zh.png" alt="WeScreen 录制中" width="620">
-</p>
+使用仓库或独立辅助程序包，安装 Python 3.10–3.13 和 FFmpeg，再运行 `bash enhancement/start.sh`；macOS 可双击 `enhancement/start.command`。将 `enhancement/.runtime/token.txt` 的密钥填入连接面板，检测程序与模型状态。
 
-## 功能
+默认自然修复；FSRCNN 提供轻量 2× 放大；SeedVR2 强力修复需另运行 `bash enhancement/install-seedvr.sh`（模型约 7 GB）。支持选择 5 秒片段预览、同步播放/定位/暂停及原尺寸查看。强力模式必须先预览。AI 可能生成错误细节，无法保证恢复到原本清晰度；输出为 SDR，明暗增强不是 HDR。
 
-**录制控制**
-- 3 秒或 5 秒倒计时、暂停/继续、5/15/30 分钟后自动停止
-- 全局停止与暂停/继续快捷键，其他应用获得焦点时同样有效
-- 自定义文件名，直接应用到下载的文件
+裁剪与剪头尾另存 MP4，原版保留。完整结果和任务存于 `enhancement/.runtime/jobs`，明确删除前一直保留，重启辅助程序后仍可取回。重新打开页面可查看任务、重试存入录像库或直接流式导出文件；处理中断后需从原片重做。每次处理一个任务，完成结果无固定数量上限，受磁盘空间约束。视频不上传外部处理服务。首次安装依赖与模型需要联网。详见 [辅助程序说明](enhancement/README.md) 与 [隐私政策](PRIVACY.zh-CN.md)。
 
-**音频**
-- 系统/标签页音频与麦克风旁白通过 Web Audio 图在本地混音
-- 两个来源可独立开关；麦克风启用降噪与回声消除
-- 麦克风被拒绝或共享源没有音频时，会明确提示降级继续录制，而不是让录制失败
+## 测试与打包
 
-**输出质量**
-- 分辨率上限（原始 / 1080p / 720p）应用到采集轨道，并回报真实输出尺寸
-- 帧率（30 / 60 fps）与画质预设（标准 / 高画质 / 节省空间）彼此独立
-- 下载前在浏览器内预览
-
-**可靠性**
-- 分片每秒写入 IndexedDB，意外关闭后可恢复
-- 录制中显示已录制体积与软上限，在内存耗尽前给出提示
-- 显示本机可用存储，低于 500 MB 时警告
-- 录制中关闭标签页会先请求确认
-
-**界面**
-- 中英文界面，跟随浏览器语言，也可在录制页面切换
-- 扩展名称、描述与快捷键说明同样本地化
-
-## 快捷键
-
-| 快捷键 | 动作 |
-| --- | --- |
-| `Ctrl/⌘ + Shift + S` | 停止录制 |
-| `Ctrl/⌘ + Shift + U` | 暂停或继续录制 |
-
-这些是 Edge 扩展命令，因此录制标签页在后台时同样生效。可在 `edge://extensions/shortcuts` 重新绑定。
-
-## 已知限制
-
-- **只输出 WebM。** 这是浏览器原生录制格式。需要 MP4 时可用 ffmpeg、HandBrake 或剪映转换。
-- **单次录制约 1.6 GB 软上限。** 录制时分片会持久化到磁盘，但停止时仍要把整段录像在内存中拼装成一个 Blob。录制器在 800 MB 变黄、1.6 GB 变红；更长内容建议分段录制。
-- **崩溃恢复尽力而为。** 崩溃前已写入 IndexedDB 的分片可以恢复，最后约一秒可能缺失。
-- **摄像头画中画在后台可能停帧。** 该模式仍需在录制器页面合成画布；检测到画布超过 3 秒未更新会停止录制并显示警告。长时间切换标签页时，建议关闭摄像头画中画并直录共享源。
-- **暂无录后剪辑。** 没有裁剪或 MP4/GIF 导出。
-
-## 开发
-
-可用 `node --test tests/recording.test.js` 运行无需额外依赖的录屏回归测试。
-
-没有构建步骤。改完文件后在 `edge://extensions/` 的扩展卡片上点**重新加载**即可。
-
-```
-manifest.json   扩展清单、权限与快捷键命令
-background.js   Service Worker：命令转发与 REC 工具栏徽标
-recorder.html   录制页面：设置、录制中、结果与恢复视图
-recorder.js     采集、音频混音、MediaRecorder 生命周期、IndexedDB 分片存储
-recorder.css    录制页面样式
-popup.html/js   工具栏弹窗
-_locales/       清单字符串本地化（en、zh_CN）
-assets/         Logo 与本 README 使用的界面截图
-docs/           隐私政策的独立页面，用于 GitHub Pages
-store/          Partner Center 上架包：素材、文案、清单
-scripts/        build-store-assets.py，重新生成全部商店素材
+```sh
+node --test tests/*.test.js
+enhancement/.venv/bin/python -m unittest discover -s tests -p '*_test.py'
+WESCREEN_SEEDVR_TEST=1 enhancement/.venv/bin/python -m unittest discover -s tests -p '*_test.py'
+python3 scripts/build-package.py
 ```
 
-动手改之前，有两点实现约定值得知道：
-
-- **码率不等于分辨率。** 画质预设只设置 `videoBitsPerSecond`；分辨率上限是独立的 `applyConstraints` 调用。两者保持解耦。
-- **IndexedDB 不是内存问题的解法。** 它解决崩溃恢复，但停止时整段录像仍要在标签页堆里拼装，体积告警衡量的正是这件事。
-
-## 商店上架
-
-Edge Add-ons 上架包在 [`store/`](store/README.md)：可直接上传的 zip、每个尺寸都精确符合要求的
-图形素材、中英文双语的商店文案，以及送审说明。
-
-```bash
-python3 scripts/build-store-assets.py   # 重新生成素材（需要 Pillow）
-```
-
-`store/README.md` 是逐步清单，包含隐私问卷每一项该填什么。上架包经过实际验证：把解压后的产物加载
-进 Chromium 真正录一段，而不是只检查 manifest。
-
-## 致谢
-
-Logo 由豆包 AI 生成。仓库内的 `assets/logo.png` 已裁掉生成器水印，并把白色背景转为透明，
-以便在 GitHub 的浅色与深色主题下都能正常显示。
+浏览器测试需 Playwright 和 Chromium，未安装时跳过。覆盖跨页面恢复、慢存储分段、工作线程画中画、实际编码播放、回收站、配额失败及结果保留。合成视频用于验证处理流程，不代表真实 Telegram 画质基准。正式发布前需另验长录音画同步及系统/浏览器兼容性。

@@ -1,71 +1,35 @@
-<p align="center">
-  <img src="assets/logo.png" alt="WeScreen" width="96">
-</p>
-
 # WeScreen Privacy Policy
 
-**Last updated: 2026-09-27**
+Last updated: 2026-10-03
 
-WeScreen is a screen recorder for Microsoft Edge that is designed so that your recordings never
-leave your device. This policy explains exactly what the extension does and does not do with your
-data.
+## Local processing
 
-## Summary
+WeScreen records selected screens, windows or tabs on your device. It has no account, cloud video storage, analytics, advertising or telemetry. Screen/audio capture starts only after you choose a source. Optional microphone, camera and click highlighting operate only when enabled.
 
-WeScreen does not collect, transmit, sell, or share any user data. There is no WeScreen server,
-no account system, and no analytics. Everything the extension does happens locally in your browser.
+## Data and storage
 
-## What WeScreen handles, and where it stays
+Completed recordings, imported videos, thumbnails, course metadata, markers, processing tasks and recovery chunks are stored in the extension's IndexedDB on this device. Preferences are in chrome.storage.local. The helper access token is stored in a local file and chrome.storage.session. Video is never sent to an external processing service.
 
-| Data | Why it is handled | Where it goes |
-| --- | --- | --- |
-| Screen, window, or tab video and audio you choose to share | To record what you asked it to record | Kept in your browser's memory and written to your own device. Never uploaded. |
-| Microphone audio, if you enable it | To mix narration into the recording | Mixed locally in the browser. Never uploaded. |
-| Recording chunks | Written every second so an interrupted recording can be recovered | Stored in your browser's local IndexedDB on your device, and deleted once you discard the recording |
-| Your preferences (file name, resolution, frame rate, quality, countdown, language, audio toggles) | To remember your settings between sessions | Stored in `chrome.storage.local` on your device |
-| The finished recording | To give you the file | Saved to your Downloads folder by the browser's own download mechanism |
+## Network activity and installation
 
-WeScreen has no ability to read your screen unless you pick a source in the browser's sharing
-picker. It cannot see anything you did not explicitly choose to share.
+Recording and library functions work offline. Optional enhancement and crop/trim send the selected video to the authenticated helper at http://127.0.0.1:8765, on this same device. The helper uses local FFmpeg, FSRCNN and optionally installed SeedVR2. Initial dependency/model installation contacts package registries, GitHub and Hugging Face; it does not upload videos. User-initiated Telegram or other links open their respective websites.
 
-## Network activity
+## Permissions
 
-WeScreen makes **no network requests**. It contains no analytics, no telemetry, no advertising, no
-crash reporting, and no remotely hosted code. The extension works fully offline.
+- storage: save preferences, recorder ownership and temporary token.
+- unlimitedStorage: allow the local video library to grow beyond normal origin quota and protect it from eviction. There is no fixed 10 GB library cap; physical disk capacity still applies.
+- downloads: export MP4/WebM videos, results and learning notes; show the last export location.
+- activeTab and scripting: insert optional click highlights into the tab where you invoke the extension. This does not grant persistent access to all websites.
+- http://127.0.0.1:8765/*: connect only to the local processing helper.
 
-You can verify this: the extension requests only the `storage` and `downloads` permissions, and
-its source is publicly readable at
-<https://github.com/susunola/wescreen>.
+## Retention and deletion
 
-## Permissions and why they are needed
+Recovery chunks are deleted after a successful archive or explicit discard. Moving a recording to Trash keeps its local video until permanent deletion. Enhanced/edited versions are separate records. Permanently deleting a browser record does not remove an exported disk file. Clearing extension data or uninstalling removes the browser library; export backups first. Normal browser browsing-data clearing does not clear extension-origin storage.
 
-| Permission | Purpose |
-| --- | --- |
-| `storage` | Save your preferences and the local recording chunks used for crash recovery |
-| `downloads` | Save the finished WebM file to your device |
+Full processing results and task metadata are retained in enhancement/.runtime/jobs until you explicitly delete them from Processing tasks. They survive helper restarts. Interrupted work is marked failed after restart; rerun from the original video. Input/intermediate files are removed when a task ends; previews are deleted after successful retrieval. Completed exported files remain under your control.
 
-WeScreen requests no host permissions and no access to your browsing history, tabs, bookmarks, or
-any website content.
+## Contact and changes
 
-## Data retention and deletion
+Updated policies are published at the same URL with a revised date. Questions: https://github.com/susunola/wescreen/issues . WeScreen is a general utility and collects no personal data from children or adults.
 
-- Recording chunks in IndexedDB are deleted when you discard a recording, and are overwritten on
-  your next recording.
-- Preferences in `chrome.storage.local` are removed when you uninstall the extension.
-- Downloaded recordings are ordinary files on your device; deleting them is up to you.
-- Because WeScreen never receives your data, there is nothing for us to delete on a server.
-
-## Children
-
-WeScreen is a general-purpose utility and is not directed at children. It collects no personal
-information from anyone.
-
-## Changes to this policy
-
-If this policy changes, the updated version will be published at this URL with a new "last
-updated" date.
-
-## Contact
-
-Questions about this policy can be raised at
-<https://github.com/susunola/wescreen/issues>.
+Channel names, channel/message links, recording plans, numbering and relative export folders are stored locally with recording metadata. The application does not read Telegram accounts or automatically download channel content.
