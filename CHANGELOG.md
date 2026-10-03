@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.1
+
+- 在录制页和扩展弹窗加入 GitHub 最新扩展包下载入口。
+- 移除录制页课程录制入口，升级时停用旧课程自动命名；既有课程录像仍可查看。
+- 验证中英文窄屏、安装包、标签页运动画面与自动连接。
+
 ## 1.8.0 — 2026-10-03
 
 - Simplify Telegram recording to channel selection, name and optional video title; fold links, numbering, export folders and recording lists into optional settings.

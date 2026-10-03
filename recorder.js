@@ -30,7 +30,7 @@ const I18N = {
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
-    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}`, courseLibrary: '本地课程库', exportCourse: '导出索引', segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
+    resultTitle: '录制完成', githubDownload: 'GitHub 下载', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}`, courseLibrary: '本地课程库', exportCourse: '导出索引', segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
     storageHint: (free) => `录像库存储余量约 ${free}（浏览器配额，不是磁盘剩余空间）。`,
     storageUnknown: '无法读取录像库配额余量。',
     starting: (n) => `${n}…`,
@@ -72,7 +72,7 @@ const I18N = {
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
-    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}`, courseLibrary: 'Local course library', exportCourse: 'Export index', segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
+    resultTitle: 'Recording complete', githubDownload: 'GitHub download', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}`, courseLibrary: 'Local course library', exportCourse: 'Export index', segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
     storageHint: (free) => `About ${free} available in the recording library (browser quota, not disk free space).`,
     storageUnknown: 'Local storage availability could not be read.',
     starting: (n) => `${n}…`,
@@ -297,6 +297,7 @@ async function loadSettings() {
     setNotice(LANG === 'zh' ? `已打开 ${new URL(pendingLink).hostname}。在 Edge 选择器中选择该标签页即可开始录制。` : `${new URL(pendingLink).hostname} is ready. Select that tab in the Edge picker to record it.`);
   }
   if (!Number.isFinite(Number($('countdown').value))) $('countdown').value = '3';
+  $('course-enabled').checked = false;
   updateCourseFilename();
 }
 
@@ -324,7 +325,7 @@ function renderCourseLibrary(entries) {
 function applyCapturePreset() {
   const telegram = $('capture-mode').value === 'telegram';
   $('telegram-guide').hidden = !telegram;$('preflight-enabled').checked=telegram;
-  $('telegram-channel').hidden = !telegram; $('course-panel').hidden = telegram;
+  $('telegram-channel').hidden = !telegram; $('course-panel').hidden = true;
   if (!telegram) return;
   const mp4 = MP4_TYPES.some(type => MediaRecorder.isTypeSupported(type));
   const values = { format: mp4 ? 'mp4' : 'webm', resolution: 'source', quality: 'high', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };

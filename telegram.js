@@ -60,7 +60,7 @@ async function completeTelegramRecording(state){
 }
 async function initTelegramChannels(){
   const {selectedTelegramChannel}=await chrome.storage.local.get('selectedTelegramChannel');await loadTelegramProfiles(selectedTelegramChannel);if(chosenChannel()){fillChannel(chosenChannel());selectNextChannelVideo();$('channel-config').open=false;}
-  $('telegram-channel').hidden=$('capture-mode').value!=='telegram';$('course-panel').hidden=$('capture-mode').value==='telegram';
+  $('telegram-channel').hidden=$('capture-mode').value!=='telegram';$('course-panel').hidden=true;
   $('channel-select').onchange=async()=>{try{$('channel-config').open=false;fillChannel(chosenChannel());$('channel-plan-item').value='';await renderChannelPlan();selectNextChannelVideo();await renderChannelWorkbench();await chrome.storage.local.set({selectedTelegramChannel:$('channel-select').value});persist();}catch(error){$('channel-status').textContent=error.message;}};
   $('channel-save').onclick=async()=>{try{await saveTelegramProfile();$('channel-status').textContent=L('channelSaved');}catch(error){$('channel-status').textContent=error.message;}};
   $('channel-open').onclick=()=>{try{const link=telegramLink($('channel-message-url').value) || telegramLink($('channel-url').value) || 'https://web.telegram.org/';window.open(link,'_blank','noopener,noreferrer');}catch(error){$('channel-status').textContent=error.message;}};

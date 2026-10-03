@@ -123,3 +123,8 @@ details[open] > summary { margin-bottom: 16px; }
 .enhance-comparison.native-size video { height: auto; }
 
 #enhance-estimate:empty, #enhance-status:empty { display: none; }
+
+.header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.github-link { display: inline-flex; align-items: center; padding: 10px 14px; border: 1px solid #486279; border-radius: 8px; text-decoration: none; white-space: nowrap; }
+
+#course-panel[hidden] { display: none; }
