@@ -47,3 +47,15 @@ Check the shared picture and audio before starting. Open the separate control wi
 ### Frozen tab recordings
 
 Open WeScreen from the playing video tab, select Original video tab (compatibility capture), then grant the optional tabCapture permission on Start. This bypasses the sharing picker while preserving MP4 H.264/AAC output and local audio playback. Native API tests verify changing decoded frames from a real playing video tab. Device-specific Telegram freezes still require user verification.
+
+## Safe upgrades / 升级保留录像
+
+Normal updates retain the `wescreen` IndexedDB database under the same extension ID. The schema migration only adds missing stores; it does not delete or rebuild existing stores. Release versions and database schema versions are separate.
+
+- Edge Store: update the existing listing. Do not uninstall before updating or switch to a different extension listing.
+- Unpacked: close recording/processing pages after saving the active recording, extract new extension files over the existing extension directory, then Reload that existing entry in `edge://extensions`. Keep the same browser profile, extension entry and directory. Do not Remove it and load another folder.
+- Switching between store and unpacked builds can change the extension ID and does not transfer the library automatically. Download recordings before switching.
+- Clearing browser/extension data or uninstalling can remove browser-local recordings. Separately exported MP4 files are not deleted by updating the extension.
+- Helper updates should also replace files in the existing helper directory, preserving `.runtime` and `models`.
+
+Upgrade verification: `NODE_PATH=... node scripts/test-upgrade.cjs` uses an isolated Chromium profile, verifies legacy schema 3→4 migration, updates 1.13.0 to the current package in the same directory, and compares video bytes/SHA-256, metadata, recovery chunks, tasks, playback state and preferences. It does not access the user's browser data.
