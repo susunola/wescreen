@@ -19,6 +19,7 @@ Recording and library functions work offline. Optional enhancement and crop/trim
 - storage: save preferences, recorder ownership and temporary token.
 - unlimitedStorage: allow the local video library to grow beyond normal origin quota and protect it from eviction. There is no fixed 10 GB library cap; physical disk capacity still applies.
 - downloads: export MP4/WebM videos, results and learning notes; show the last export location.
+- Optional tabCapture: only after you choose direct-tab compatibility capture and grant permission, capture the tab where you invoked WeScreen. Captured audio is also played locally so you can continue listening.
 - activeTab and scripting: insert optional click highlights into the tab where you invoke the extension. This does not grant persistent access to all websites.
 - http://127.0.0.1:8765/*: connect only to the local processing helper.
 

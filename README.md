@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.7.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.7.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -43,3 +43,7 @@ Channel workbench supports reorder, skip, rerecord and duplicate links. Recordin
 ### Continuous Telegram recording
 
 Check the shared picture and audio before starting. Open the separate control window to pause, resume or stop. Save the current video and prepare the next to retain the shared source while paused. Copy the next message link and open it in the original shared tab before resuming. Review start/middle/end thumbnails, inspect suggested black-screen trims, and remember crop/rotation/landscape preferences for matching dimensions. The control window is not always-on-top and may appear in whole-screen capture.
+
+### Frozen tab recordings
+
+Open WeScreen from the playing video tab, select Original video tab (compatibility capture), then grant the optional tabCapture permission on Start. This bypasses the sharing picker while preserving MP4 H.264/AAC output and local audio playback. Native API tests verify changing decoded frames from a real playing video tab. Device-specific Telegram freezes still require user verification.

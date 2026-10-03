@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.1 — 2026-10-03
+
+- Add optional original-tab capture as an explicit compatibility alternative for recordings with frozen video. Request tabCapture only on selection and preserve local audio playback.
+- Verify decoded MP4 frames actually change while recording in the background; add a native tabCapture test with a playing video source.
+
 ## 1.7.0 — 2026-10-03
 
 - Add Telegram source preflight with a picture/audio meter and a separate recording control window.

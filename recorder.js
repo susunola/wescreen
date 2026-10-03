@@ -556,6 +556,7 @@ async function start() {
   if (!$('recovery').classList.contains('hidden')) { setNotice(L('resolveRecovery')); return; }
   $('start').disabled = true;
   setNotice('');
+  if($('capture-method').value==='tab'){try{if(!await chrome.permissions.request({permissions:['tabCapture']}))throw new Error(E('标签页采集权限未授予，请授权或使用共享选择器。','Tab capture permission denied. Grant it or use the sharing picker.'));}catch(error){setNotice(error.message);resetStart();return;}}
   persist();
   if (typeof stopMicTest === 'function') await stopMicTest();
   try {
@@ -564,7 +565,7 @@ async function start() {
     if ($('capture-mode')?.value === 'telegram') await prepareTelegramChannel();
     else captureChannelContext = null;
     if (!mediaType()) throw new Error(L(selectedExtension() === 'mp4' ? 'errMP4' : 'errUnsupported'));
-    displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: $('screen-audio').checked });
+    displayStream = $('capture-method').value==='tab' ? await captureOriginalTab() : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: $('screen-audio').checked });
   } catch (error) {
     setNotice(captureError(error));
     resetStart();
@@ -638,7 +639,7 @@ function releaseCapture() {
   stopTimer = null;
   segmentTimer = null;
   if (compositor) { compositor.worker.terminate(); compositor.output.stop(); compositor = null; }
-  stopLivePreview();
+  stopLivePreview();if(typeof closeTabPlayback==='function')closeTabPlayback();
   [displayStream, micStream, cameraStream].filter(Boolean).forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
   mixedAudio = null;
   if (mixer) { mixer.close().catch(() => {}); mixer = null; }

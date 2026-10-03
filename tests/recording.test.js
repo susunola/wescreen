@@ -18,6 +18,7 @@ function captureContext({ camera = false, clicks = true, state = 'live' } = {}) 
   const stream = { getVideoTracks: () => [video] };
   const seen = { notices: [], recordings: [], compositions: 0, releases: 0 };
   const fields = {
+    'capture-method': { value: 'shared' },
     'screen-audio': { checked: true }, camera: { checked: camera }, clicks: { checked: clicks },
     recovery: { classList: { contains: () => true } }, countdown: { value: '0' }, start: { disabled: false, textContent: '' }
   };

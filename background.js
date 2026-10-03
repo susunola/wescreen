@@ -22,3 +22,16 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.url!==chrome.runtime.getURL('controls.html') || !['stop-recording','pause-recording','mark-important','get-recording-status'].includes(message.action)){respond({error:'Unsupported control request'});return;}
  chrome.storage.session.get('recordingOwner').then(async({recordingOwner})=>{if(!recordingOwner?.tabId)return respond({active:false});try{respond(await chrome.tabs.sendMessage(recordingOwner.tabId,{type:message.action}));}catch{respond({active:false});}}).catch(error=>respond({error:error.message}));return true;
 });
+
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+ if(message.type!=='original-tab-stream')return;
+ if(sender.url!==chrome.runtime.getURL('recorder.html') || !sender.tab?.id){respond({error:'Unsupported capture request'});return;}
+ (async()=>{
+  if(!await chrome.permissions.contains({permissions:['tabCapture']}))throw new Error('Tab capture permission is required');
+  const {pointerTargetTabId}=await chrome.storage.session.get('pointerTargetTabId');
+  if(!pointerTargetTabId || pointerTargetTabId===sender.tab.id)throw new Error('请在原视频标签页点击 WeScreen 再打开录制器 / Open WeScreen from the original video tab');
+  const target=await chrome.tabs.get(pointerTargetTabId);
+  if(!/^https?:\/\//i.test(target.url || ''))throw new Error('原视频标签页不可访问，请重新点击扩展 / Reopen WeScreen from the video tab');
+  const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:pointerTargetTabId,consumerTabId:sender.tab.id});respond({streamId});
+ })().catch(error=>respond({error:error.message}));return true;
+});

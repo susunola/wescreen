@@ -29,3 +29,5 @@ Telegram 视频预设使用原始分辨率、高画质、共享声音和倒计�
 Permissions: storage, unlimitedStorage, downloads, activeTab, scripting and host http://127.0.0.1:8765/*. No cloud processing, analytics or remotely hosted extension code. Optional helper is a separate local installation. Recordings are not sent to package/model distribution sites. Camera composition requires MediaStreamTrackProcessor/Generator and transferable streams; unsupported browsers display an error before recording.
 
 Load the extension zip; choose a capture source and shared audio; record, stop and inspect Library. Optional editing/enhancement requires starting the separately supplied helper and entering its token. Review local helper behavior independently from extension loading. The local privacy page in docs/index.html is updated; publishing it requires deployment of the repository changes.
+
+Optional tabCapture permission: requested only when the user selects original-tab compatibility capture, to record the tab from which WeScreen was invoked. No persistent access to all websites is requested.
