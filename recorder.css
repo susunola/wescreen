@@ -319,3 +319,5 @@ body.cinema-mode{background:#090b0e;}body.cinema-mode .app{width:100%;max-width:
 @media(prefers-reduced-transparency:reduce){#playback-shell .player-control-deck{background:#1b2029;backdrop-filter:none;}.cinema-popover{background:#21252c;}}
 /* The page's generic video preview cap must not constrain cinema/fullscreen. */
 #playback-stage #preview{max-height:none;border-radius:0;}
+
+#realtime-ai-canvas{position:absolute;left:50%;top:50%;z-index:1;transform-origin:center;pointer-events:none;}#realtime-ai-canvas[hidden]{display:none;}#rotated-playback-controls #playback-realtime{color:#7eb7ff;}#playback-realtime[aria-pressed=true]{background:#2583ff18!important;}#realtime-ai-status{margin:0 14px 8px;font-size:10px;}

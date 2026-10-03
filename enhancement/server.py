@@ -13,6 +13,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from realtime import enhance_frame
 
 ROOT = Path(__file__).resolve().parent
 MODEL = ROOT / 'models' / 'FSRCNN_x2.pb'
@@ -298,6 +301,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-WeScreen-Token')
+        self.send_header('Access-Control-Expose-Headers', 'X-Inference-Ms')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Private-Network', 'true')
         self.send_header('Cache-Control', 'no-store')
@@ -331,6 +335,30 @@ class Handler(BaseHTTPRequestHandler):
                     PAIR_FILE.write_text(origin); PAIR_FILE.chmod(0o600)
             return self.reply(200, {'token': TOKEN})
         if not self.authorized():
+            return
+        if urlparse(self.path).path == '/realtime/frame':
+            try: size = int(self.headers.get('Content-Length', '0'))
+            except ValueError: size = 0
+            if not 0 < size <= 2 * 1024 * 1024:
+                return self.reply(413, {'error': 'Realtime frame must be under 2 MB'})
+            if self.headers.get('Content-Type', '').split(';')[0] != 'image/jpeg':
+                return self.reply(415, {'error': 'Realtime input must be JPEG'})
+            if not SLOT.acquire(blocking=False):
+                return self.reply(409, {'error': 'Helper is busy; showing original video'})
+            try:
+                self.connection.settimeout(5)
+                data = self.rfile.read(size)
+                if len(data) != size: raise ValueError('Incomplete realtime frame')
+                result, elapsed = enhance_frame(data, MODEL, MODEL_HASH)
+                self.send_response(200); self.cors_headers()
+                self.send_header('Content-Type', 'image/jpeg')
+                self.send_header('Content-Length', str(len(result)))
+                self.send_header('X-Inference-Ms', str(round(elapsed, 2)))
+                self.end_headers(); self.wfile.write(result)
+            except ValueError as error: self.reply(400, {'error': str(error)})
+            except (BrokenPipeError, ConnectionResetError): pass
+            except Exception as error: self.reply(503, {'error': str(error)})
+            finally: SLOT.release()
             return
         parsed = urlparse(self.path); query = parse_qs(parsed.query)
         parts = parsed.path.strip('/').split('/')
@@ -408,7 +436,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None

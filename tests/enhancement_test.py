@@ -208,5 +208,51 @@ class EnhancementTest(unittest.TestCase):
             self.assertEqual((job['width'],job['height']),(1920,1080) if landscape else (160,90))
 
 
+
+class RealtimeTest(unittest.TestCase):
+    def test_frame_uses_neural_model_and_doubles_dimensions(self):
+        import cv2
+        import numpy as np
+        from realtime import enhance_frame
+        image = np.random.default_rng(4).integers(0, 256, (90, 160, 3), dtype=np.uint8)
+        ok, jpeg = cv2.imencode('.jpg', image)
+        self.assertTrue(ok)
+        output, elapsed = enhance_frame(jpeg.tobytes(), server.MODEL, server.MODEL_HASH)
+        decoded = cv2.imdecode(np.frombuffer(output, np.uint8), cv2.IMREAD_COLOR)
+        self.assertEqual(decoded.shape[:2], (180, 320))
+        self.assertGreater(elapsed, 0)
+        interpolation = cv2.resize(image, (320, 180), interpolation=cv2.INTER_CUBIC)
+        self.assertGreater(float(np.abs(decoded.astype(float)-interpolation).mean()), 1)
+
+    def test_rejects_oversize_header_before_decoding(self):
+        from realtime import jpeg_dimensions
+        jpeg = b'\xff\xd8\xff\xc0\x00\x0b\x08' + (6000).to_bytes(2,'big')*2 + b'\x01\x01\x11\x00'
+        with self.assertRaises(ValueError): jpeg_dimensions(jpeg)
+        with self.assertRaises(ValueError): jpeg_dimensions(b'not an image')
+
+    def test_http_authentication_limits_and_busy_fallback(self):
+        from http.server import ThreadingHTTPServer
+        import cv2
+        import numpy as np
+        http = ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
+        thread = threading.Thread(target=http.serve_forever, daemon=True); thread.start()
+        base = f'http://127.0.0.1:{http.server_port}/realtime/frame'
+        jpeg = cv2.imencode('.jpg', np.zeros((32,64,3), np.uint8))[1].tobytes()
+        headers = {'Content-Type':'image/jpeg', 'X-WeScreen-Token':server.TOKEN}
+        try:
+            with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(urllib.request.Request(base, jpeg))
+            self.assertEqual(error.exception.code, 401)
+            with urllib.request.urlopen(urllib.request.Request(base,jpeg,headers)) as response:
+                self.assertEqual(response.headers['Content-Type'],'image/jpeg')
+                self.assertGreater(float(response.headers['X-Inference-Ms']),0)
+            server.SLOT.acquire()
+            try:
+                with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(urllib.request.Request(base,jpeg,headers))
+                self.assertEqual(error.exception.code,409)
+            finally: server.SLOT.release()
+            with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(urllib.request.Request(base,b'x',{**headers,'Content-Length':str(2*1024*1024+1)}))
+            self.assertEqual(error.exception.code,413)
+        finally: http.shutdown(); http.server_close(); thread.join()
+
 if __name__ == '__main__':
     unittest.main()
