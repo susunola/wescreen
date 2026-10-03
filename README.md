@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.8.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.17.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -36,15 +36,21 @@ Browser tests require Playwright and Chromium; if absent those tests are skipped
 
 [Source](https://github.com/susunola/wescreen) · [Current changes](CHANGELOG.md)
 
-## Professional capture and playback (1.16)
+## Professional capture and playback (1.17)
 
-New controls stay inside the existing advanced menus: recording → advanced settings → Professional capture & audio; player → More → Professional playback tools; library → File management. See [feature coverage and verification](docs/professional-1.16.md).
+New controls stay inside the existing advanced menus: recording → advanced settings → Professional capture & audio; player → More → Professional playback tools; library → File management. See [feature coverage and verification](docs/professional-1.17.md).
 
 Select a recording folder to write an additional disk copy in safe segments (256 MB threshold), while the original and recovery chunks remain in the browser library. Folder permission must remain granted. This does not trigger browser downloads. Monitoring reports preview frame delivery/drops, not encoder frame statistics. Independent audio is optional and follows recording pauses; download or delete it in File management.
 
 Select one continuous recording and use Merge for compatible-stream copying, or Compatible merge for explicit re-encoding. Results stay in the helper until manually saved or exported. Originals remain available. Large merged files can be exported directly without first importing them into the library; library import still has a 1.6 GB per-file limit.
 
 On macOS, run the helper's `install-launcher.command` once after dependencies are installed. The extension's Start local helper link then launches or updates the managed helper without interrupting an active processing job. The installer retains existing models and recordings. The helper package is separate from the Edge Store extension package.
+
+Version 1.17 adds a persistent recent-play playlist, three clear quality choices, release-once seeking with bounded thumbnails, signed audio sync, hold-to-compare, subtitle appearance and recovery feedback. Resolution caps (4K / 1440p / 1080p / 720p) are separate from encoding bitrate; the actual captured pixels are reported. Source mode can retain 8K only when the source, device and browser support it.
+
+Automatic static-tail cleanup is enabled by default and requires a terminal freeze plus silence longer than one minute. A new trimmed version is saved; originals stay intact. Still lectures with sound, a wholly static video, and internal holds followed by motion are preserved. Local fixed-watermark filling requires preview of the current region before saving. See the helper guide for limitations.
+
+Update the macOS launcher with `install-launcher.command`. A new extension ID is approved in a native local confirmation window; previously approved IDs remain trusted. Background reconnect never opens the confirmation window. No token needs to be copied for this flow.
 
 ## 1.6 workflow additions
 
