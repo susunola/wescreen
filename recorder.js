@@ -6,34 +6,38 @@ const TIMESLICE_MS = 1000;
 // The whole recording is assembled in the tab heap at stop time, so the recorded payload —
 // not the wall-clock length — is what decides whether the tab survives.
 const HEAP_WARN_BYTES = 800 * 1024 * 1024;
+// Rotate before the per-segment heap ceiling; this is not a total library capacity limit.
+const AUTO_SEGMENT_BYTES = HEAP_WARN_BYTES;
 const HEAP_LIMIT_BYTES = 1600 * 1024 * 1024;
 const STORAGE_FLOOR_BYTES = 500 * 1024 * 1024;
 const OPEN_QUALITIES = new Set(['source', '1080', '720']);
 
 const I18N = {
   zh: {
+    micDevice: '麦克风设备', defaultDevice: '系统默认', testMic: '测试麦克风', stopMicTest: '停止测试', micTesting: '请说话，观察电平；测试声音不会播放或保存。', micFailed: '无法打开麦克风，请检查权限和设备。', searchRecordings: '搜索录像名称', allCourses: '全部课程', uncategorized: '未分类', enhanceRecording: '画质增强', renameRecording: '重命名', renamePrompt: '输入新的录像名称', libraryTotal: (n, size) => `共 ${n} 条 · 占用 ${size}`, noMatches: '没有匹配的录像。',
+    recordingLibrary: '录像清单', localLocation: '存储：浏览器本地录像库', downloadedLocation: (path) => `下载路径：${path}`, showFolder: '打开所在文件夹', libraryEmpty: '还没有保存的录像。', libraryHint: '录像保存在此浏览器本机，清除扩展数据或卸载扩展会删除录像，请下载备份。', openRecording: '打开播放', deleteRecording: '删除', confirmDelete: (name) => `删除本地录像“${name}”？已下载的文件不受影响。`, storageFailed: '本地保存失败，请立即下载录像备份。', resolveRecovery: '请先恢复或丢弃未完成的录像，再开始新录制。', alreadyRecording: '另一个录制页面正在录制，请先停止该录制。', capFailed: (res) => `分辨率限制未生效，实际输出 ${res}。`,
     langSwitch: 'English', pageTitle: 'WeScreen',
     eyebrow: '本地处理 · 保护隐私 · 为 EDGE 打造',
     privacy: '无账号 · 无上传 · 无追踪 —— 录制、混音和存储全部在这台设备上完成。',
     setupLead: '录制整个屏幕、窗口或标签页。所有媒体只在你的设备上处理。',
-    labelFilename: '文件名', labelResolution: '分辨率', labelQuality: '画质', labelFrameRate: '帧率', labelCountdown: '倒计时', labelAutoStop: '自动停止', labelSegment: '长录制分段', advancedSettings: '高级录制设置',
+    labelMode: '录制场景', modeGeneral: '普通录屏', modeTelegram: 'Telegram 频道视频', openTelegram: '打开 Telegram Web', telegramGuide: '先打开频道视频并暂停。开始录制时选择 Telegram 标签页并勾选共享音频；倒计时结束后切回视频播放，可进入全屏减少界面遮挡。桌面版请选择窗口，声音支持取决于系统。', telegramNoAudio: '没有采集到 Telegram 视频声音。请重新选择 Telegram 标签页并勾选共享音频。', telegramWebM: '当前浏览器不支持 MP4，已使用 WebM 视频预设。', labelFormat: '录制格式', formatMP4: 'MP4（H.264 + AAC，兼容优先）', formatWebM: 'WebM（VP9 / VP8）', errMP4: '当前浏览器不支持 H.264 + AAC 的 MP4 录制，请更新浏览器或选择 WebM。', labelFilename: '文件名', labelResolution: '分辨率', labelQuality: '画质', labelFrameRate: '帧率', labelCountdown: '倒计时', labelAutoStop: '自动停止', labelSegment: '长录制分段', advancedSettings: '高级录制设置',
     resSource: '原始分辨率', res1080: '1080p', res720: '720p',
     qualityStandard: '标准', qualityHigh: '高画质', qualityCompact: '节省空间',
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
-    autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '单个文件', segment15: '每 15 分钟', segment30: '每 30 分钟',
+    autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '仅按内存自动分段', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
-    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载 WebM', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '新建录制',
+    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载录像', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '新建录制',
     btnRecover: '恢复并下载', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
-    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}.webm`, courseLibrary: '本地课程库', exportCourse: '导出索引', segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
-    storageHint: (free) => `本机可用存储约 ${free}，录像只写入这台设备。`,
-    storageUnknown: '无法读取本机可用存储空间。',
+    resultTitle: '录制完成', courseMode: '课程录制模式', courseEnabled: '使用课程自动命名', courseName: '课程名称', episodeNumber: '第几集', episodeTitle: '本集标题', courseFilename: (name) => `将保存为：${name}`, courseLibrary: '本地课程库', exportCourse: '导出索引', segmentSaved: (n) => `第 ${n} 段已保存，正在继续录制。`, markerSaved: (time) => `已在 ${time} 标记重点。`,
+    storageHint: (free) => `录像库存储余量约 ${free}（浏览器配额，不是磁盘剩余空间）。`,
+    storageUnknown: '无法读取录像库配额余量。',
     starting: (n) => `${n}…`,
     memory: (used, limit) => `已录制约 ${used}（本次上限约 ${limit}）`,
     heapWarn: (used) => `录像已达 ${used}，请尽快停止并下载，以免浏览器内存不足。`,
     heapCritical: (used) => `录像已达 ${used}，接近浏览器内存上限，现在停止以保住这段录像。`,
-    lowDisk: (free) => `本机可用存储只剩 ${free}，请先清理磁盘再录制长视频。`,
+    lowDisk: (free) => `录像库配额余量仅 ${free}，请导出并清理不需要的录像。`,
     resultSize: (size) => `文件大小约 ${size}。`,
     recoveryFound: (size) => `检测到未完成的本地录制（约 ${size}）。`,
     degradedMic: '麦克风不可用，已继续录制画面与系统声音。',
@@ -52,28 +56,30 @@ const I18N = {
     errDownload: '保存文件失败，请检查浏览器的下载设置。'
   },
   en: {
+    micDevice: 'Microphone device', defaultDevice: 'System default', testMic: 'Test microphone', stopMicTest: 'Stop test', micTesting: 'Speak and watch the level. Test audio is not played or saved.', micFailed: 'Cannot open the microphone. Check permissions and device.', searchRecordings: 'Search recording names', allCourses: 'All courses', uncategorized: 'Uncategorized', enhanceRecording: 'Enhance', renameRecording: 'Rename', renamePrompt: 'Enter a new recording name', libraryTotal: (n, size) => `${n} recordings · ${size} used`, noMatches: 'No matching recordings.',
+    recordingLibrary: 'Recordings', localLocation: 'Storage: browser local recording library', downloadedLocation: (path) => `Downloaded to: ${path}`, showFolder: 'Show in folder', libraryEmpty: 'No saved recordings yet.', libraryHint: 'Stored in this browser on this device. Clearing extension data or uninstalling removes recordings; download a backup.', openRecording: 'Play', deleteRecording: 'Delete', confirmDelete: (name) => `Delete local recording “${name}”? Downloaded files are unaffected.`, storageFailed: 'Local saving failed. Download a backup now.', resolveRecovery: 'Recover or discard the unfinished recording before starting a new one.', alreadyRecording: 'Another recorder is active. Stop it before starting a new recording.', capFailed: (res) => `Resolution cap was not applied. Actual output: ${res}.`,
     langSwitch: '中文', pageTitle: 'WeScreen',
     eyebrow: 'LOCAL · PRIVATE · EDGE',
     privacy: 'No account · No upload · No tracking — recording, mixing, and storage all happen on this device.',
     setupLead: 'Record your entire screen, a window, or a tab. All media is processed on your device only.',
-    labelFilename: 'File name', labelResolution: 'Resolution', labelQuality: 'Quality', labelFrameRate: 'Frame rate', labelCountdown: 'Countdown', labelAutoStop: 'Auto stop', labelSegment: 'Long-recording segments', advancedSettings: 'Advanced recording settings',
+    labelMode: 'Recording scenario', modeGeneral: 'General screen recording', modeTelegram: 'Telegram channel video', openTelegram: 'Open Telegram Web', telegramGuide: 'Open and pause the channel video first. Select the Telegram tab and enable shared audio in the capture picker. After the countdown, return and play the video; fullscreen reduces UI clutter. For the desktop app select its window; audio support varies by system.', telegramNoAudio: 'No Telegram audio was captured. Select the Telegram browser tab again and enable shared audio.', telegramWebM: 'MP4 is unavailable in this browser. The video preset uses WebM.', labelFormat: 'Recording format', formatMP4: 'MP4 (H.264 + AAC, compatible)', formatWebM: 'WebM (VP9 / VP8)', errMP4: 'This browser cannot record H.264 + AAC MP4. Update your browser or select WebM.', labelFilename: 'File name', labelResolution: 'Resolution', labelQuality: 'Quality', labelFrameRate: 'Frame rate', labelCountdown: 'Countdown', labelAutoStop: 'Auto stop', labelSegment: 'Long-recording segments', advancedSettings: 'Advanced recording settings',
     resSource: 'Source resolution', res1080: '1080p', res720: '720p',
     qualityStandard: 'Standard', qualityHigh: 'High', qualityCompact: 'Space saver',
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
-    autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'One file', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
+    autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'Memory-based rotation only', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
-    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download WebM', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'New recording',
+    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download video', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'New recording',
     btnRecover: 'Recover and download', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
-    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}.webm`, courseLibrary: 'Local course library', exportCourse: 'Export index', segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
-    storageHint: (free) => `About ${free} of local storage available. This recording is written to this device only.`,
+    resultTitle: 'Recording complete', courseMode: 'Course recording mode', courseEnabled: 'Use course auto-naming', courseName: 'Course name', episodeNumber: 'Episode', episodeTitle: 'Episode title', courseFilename: (name) => `Will save as: ${name}`, courseLibrary: 'Local course library', exportCourse: 'Export index', segmentSaved: (n) => `Part ${n} saved. Recording continues.`, markerSaved: (time) => `Important moment marked at ${time}.`,
+    storageHint: (free) => `About ${free} available in the recording library (browser quota, not disk free space).`,
     storageUnknown: 'Local storage availability could not be read.',
     starting: (n) => `${n}…`,
     memory: (used, limit) => `About ${used} recorded (soft limit ${limit})`,
     heapWarn: (used) => `${used} recorded — stop and download soon to avoid running the browser out of memory.`,
     heapCritical: (used) => `${used} recorded — close to the browser memory ceiling. Stop now to keep this recording.`,
-    lowDisk: (free) => `Only ${free} of local storage left. Free up disk space before a long recording.`,
+    lowDisk: (free) => `Only ${free} of library quota remains. Export and remove unwanted recordings.`,
     resultSize: (size) => `File size about ${size}.`,
     recoveryFound: (size) => `An unfinished local recording was found (about ${size}).`,
     degradedMic: 'Microphone unavailable — continuing with screen video and system audio.',
@@ -100,48 +106,101 @@ const L = (key, ...args) => {
 
 let displayStream = null, micStream = null, cameraStream = null, mixer = null, recorder = null, chunks = [], chunkBytes = 0, compositor = null, markers = [];
 let startedAt = 0, pausedAt = 0, pausedTotal = 0, timer = null, stopTimer = null, segmentTimer = null, finalBlob = null, finalSize = 0, recordingStream = null, segmentIndex = 1, rollingSegment = false, videoFailure = null;
+let stopRequested = false, storageFailure = false, mixedAudio = null, previewUrl = null, finalName = null, finalId = null, releaseRecordingLock = null;
+let lastRecordingWrite=0;
+let micTest = null, libraryRenderGeneration = 0;
+let recordingMime = 'video/webm';
 let sessionStartedAt = 0, lastMemorySync = 0, chunkSeq = 0;
 let hintKey = null, hintArgs = [], hintAlerts = false, captureNote = null;
-const pendingWrites = new Set();
+
+let finalDuration = 0, finalMarkers = [], segmentStartedElapsed = 0;
+let activeSegment = null;
+const segmentSaves = new Set();
 
 const pad = (value) => String(value).padStart(2, '0');
 const fmt = (ms) => `${pad(Math.floor(Math.floor(ms / 1000) / 60))}:${pad(Math.floor(ms / 1000) % 60)}`;
 const elapsed = () => Date.now() - startedAt - pausedTotal - (pausedAt ? Date.now() - pausedAt : 0);
 
-// ---- local chunk store ----------------------------------------------------
-const db = new Promise((resolve, reject) => {
-  const request = indexedDB.open('wescreen', 2);
-  request.onupgradeneeded = () => {
-    const database = request.result;
-    if (!database.objectStoreNames.contains('chunks')) database.createObjectStore('chunks');
-    if (!database.objectStoreNames.contains('meta')) database.createObjectStore('meta');
-  };
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error);
-});
-const runTx = (names, mode, run) => db.then((database) => new Promise((resolve, reject) => {
-  const tx = database.transaction(names, mode);
-  run(tx);
-  tx.oncomplete = () => resolve(true);
-  tx.onerror = () => reject(tx.error);
-  tx.onabort = () => reject(tx.error);
-}));
-const track = (promise) => { pendingWrites.add(promise); promise.catch(() => {}).finally(() => pendingWrites.delete(promise)); return promise; };
-// Chunks are stored as plain Blobs: no encode step, no extra copy in the tab heap.
-const saveChunk = (blob, session, seq) => track(runTx('chunks', 'readwrite', (tx) => tx.objectStore('chunks').put(blob, `${session}-${String(seq).padStart(6, '0')}`)));
-const clearChunks = () => track(runTx('chunks', 'readwrite', (tx) => tx.objectStore('chunks').clear()));
-const setInProgress = (value) => track(runTx('meta', 'readwrite', (tx) => tx.objectStore('meta').put(value, 'inProgress')));
-const readInProgress = () => db.then((database) => new Promise((resolve, reject) => {
-  const request = database.transaction('meta').objectStore('meta').get('inProgress');
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error);
-}));
-const loadChunks = () => db.then((database) => new Promise((resolve, reject) => {
-  const request = database.transaction('chunks').objectStore('chunks').getAll();
-  request.onsuccess = () => resolve(request.result || []);
-  request.onerror = () => reject(request.error);
-}));
+async function saveThumbnail(blob, id) {
+  const video = document.createElement('video'); video.muted = true; video.preload = 'auto';
+  const url = URL.createObjectURL(blob);
+  try {
+    const thumbnail = await new Promise(resolve => {
+      const timeout = setTimeout(() => resolve(null), 3000);
+      video.onerror = () => { clearTimeout(timeout); resolve(null); };
+      let seeking = false;
+      const capture = () => {
+        if (seeking || !video.videoWidth || !video.videoHeight) return;
+        clearTimeout(timeout);
+        try {
+          const canvas = document.createElement('canvas'); canvas.width = 240; canvas.height = Math.round(240 * video.videoHeight / video.videoWidth);
+          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        } catch { resolve(null); }
+      };
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        if (Number.isFinite(duration) && duration > .1) { seeking = true; video.currentTime = Math.min(.5, duration / 3); }
+      };
+      video.onseeked = () => { seeking = false; capture(); };
+      video.onloadeddata = capture;
+      video.src = url;
+    });
+    if (!thumbnail) return;
+    await runTx('recordings', 'readwrite', tx => {
+      const store = tx.objectStore('recordings'), request = store.get(id);
+      request.onsuccess = () => { if (request.result) store.put({ ...request.result, thumbnail }); };
+    });
+    await renderRecordingLibrary();
+  } finally { video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url); }
+}
+async function refreshMicDevices() {
+  const select = $('mic-device'), selected = select.value;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  select.replaceChildren();
+  const defaultOption = document.createElement('option'); defaultOption.value = ''; defaultOption.textContent = L('defaultDevice'); select.append(defaultOption);
+  devices.filter(device => device.kind === 'audioinput' && device.deviceId !== 'default').forEach((device, index) => {
+    const option = document.createElement('option'); option.value = device.deviceId; option.textContent = device.label || `Microphone ${index + 1}`; select.append(option);
+  });
+  if ([...select.options].some(option => option.value === selected)) select.value = selected;
+}
+async function stopMicTest() {
+  if (!micTest) return;
+  const test = micTest; micTest = null;
+  clearInterval(test.timer); test.stream?.getTracks().forEach(track => track.stop());
+  if (test.context) await test.context.close().catch(() => {});
+  $('mic-level').value = 0; $('mic-status').textContent = ''; $('test-mic').textContent = L('testMic');
+}
+async function testMicrophone() {
+  if (micTest) return stopMicTest();
+  const test = { stream: null, context: null, timer: null }; micTest = test;
+  $('test-mic').textContent = L('stopMicTest');
+  try {
+    const id = $('mic-device').value;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: id ? { deviceId: { exact: id } } : true });
+    if (micTest !== test) { stream.getTracks().forEach(track => track.stop()); return; }
+    test.stream = stream; test.context = new AudioContext(); await test.context.resume();
+    if (micTest !== test) return;
+    const analyser = test.context.createAnalyser(); analyser.fftSize = 256;
+    test.context.createMediaStreamSource(stream).connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    test.timer = setInterval(() => { analyser.getFloatTimeDomainData(samples); const rms = Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length); $('mic-level').value = Math.min(1, rms * 4); }, 100);
+    $('mic-status').textContent = L('micTesting'); await refreshMicDevices();
+  } catch { if (micTest === test) { await stopMicTest(); $('mic-status').textContent = L('micFailed'); } }
+}
 
+function clearPreview() {
+  const video = $('preview');
+  video.pause(); video.removeAttribute('src'); video.load();
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = null;
+}
+function setPreview(blob) {
+  clearPreview();
+  const video = $('preview');
+  previewUrl = URL.createObjectURL(blob);
+  video.src = previewUrl;
+}
 // ---- view helpers ---------------------------------------------------------
 function fmtBytes(bytes) {
   if (!bytes) return '0 B';
@@ -150,9 +209,10 @@ function fmtBytes(bytes) {
   const value = bytes / (1024 ** power);
   return `${power === 0 || value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[power]}`;
 }
-function show(name) { ['setup', 'recording', 'result'].forEach((id) => $(id).classList.toggle('hidden', id !== name)); }
+let recordingView = 'setup';
+function show(name) { recordingView = name; navigateWorkspace('capture'); }
 const isRecording = () => !$('recording').classList.contains('hidden');
-function sanitized() { return $('filename').value.trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\.webm$/i, '') || 'wescreen-recording'; }
+function sanitized() { return $('filename').value.trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\.(webm|mp4)$/i, '') || 'wescreen-recording'; }
 function setNotice(message) { const notice = $('notice'); notice.textContent = message || ''; notice.hidden = !message; }
 function setHint(key, args = [], alerts = false) {
   hintKey = key;
@@ -167,9 +227,13 @@ function setCaptureNote(key, args = []) {
   if (captureNote) setHint(captureNote.key, captureNote.args);
 }
 
+function hasUnlimitedStorage() {
+  return location.protocol === 'chrome-extension:' && Boolean(chrome.runtime.getManifest?.().permissions?.includes('unlimitedStorage'));
+}
 function renderStorageHint() {
-  if (!navigator.storage || !navigator.storage.estimate) { $('storage-hint').textContent = L('storageUnknown'); return; }
+  if (!navigator.storage?.estimate) { $('storage-hint').textContent = L('storageUnknown'); return; }
   navigator.storage.estimate().then(({ quota = 0, usage = 0 }) => {
+    if (hasUnlimitedStorage()) { $('storage-hint').textContent = L('unlimitedLibrary', fmtBytes(usage)); return; }
     const free = Math.max(0, quota - usage);
     $('storage-hint').textContent = free < STORAGE_FLOOR_BYTES ? L('lowDisk', fmtBytes(free)) : L('storageHint', fmtBytes(free));
   }).catch(() => { $('storage-hint').textContent = L('storageUnknown'); });
@@ -203,12 +267,13 @@ function applyLang(next) {
   syncMemory();
   renderStorageHint();
   if ($('course-enabled')) updateCourseFilename();
+  window.dispatchEvent(new Event('wescreen-language'));
 }
 
 // ---- settings -------------------------------------------------------------
 const SETTING_FIELDS = [
-  ['filename', 'text'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
-  ['countdown', 'select'], ['autostop', 'select'], ['segment-minutes', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
+  ['mic-device', 'select'], ['capture-mode', 'select'], ['filename', 'text'], ['format', 'select'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
+  ['channel-name', 'text'], ['channel-url', 'text'], ['channel-video-title', 'text'], ['channel-message-url', 'text'], ['channel-episode', 'text'], ['channel-folder', 'text'], ['countdown', 'select'], ['autostop', 'select'], ['segment-minutes', 'select'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
 ];
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
 const persist = () => chrome.storage.local.set({ settings: readSettings() }).catch(() => {});
@@ -219,6 +284,7 @@ async function loadSettings() {
   if (!OPEN_QUALITIES.has(settings.resolution)) settings.resolution = settings.quality === 'compact' ? '720' : '1080';
   if (lang && I18N[lang]) LANG = lang;
   else if (!String(navigator.language || '').startsWith('zh')) LANG = 'en';
+  await refreshMicDevices().catch(() => {});
   for (const [id, kind] of SETTING_FIELDS) {
     const value = settings[id];
     if (!$(id) || value === undefined || value === null || value === '') continue;
@@ -243,27 +309,38 @@ function updateCourseFilename() {
   if (!enabled || !name) { hint.textContent = ''; return; }
   const generated = `${name}-${String(episode).padStart(2, '0')}${title ? `-${title}` : ''}`.replace(/[\\/:*?"<>|]/g, '-');
   $('filename').value = generated;
-  hint.textContent = L('courseFilename', generated);
+  hint.textContent = L('courseFilename', `${generated}.${selectedExtension()}`);
 }
-async function saveCourseEntry(parts) {
-  if (!$('course-enabled').checked || !$('course-name').value.trim()) return;
-  const { courseLibrary = [] } = await chrome.storage.local.get('courseLibrary');
-  const entry = { course: $('course-name').value.trim(), episode: Number($('episode-number').value) || 1, title: $('episode-title').value.trim(), filename: sanitized(), parts, recordedAt: new Date().toISOString(), markers: markers.map((marker) => ({ ...marker })) };
-  const index = courseLibrary.findIndex((item) => item.course === entry.course && item.episode === entry.episode);
-  if (index >= 0) courseLibrary[index] = entry; else courseLibrary.push(entry);
-  await chrome.storage.local.set({ courseLibrary });
-  renderCourseLibrary(courseLibrary);
-}
+async function saveCourseEntry() { return renderCourseLibrary(await readStore('recordings')); }
 function renderCourseLibrary(entries) {
   const name = $('course-name').value.trim();
-  const visible = entries.filter((entry) => !name || entry.course === name).sort((a, b) => a.episode - b.episode);
+  const visible = entries.filter(entry => !entry.deletedAt && entry.course && (!name || entry.course === name)).sort((a,b) => (a.episode || 0) - (b.episode || 0));
   const list = $('course-items'); list.replaceChildren();
-  visible.forEach((entry) => { const item = document.createElement('li'); item.textContent = `${entry.course} · ${String(entry.episode).padStart(2, '0')} · ${entry.title || entry.filename}`; const meta = document.createElement('span'); meta.textContent = `${entry.parts || 1} part${entry.parts === 1 ? '' : 's'}`; item.append(meta); list.append(item); });
+  for (const entry of visible) { const item = document.createElement('li'); item.textContent = `${entry.course} · ${entry.episode || '—'} · ${entry.name}`; list.append(item); }
   $('course-library').classList.toggle('hidden', !visible.length);
 }
 
 // ---- capture --------------------------------------------------------------
-function mediaType() { return ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((type) => MediaRecorder.isTypeSupported(type)); }
+function applyCapturePreset() {
+  const telegram = $('capture-mode').value === 'telegram';
+  $('telegram-guide').hidden = !telegram;
+  $('telegram-channel').hidden = !telegram; $('course-panel').hidden = telegram;
+  if (!telegram) return;
+  const mp4 = MP4_TYPES.some(type => MediaRecorder.isTypeSupported(type));
+  const values = { format: mp4 ? 'mp4' : 'webm', resolution: 'source', quality: 'high', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };
+  for (const [id, value] of Object.entries(values)) $(id).value = value;
+  for (const id of ['microphone', 'camera', 'clicks', 'course-enabled']) $(id).checked = false;
+  $('screen-audio').checked = true;
+  updateCourseFilename(); updateTelegramFilename(); persist();
+  setNotice(mp4 ? '' : L('telegramWebM'));
+}
+const MP4_TYPES = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.640033,mp4a.40.2'];
+function selectedExtension() { return $('format').value === 'mp4' ? 'mp4' : 'webm'; }
+function mediaType() {
+  const types = selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return types.find(type => MediaRecorder.isTypeSupported(type));
+}
+function recordingExtension() { return recordingMime.startsWith('video/mp4') ? 'mp4' : 'webm'; }
 function captureError(error) {
   if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) return L('errPickerCanceled');
   if (error && error.name === 'NotFoundError') return L('errNoSource');
@@ -292,6 +369,7 @@ async function applyOutputSize(stream) {
   if (resolution === 'source' || !after) return null;
   const beforeHeight = before ? Number(before.split('×')[1]) || 0 : 0;
   const afterHeight = Math.round(settings.height || 0);
+  if (settings.height > Number(resolution) + 2 || settings.width > Math.round(Number(resolution) * 16 / 9) + 2) return { key: 'capFailed', args: [after] };
   const scaled = (beforeHeight && afterHeight && afterHeight < beforeHeight) || (!beforeHeight && afterHeight <= Number(resolution) + 2);
   return { key: scaled ? 'scaledDown' : 'keepsSource', args: [after] };
 }
@@ -299,7 +377,7 @@ async function applyOutputSize(stream) {
 async function addMic() {
   if (!$('microphone').checked) return;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, ...($('mic-device').value ? { deviceId: { exact: $('mic-device').value } } : {}) } });
   } catch { micStream = null; }
 }
 async function addCamera() {
@@ -307,140 +385,184 @@ async function addCamera() {
   cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
 }
 async function composeOutput() {
-  const screenVideo = document.createElement('video');
-  const cameraVideo = document.createElement('video');
-  screenVideo.srcObject = displayStream; if (cameraStream) cameraVideo.srcObject = cameraStream;
-  screenVideo.muted = true; cameraVideo.muted = true; screenVideo.playsInline = true; cameraVideo.playsInline = true;
-  await screenVideo.play(); if (cameraStream) await cameraVideo.play();
-  const source = displayStream.getVideoTracks()[0].getSettings();
-  const canvas = document.createElement('canvas');
-  canvas.width = source.width || 1280; canvas.height = source.height || 720;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D is unavailable');
-  const draw = () => {
-    try {
-      ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-      const width = Math.round(canvas.width * .23), height = Math.round(width * 9 / 16), pad = Math.round(canvas.width * .025);
-      ctx.save(); ctx.beginPath(); ctx.roundRect(canvas.width - width - pad, canvas.height - height - pad, width, height, Math.round(width * .08)); ctx.clip(); ctx.drawImage(cameraVideo, canvas.width - width - pad, canvas.height - height - pad, width, height); ctx.restore(); ctx.lineWidth = Math.max(2, Math.round(canvas.width / 500)); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeRect(canvas.width - width - pad, canvas.height - height - pad, width, height);
-      compositor.lastFrameAt = Date.now();
-      compositor.frame = requestAnimationFrame(draw);
-    } catch (error) {
-      if (!recorder || recorder.state === 'inactive') throw error;
-      videoFailure = 'errVideoStalled';
-      stop();
-    }
-  };
-  compositor = { frame: 0, watch: null, lastFrameAt: Date.now(), screenVideo, cameraVideo };
-  draw();
-  const stream = canvas.captureStream(Number($('framerate').value) || 30);
-  const composition = compositor;
-  composition.watch = setInterval(() => {
-    if (recorder && recorder.state === 'recording' && Date.now() - composition.lastFrameAt > 3000) {
-      videoFailure = 'errVideoStalled';
-      stop();
-    }
-  }, 1000);
-  return stream;
+  if (!window.MediaStreamTrackProcessor || !window.MediaStreamTrackGenerator || !window.OffscreenCanvas) throw new Error(L('pipUnsupported'));
+  const video = displayStream.getVideoTracks()[0], camera = cameraStream.getVideoTracks()[0];
+  const processor = new MediaStreamTrackProcessor({ track: video });
+  const cameraProcessor = new MediaStreamTrackProcessor({ track: camera });
+  const output = new MediaStreamTrackGenerator({ kind: 'video' });
+  const worker = new Worker('compositor-worker.js');
+  compositor = { worker, output };
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(L('errVideoStalled'))), 10000);
+    worker.onerror = event => { clearTimeout(timeout); reject(new Error(event.message || L('errVideoStalled'))); if (recorder?.state === 'recording') { videoFailure = 'errVideoStalled'; stop(); } };
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'ready') { clearTimeout(timeout); resolve(); }
+      if (data.type === 'error') { clearTimeout(timeout); reject(new Error(data.message)); if (recorder?.state !== 'inactive' && recorder) { videoFailure = 'errVideoStalled'; stop(); } }
+    };
+    worker.postMessage({ screen: processor.readable, camera: cameraProcessor.readable, output: output.writable, frameRate: Number($('framerate').value) || 30 }, [processor.readable, cameraProcessor.readable, output.writable]);
+  });
+  return new MediaStream([output]);
 }
 function mixAudio() {
+  if (mixedAudio) return mixedAudio;
+  if (![displayStream, micStream].some(stream => stream && stream.getAudioTracks().length)) return null;
   const context = new AudioContext();
   const destination = context.createMediaStreamDestination();
   [displayStream, micStream].filter(Boolean).forEach((stream) => {
-    if (stream.getAudioTracks().length) context.createMediaStreamSource(stream).connect(destination);
+    if (!stream.getAudioTracks().length) return;
+    const gain = context.createGain();
+    gain.gain.value = micStream && displayStream.getAudioTracks().length ? 0.5 : 1;
+    context.createMediaStreamSource(stream).connect(gain).connect(destination);
   });
   const track = destination.stream.getAudioTracks()[0];
   if (!track) { context.close().catch(() => {}); return null; }
   mixer = context;
+  mixedAudio = track;
   return track;
 }
 function audioHintKey() {
   const haveMic = Boolean(micStream && micStream.getAudioTracks().length);
   const haveScreen = Boolean(displayStream && displayStream.getAudioTracks().length);
   if ($('microphone').checked && !haveMic) return haveScreen ? 'degradedMic' : 'degradedSurfaces';
-  if (!$('screen-audio').checked || !haveScreen) return 'degradedScreenAudio';
+  if (!haveMic && !haveScreen && $('screen-audio').checked) return 'degradedScreenAudio';
   return null;
 }
 
+function videoBitrate(track) {
+  const { width = 1920, height = 1080, frameRate = Number($('framerate').value) || 30 } = track.getSettings();
+  const factor = Math.max(0.5, Math.min(8, width * height / (1920 * 1080) * frameRate / 30));
+  return Math.round((BITRATES[$('quality').value] || BITRATES.standard) * factor);
+}
+async function acquireRecordingLock() {
+  if (!navigator.locks) return true;
+  return new Promise((resolve, reject) => {
+    navigator.locks.request('wescreen-recording', { ifAvailable: true }, lock => {
+      if (!lock) { resolve(false); return; }
+      return new Promise(release => { releaseRecordingLock = release; resolve(true); });
+    }).catch(reject);
+  });
+}
+function unlockRecording() {
+  if (releaseRecordingLock) releaseRecordingLock();
+  releaseRecordingLock = null;
+}
+
 // ---- recording lifecycle ---------------------------------------------------
-function armRecorder(stream, type) {
+function armRecorder(stream, type, state) {
   const videoTracks = stream.getVideoTracks();
   if (!videoTracks.length || videoTracks[0].readyState !== 'live') throw new Error(L('errNoSource'));
   const audio = mixAudio();
-  const tracks = [...videoTracks, ...(audio ? [audio] : [])];
-  recorder = new MediaRecorder(new MediaStream(tracks), {
-    mimeType: type,
-    videoBitsPerSecond: BITRATES[$('quality').value],
-    audioBitsPerSecond: AUDIO_BITRATE
+  const instance = new MediaRecorder(new MediaStream([...videoTracks, ...(audio ? [audio] : [])]), {
+    mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: AUDIO_BITRATE
   });
-  chunks = [];
-  chunkBytes = 0;
-  chunkSeq = 0;
-  recorder.ondataavailable = (event) => {
-    if (!event.data || !event.data.size) return;
-    const payload = event.data;
-    chunks.push(payload);
-    chunkBytes += payload.size;
-    saveChunk(payload, sessionStartedAt, chunkSeq++);
-    if (Date.now() - lastMemorySync > 1000) { lastMemorySync = Date.now(); syncMemory(); }
-    if (chunkBytes >= HEAP_LIMIT_BYTES) setHint('heapCritical', [fmtBytes(chunkBytes)], true);
-    else if (chunkBytes >= HEAP_WARN_BYTES) setHint('heapWarn', [fmtBytes(chunkBytes)], true);
+  state = state || { session: crypto.randomUUID(), index: 1, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0, name: `${sanitized()}.${recordingExtension()}` };
+  state.recorder = instance;
+  instance.ondataavailable = event => {
+    if (!event.data?.size) return;
+    state.chunks.push(event.data); state.bytes += event.data.size;
+    const write = saveChunk(event.data, state.session, state.seq++); state.writes.add(write);
+    write.then(()=>{lastRecordingWrite=Date.now();},storageError).finally(() => state.writes.delete(write));
+    if (state === activeSegment) {
+      chunks = state.chunks; chunkBytes = state.bytes; chunkSeq = state.seq;
+      syncMemory();
+      if (chunkBytes >= HEAP_LIMIT_BYTES) { setHint('heapCritical', [fmtBytes(chunkBytes)], true); stop(); }
+      else if (chunkBytes >= AUTO_SEGMENT_BYTES && !rollingSegment) { setHint('autoSegment'); saveSegmentAndContinue().catch(error => { setNotice(error.message); stop(); }); }
+    }
   };
-  recorder.onstop = () => { if (rollingSegment) saveSegmentAndContinue(); else finish(); };
-  recorder.onerror = () => { setHint('errRecorder', [], true); stop(); };
+  instance.onstop = () => {
+    if (state === activeSegment) finish().catch(error => setNotice(error.message));
+    else {
+      const saving = saveCompletedSegment(state).catch(error => { storageError(); setNotice(error.message); stop(); });
+      segmentSaves.add(saving); saving.finally(() => segmentSaves.delete(saving));
+    }
+  };
+  instance.onerror = () => { videoFailure = 'errRecorder'; stop(); };
+  return instance;
 }
-function beginRecording(stream) {
+function segmentDetails(state, end = elapsed()) {
+  return { duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
+}
+function createSegment(index) {
+  const settings = displayStream.getVideoTracks()[0].getSettings();
+  return { session: crypto.randomUUID(), index, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0,
+    course: $('course-enabled').checked ? $('course-name').value.trim() : '', episode: Number($('episode-number').value) || 1,
+    width: settings.width, height: settings.height, channelMetadata: activeSegment && recorder && recorder.state !== 'inactive' ? activeSegment.channelMetadata : captureChannelContext,
+    name: `${sanitized()}${Number($('segment-minutes').value) || index > 1 ? `-part-${String(index).padStart(3, '0')}` : ''}.${recordingExtension()}` };
+}
+function selectSegment(state) {
+  activeSegment = state; recorder = state.recorder; chunks = state.chunks; chunkBytes = state.bytes; chunkSeq = state.seq;
+  segmentIndex = state.index; sessionStartedAt = state.session; segmentStartedElapsed = state.start;
+}
+function scheduleSegment() {
+  clearTimeout(segmentTimer);
+  const minutes = Number($('segment-minutes').value);
+  if (minutes) segmentTimer = setTimeout(() => saveSegmentAndContinue().catch(error => { setNotice(error.message); stop(); }), minutes * 60000);
+}
+async function beginRecording(stream) {
   const type = mediaType();
-  if (!type) throw new Error(L('errUnsupported'));
-  recordingStream = stream;
-  segmentIndex = 1;
-  markers = [];
-  videoFailure = null;
-  armRecorder(stream, type);
-  sessionStartedAt = Date.now();
-  startedAt = sessionStartedAt;
-  pausedAt = 0;
-  pausedTotal = 0;
-  lastMemorySync = 0;
-  setInProgress(true);
-  recorder.start(TIMESLICE_MS);
+  if (!type) throw new Error(L(selectedExtension() === 'mp4' ? 'errMP4' : 'errUnsupported'));
+  lastRecordingWrite=Date.now();recordingMime = type; stopRequested = false; storageFailure = false; finalName = null; finalId = null;
+  recordingStream = stream; markers = []; finalMarkers = []; finalDuration = 0; videoFailure = null;
+  startedAt = Date.now(); pausedAt = 0; pausedTotal = 0; lastMemorySync = 0;
+  const state = createSegment(1); armRecorder(stream, type, state);
+  await setInProgress({ session: state.session, name: state.name, mimeType: type, index: state.index, course: state.course, episode: state.episode, ...(state.channelMetadata || {}) });
+  selectSegment(state); recorder.start(TIMESLICE_MS);
   timer = setInterval(tick, 250);
-  const auto = Number($('autostop').value);
-  if (auto) stopTimer = setTimeout(stop, auto * 1000);
-  const segment = Number($('segment-minutes').value);
-  if (segment) segmentTimer = setTimeout(() => { rollingSegment = true; stop(); }, segment * 60 * 1000);
+  const auto = Number($('autostop').value); if (auto) stopTimer = setTimeout(stop, auto * 1000);
+  scheduleSegment();
   const audioKey = audioHintKey();
-  if (audioKey) setHint(audioKey, [], true);
-  else if (captureNote) setHint(captureNote.key, captureNote.args);
-  else setHint('recordingHint');
-  show('recording');
-  syncMemory();
+  if (audioKey) setHint(audioKey, [], true); else if (captureNote) setHint(captureNote.key, captureNote.args); else setHint('recordingHint');
+  show('recording'); startLivePreview(stream); syncMemory();
   chrome.runtime.sendMessage({ type: 'recording-state', active: true, highlightClicks: $('clicks').checked }).catch(() => {});
 }
+function snapshotSegment() {
+  finalDuration = Math.max(0, elapsed() - segmentStartedElapsed);
+  finalMarkers = markers.filter(marker => marker.at >= segmentStartedElapsed && marker.at <= segmentStartedElapsed + finalDuration).map(marker => ({ ...marker, at: marker.at - segmentStartedElapsed }));
+}
+async function saveCompletedSegment(state) {
+  const blob = new Blob(state.chunks, { type: state.recorder.mimeType || recordingMime });
+  await Promise.allSettled([...state.writes]);
+  let id = null;
+  try { id = await archiveRecording(blob, state.name, state.session, state.index, false, state.details); }
+  catch (error) { storageError(); throw error; }
+  finally { download(blob, state.name, id); state.chunks = []; }
+  setHint('segmentSaved', [state.index]);
+}
 async function saveSegmentAndContinue() {
-  const part = new Blob(chunks, { type: (recorder && recorder.mimeType) || 'video/webm' });
-  const completed = segmentIndex++;
-  await Promise.all([...pendingWrites]);
-  download(part, `${sanitized()}-part-${String(completed).padStart(3, '0')}.webm`);
-  saveCourseEntry(completed).catch(() => {});
-  chunks = []; chunkBytes = 0; chunkSeq = 0;
-  await clearChunks();
-  rollingSegment = false;
-  const type = mediaType();
-  if (!recordingStream || !type) return finish();
-  armRecorder(recordingStream, type);
-  recorder.start(TIMESLICE_MS);
-  const segment = Number($('segment-minutes').value);
-  if (segment) segmentTimer = setTimeout(() => { rollingSegment = true; stop(); }, segment * 60 * 1000);
-  setHint('segmentSaved', [completed]);
-  syncMemory();
+  if (rollingSegment || stopRequested || !activeSegment || recorder.state === 'inactive') return;
+  rollingSegment = true;
+  const previous = activeSegment;
+  try {
+    const next = createSegment(previous.index + 1); armRecorder(recordingStream, recordingMime, next);
+    // Persist the new session while the old encoder is STILL RUNNING. Disk latency cannot cause a capture gap.
+    await setInProgress({ session: next.session, name: next.name, mimeType: recordingMime, index: next.index, course: next.course, episode: next.episode, ...(next.channelMetadata || {}) });
+    if (stopRequested || previous.recorder.state === 'inactive') { await discardSession(next.session); if (previous.recorder.state !== 'inactive') previous.recorder.stop(); return; }
+    next.start = elapsed();
+    await new Promise((resolve, reject) => { next.recorder.addEventListener('start', resolve, { once: true }); next.recorder.addEventListener('error', reject, { once: true }); next.recorder.start(TIMESLICE_MS); });
+    if (pausedAt) next.recorder.pause();
+    // Start-before-stop intentionally allows a tiny overlap instead of losing frames at the boundary.
+    previous.details = segmentDetails(previous);
+    selectSegment(next); previous.recorder.stop();
+    if (stopRequested) next.recorder.stop(); else scheduleSegment();
+  } finally { rollingSegment = false; }
 }
 function tick() {
+  $('live-clock').textContent = fmt(elapsed());
   $('timer').textContent = fmt(elapsed());
 }
 async function start() {
+  if ($('start').disabled) return;
+  if (!$('recovery').classList.contains('hidden')) { setNotice(L('resolveRecovery')); return; }
+  $('start').disabled = true;
   setNotice('');
   persist();
+  if (typeof stopMicTest === 'function') await stopMicTest();
   try {
+    if (!await acquireRecordingLock()) { setNotice(L('alreadyRecording')); resetStart(); return; }
+    if (await refreshRecovery()) { setNotice(L('resolveRecovery')); resetStart(); return; }
+    if ($('capture-mode')?.value === 'telegram') await prepareTelegramChannel();
+    else captureChannelContext = null;
+    if (!mediaType()) throw new Error(L(selectedExtension() === 'mp4' ? 'errMP4' : 'errUnsupported'));
     displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: $('screen-audio').checked });
   } catch (error) {
     setNotice(captureError(error));
@@ -448,10 +570,14 @@ async function start() {
     return;
   }
   chrome.storage.local.remove(['pendingLink', 'filenameSuggestion']).catch(() => {});
+  if ($('capture-mode')?.value === 'telegram' && !displayStream.getAudioTracks().length) {
+    releaseCapture(); setNotice(L('telegramNoAudio')); resetStart(); return;
+  }
+  if ($('capture-mode')?.value === 'telegram') displayStream.getVideoTracks()[0].contentHint = 'motion';
   const note = await applyOutputSize(displayStream);
   setCaptureNote(note && note.key, (note && note.args) || []);
   await addMic();
-  try { await addCamera(); } catch { cameraStream = null; }
+  try { await addCamera(); } catch (error) { releaseCapture(); setNotice(L('cameraFailed')); resetStart(); return; }
   const wait = Number($('countdown').value) || 0;
   if (wait) {
     $('start').disabled = true;
@@ -459,7 +585,6 @@ async function start() {
       $('start').textContent = L('starting', n);
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    $('start').disabled = false;
     $('start').textContent = L('btnStart');
   }
   const video = displayStream.getVideoTracks()[0];
@@ -469,10 +594,13 @@ async function start() {
     resetStart();
     return;
   }
-  video.onended = () => stop();
+  video.onended = () => { videoFailure = 'errSourceEnded'; stop(); };
   try {
     // Click rings are drawn inside the shared tab; only camera PiP needs a canvas.
-    beginRecording(cameraStream ? await composeOutput() : displayStream);
+    mixAudio();
+    if (mixer && mixer.state === 'suspended') await mixer.resume();
+    await beginRecording(cameraStream ? await composeOutput() : displayStream);
+    $('start').disabled = false;
   } catch (error) {
     releaseCapture();
     setNotice(error && error.message ? error.message : L('errStart', 'unknown error'));
@@ -498,7 +626,7 @@ function markImportant() {
   if (!isRecording() || !recorder || recorder.state !== 'recording') return;
   const at = elapsed(); markers.push({ at, label: 'important' }); setHint('markerSaved', [fmt(at)]);
 }
-const stop = () => { if (recorder && recorder.state !== 'inactive') recorder.stop(); };
+const stop = () => { stopRequested = true; clearTimeout(segmentTimer); if (!rollingSegment && recorder && recorder.state !== 'inactive') recorder.stop(); };
 function releaseCapture() {
   clearInterval(timer);
   clearTimeout(stopTimer);
@@ -506,11 +634,15 @@ function releaseCapture() {
   timer = null;
   stopTimer = null;
   segmentTimer = null;
-  if (compositor) { clearInterval(compositor.watch); cancelAnimationFrame(compositor.frame); compositor.screenVideo.pause(); compositor.cameraVideo.pause(); compositor = null; }
+  if (compositor) { compositor.worker.terminate(); compositor.output.stop(); compositor = null; }
+  stopLivePreview();
   [displayStream, micStream, cameraStream].filter(Boolean).forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+  mixedAudio = null;
   if (mixer) { mixer.close().catch(() => {}); mixer = null; }
+  recordingStream = null;
 }
 function resetStart() {
+  unlockRecording();
   show('setup');
   $('start').disabled = false;
   $('start').textContent = L('btnStart');
@@ -529,30 +661,39 @@ function resetStart() {
   setHint(null);
   syncMemory();
 }
-function finish() {
+async function finish(savedBlob = null, savedName = null, archived = false, savedId = null) {
+  if (!savedBlob) snapshotSegment();
   releaseCapture();
-  const type = (recorder && recorder.mimeType) || 'video/webm';
-  finalBlob = new Blob(chunks, { type });
+  const type = (recorder && recorder.mimeType) || recordingMime;
+  finalBlob = savedBlob || new Blob(chunks, { type });
+  finalName = savedName || activeSegment.name;
   finalSize = finalBlob.size;
-  saveCourseEntry(Math.max(1, segmentIndex - 1)).catch(() => {});
+
   if ($('course-enabled').checked) { $('episode-number').value = String(Math.max(1, Number($('episode-number').value) || 1) + 1); persist(); updateCourseFilename(); }
-  const url = URL.createObjectURL(finalBlob);
-  $('preview').src = url;
-  $('preview').onloadeddata = () => URL.revokeObjectURL(url);
+  setPreview(finalBlob);
   $('result-warning').textContent = videoFailure ? L(videoFailure) : '';
   $('result-warning').hidden = !videoFailure;
-  recorder = null;
   chunks = [];
-  // Chunks stay in IndexedDB so the recovery banner can still offer them after a reload.
-  Promise.all([...pendingWrites]).finally(() => setInProgress(false));
+  // Keep recovery chunks until the completed video has been stored atomically.
+  await Promise.allSettled([...pendingWrites]);
+  await Promise.allSettled([...segmentSaves]);
+  if (!archived) { try { finalId = await archiveRecording(finalBlob, finalName, activeSegment.session, activeSegment.index, false, segmentDetails(activeSegment, activeSegment.start + finalDuration)); } catch { storageError(); } }
+  if (archived) finalId = savedId;
+  if (finalId) await completeTelegramRecording(activeSegment).catch(error => setNotice(error.message));
+  unlockRecording();
+  if (storageFailure) { $('result-warning').textContent = L('storageFailed'); $('result-warning').hidden = false; }
+  recorder = null;
   chrome.runtime.sendMessage({ type: 'recording-state', active: false, highlightClicks: false }).catch(() => {});
   show('result');
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
 }
-function download(blob = finalBlob, explicitName = null) {
+async function download(blob = finalBlob, explicitName = null, recordingId = finalId) {
   if (!blob || !blob.size) { setNotice(L('errEmpty')); return; }
-  const name = explicitName || `${sanitized()}.webm`;
+  const baseName = explicitName || finalName || `${sanitized()}.${recordingExtension()}`;
+  const entry = recordingId && blob.type.startsWith('video/') ? await readStore('recordings', recordingId).catch(() => null) : null;
+  const folder = relativeFolder(entry?.exportFolder || '');
+  const name = folder ? `${folder}/${baseName}` : baseName;
   const anchor = document.createElement('a');
   anchor.href = URL.createObjectURL(blob);
   anchor.download = name;
@@ -562,15 +703,30 @@ function download(blob = finalBlob, explicitName = null) {
   if (!chrome.downloads || !chrome.downloads.download) { fallback(); return; }
   chrome.downloads.download({ url: anchor.href, filename: name, saveAs: false })
     .then((id) => {
-      if (typeof id === 'number') { setTimeout(() => URL.revokeObjectURL(anchor.href), 60000); return; }
+      if (typeof id === 'number') {
+        if (recordingId && blob.type.startsWith('video/') && chrome.downloads.search) saveDownloadLocation(recordingId, id).catch(error => { $('library-status').textContent = error.message; });
+        setTimeout(() => URL.revokeObjectURL(anchor.href), 60000); return;
+      }
       // undefined means the download was rejected without throwing.
       fallback();
     })
     .catch(() => { fallback(); setNotice(L('errDownload')); });
 }
+async function saveDownloadLocation(recordingId, downloadId) {
+  const [item] = await chrome.downloads.search({ id: downloadId });
+  // Read and update in one transaction so a delayed download cannot resurrect a deleted video.
+  await runTx('recordings', 'readwrite', tx => {
+    const store = tx.objectStore('recordings');
+    const request = store.get(recordingId);
+    request.onsuccess = () => {
+      if (request.result) store.put({ ...request.result, downloadId, downloadPath: item && item.filename || '', downloadExists: item?.exists !== false, downloadState: item?.state || 'in_progress' });
+    };
+  });
+  await renderRecordingLibrary();
+}
 function downloadNotes() {
-  const payload = { title: sanitized(), durationSeconds: Math.round(elapsed() / 1000), markers, createdAt: new Date().toISOString() };
-  download(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `${sanitized()}.learning-notes.json`);
+  const payload = { title: (finalName || sanitized()).replace(/\.(webm|mp4)$/i, ''), durationSeconds: Math.round(finalDuration / 1000), markers: finalMarkers, createdAt: new Date().toISOString() };
+  download(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `${(finalName || sanitized()).replace(/\.(webm|mp4)$/i, '')}.learning-notes.json`);
 }
 const persistLang = () => chrome.storage.local.set({ lang: LANG }).catch(() => {});
 
@@ -584,39 +740,65 @@ $('start').addEventListener('click', () => {
   if ($('start').dataset.i18n === 'btnStop') stop();
   else start();
 });
+$('test-mic').onclick = testMicrophone;
+$('mic-device').onchange = () => { stopMicTest(); persist(); };
+$('library-search').oninput = () => { libraryPage = 0; renderRecordingLibrary().catch(error => { $('library-status').textContent = error.message; }); };
+$('library-course').onchange = $('library-search').oninput;
+$('capture-mode').onchange = applyCapturePreset;
 $('stop').onclick = stop;
 $('pause').onclick = pause;
 $('mark').onclick = markImportant;
 $('download').onclick = () => download();
 $('notes').onclick = downloadNotes;
-$('export-course').onclick = async () => { const { courseLibrary = [] } = await chrome.storage.local.get('courseLibrary'); download(new Blob([JSON.stringify(courseLibrary, null, 2)], { type: 'application/json' }), 'wescreen-course-index.json'); };
+$('export-course').onclick = async () => { const entries = (await readStore('recordings')).filter(entry => entry.course && !entry.deletedAt); download(new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' }), 'wescreen-course-index.json'); };
 $('new-recording').onclick = () => { setNotice(''); setHint(null); show('setup'); };
 $('language').onclick = () => {
   applyLang(LANG === 'zh' ? 'en' : 'zh');
   persistLang();
+  renderRecordingLibrary().catch(() => {});
 };
-['course-enabled', 'course-name', 'episode-number', 'episode-title'].forEach((id) => $(id).addEventListener('input', updateCourseFilename));
+['format', 'course-enabled', 'course-name', 'episode-number', 'episode-title'].forEach(id => $(id).addEventListener('input', () => { updateCourseFilename(); if (id === 'course-name') saveCourseEntry().catch(error => setNotice(error.message)); }));
 // Closing mid-recording loses the in-flight take; IndexedDB only keeps what already landed.
 window.addEventListener('beforeunload', (event) => {
-  if (!recorder || recorder.state === 'inactive') return;
+  if (!releaseRecordingLock && (!recorder || recorder.state === 'inactive')) return;
   event.preventDefault();
   event.returnValue = '';
 });
-loadSettings()
-  .then(() => applyLang(LANG))
-  .then(() => Promise.all([readInProgress(), loadChunks()]))
-  .then(([flag, stored]) => {
-    if (flag === false || !stored.length) return;
-    const size = stored.reduce((total, blob) => total + (blob.size || 0), 0);
-    $('recovery-text').textContent = L('recoveryFound', fmtBytes(size));
-    $('recovery').classList.remove('hidden');
-    $('recover').onclick = () => {
-      download(new Blob(stored, { type: 'video/webm' }));
-      clearChunks().then(() => setInProgress(null)).then(() => $('recovery').classList.add('hidden'));
-    };
-    $('discard').onclick = () => {
-      clearChunks().then(() => setInProgress(null)).then(() => $('recovery').classList.add('hidden'));
-    };
-  })
-  .then(async () => { const { courseLibrary = [] } = await chrome.storage.local.get('courseLibrary'); renderCourseLibrary(courseLibrary); })
-  .catch(() => {});
+async function refreshRecovery() {
+  const sessions = await pendingSessions();
+  let bytes = 0;
+  for (const state of sessions) bytes += (await loadChunks(state.session)).reduce((total, blob) => total + blob.size, 0);
+  $('recovery-text').textContent = L('recoveryFound', fmtBytes(bytes));
+  $('recovery').classList.toggle('hidden', sessions.length === 0);
+  return sessions.length > 0;
+}
+async function handleRecovery(keep) {
+  if (!await acquireRecordingLock()) return setNotice(L('alreadyRecording'));
+  $('recover').disabled = true; $('discard').disabled = true; $('start').disabled = true;
+  try {
+    // Read after acquiring the lock, never use the snapshot from page load.
+    const sessions = await pendingSessions();
+    for (const state of sessions) {
+      const stored = await loadChunks(state.session);
+      if (keep && stored.length) {
+        const blob = new Blob(stored, { type: state.mimeType || 'video/webm' });
+        let id = null;
+        try { id = await archiveRecording(blob, state.name || 'recovered-recording.webm', state.session, state.index || 1, true, { course: state.course || '', episode: state.episode, channelId: state.channelId, channelName: state.channelName, channelUrl: state.channelUrl, sourceUrl: state.sourceUrl, sourceTitle: state.sourceTitle, exportFolder: state.exportFolder, recovered: true }); }
+        finally { download(blob, state.name || 'recovered-recording.webm', id); }
+      } else await discardSession(state.session);
+    }
+    await refreshRecovery();
+  } catch (error) { setNotice(L('storageFailed') + ' ' + error.message); }
+  finally { unlockRecording(); $('recover').disabled = false; $('discard').disabled = false; $('start').disabled = false; }
+}
+$('recover').onclick = () => handleRecovery(true);
+$('discard').onclick = () => handleRecovery(false);
+window.addEventListener('wescreen-storage-closed', () => setNotice(L('databaseClosed')));
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await loadSettings(); applyLang(LANG); $('telegram-guide').hidden = $('capture-mode').value !== 'telegram';
+    await db; await navigator.storage?.persist?.().catch(() => false);
+    await refreshRecovery(); await refreshMicDevices().catch(() => {}); await renderRecordingLibrary();
+    await initWorkspace(); document.documentElement.dataset.ready = "true";
+  } catch (error) { setNotice(error.message); $('library-status').textContent = error.message; }
+});

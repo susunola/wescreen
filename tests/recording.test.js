@@ -19,7 +19,7 @@ function captureContext({ camera = false, clicks = true, state = 'live' } = {}) 
   const seen = { notices: [], recordings: [], compositions: 0, releases: 0 };
   const fields = {
     'screen-audio': { checked: true }, camera: { checked: camera }, clicks: { checked: clicks },
-    countdown: { value: '0' }, start: { disabled: false, textContent: '' }
+    recovery: { classList: { contains: () => true } }, countdown: { value: '0' }, start: { disabled: false, textContent: '' }
   };
   const context = {
     $: id => fields[id],
@@ -28,6 +28,10 @@ function captureContext({ camera = false, clicks = true, state = 'live' } = {}) 
     displayStream: null,
     cameraStream: camera ? {} : null,
     persist: () => {},
+    acquireRecordingLock: async () => true,
+    refreshRecovery: async () => false,
+    prepareTelegramChannel: async () => {}, captureChannelContext: null,
+    mixAudio: () => null, mixer: null, mediaType: () => 'video/webm',
     setNotice: text => seen.notices.push(text),
     captureError: error => error.message,
     resetStart: () => {},
@@ -84,40 +88,16 @@ test('recorder rejects streams without a live video track before creating audio'
     MediaRecorder: class {},
     MediaStream: class {}
   };
-  vm.runInNewContext(extract('function armRecorder(', 'function beginRecording('), context);
+  vm.runInNewContext(extract('function armRecorder(', 'async function beginRecording('), context);
   assert.throws(() => context.armRecorder({ getVideoTracks: () => [] }, 'video/webm'), /errNoSource/);
   assert.throws(() => context.armRecorder({ getVideoTracks: () => [{ readyState: 'ended' }] }, 'video/webm'), /errNoSource/);
   assert.equal(mixed, false);
 });
 
-test('camera composition detects stalled frames and stops instead of silently recording a still', async () => {
-  let now = 1000, watchdog, stopped = 0;
-  const canvas = {
-    width: 0, height: 0,
-    getContext: () => ({ drawImage: () => {}, save: () => {}, beginPath: () => {}, roundRect: () => {}, clip: () => {}, restore: () => {}, strokeRect: () => {} }),
-    captureStream: () => ({ getVideoTracks: () => [{ readyState: 'live' }] })
-  };
-  const context = {
-    document: { createElement: tag => tag === 'canvas' ? canvas : { play: async () => {}, pause: () => {} } },
-    displayStream: { getVideoTracks: () => [{ getSettings: () => ({ width: 640, height: 360 }) }] },
-    cameraStream: { getVideoTracks: () => [{ readyState: 'live' }] },
-    compositor: null,
-    videoFailure: null,
-    recorder: null,
-    Date: { now: () => now },
-    Math,
-    $: id => ({ framerate: { value: '30' } })[id],
-    requestAnimationFrame: () => 1,
-    setInterval: callback => { watchdog = callback; return 1; },
-    stop: () => { stopped++; }
-  };
+test('unsupported background compositor fails explicitly before recording', async () => {
+  const context = { window: {}, L: key => key };
   vm.runInNewContext(extract('async function composeOutput()', 'function mixAudio()'), context);
-  await context.composeOutput();
-  context.recorder = { state: 'recording' };
-  now += 4000;
-  watchdog();
-  assert.equal(stopped, 1);
-  assert.equal(context.videoFailure, 'errVideoStalled');
+  await assert.rejects(context.composeOutput(), /pipUnsupported/);
 });
 
 function fakeElement() {
@@ -127,23 +107,6 @@ function fakeElement() {
     remove() { this.removed = true; }
   };
 }
-
-test('a compositor that cannot draw its first frame fails before recording starts', async () => {
-  const context = {
-    document: { createElement: tag => tag === 'canvas' ? {
-      getContext: () => ({ drawImage: () => { throw new Error('frame unavailable'); } })
-    } : { play: async () => {} } },
-    displayStream: { getVideoTracks: () => [{ getSettings: () => ({ width: 640, height: 360 }) }] },
-    cameraStream: {},
-    compositor: null,
-    recorder: null,
-    Date,
-    $: () => ({ value: '30' }),
-    stop: () => { throw new Error('should not call stop without a recorder'); }
-  };
-  vm.runInNewContext(extract('async function composeOutput()', 'function mixAudio()'), context);
-  await assert.rejects(context.composeOutput(), /frame unavailable/);
-});
 
 test('pointer rings are inserted into the captured page only while recording', () => {
   const html = fakeElement();
@@ -190,7 +153,7 @@ test('opening the recorder records the injected tab as the click-highlight targe
     runtime: { getURL: name => `chrome-extension://example/${name}` }
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'popup.js'), 'utf8'), {
-    chrome, document: { querySelector: selector => nodes[selector] }, window: { close: () => {} }
+    chrome, document: { documentElement: {}, querySelector: selector => nodes[selector] }, window: { close: () => {} }
   });
   await openRecorder();
   assert.deepEqual(operations, [{ kind: 'inject', id: 42 }, { kind: 'target', id: 42 }]);
@@ -234,4 +197,71 @@ test('recording-state enables then disables the ring on the tracked tab', async 
   assert.equal(calls[0].id, 42);
   assert.equal(calls[0].payload.active, true);
   assert.equal(calls[1].payload.active, false);
+});
+
+test('the complete recording script parses, not just extracted functions', () => {
+  assert.doesNotThrow(() => new vm.Script(recorderCode));
+});
+
+test('a rejected resolution cap reports the actual uncapped output', async () => {
+  const context = { $: id => ({ resolution: { value: '1080' }, framerate: { value: '60' } })[id] };
+  vm.runInNewContext(extract('async function applyOutputSize(', '// Missing audio'), context);
+  const note = await context.applyOutputSize({ getVideoTracks: () => [{ getSettings: () => ({ width: 3840, height: 2160 }), applyConstraints: async () => { throw new Error('unsupported'); } }] });
+  assert.equal(note.key, 'capFailed');
+  assert.equal(note.args[0], '3840×2160');
+});
+
+test('video bitrate scales with actual pixels and frame rate', () => {
+  const context = { BITRATES: { standard: 6000000 }, $: id => ({ quality: { value: 'standard' }, framerate: { value: '30' } })[id] };
+  vm.runInNewContext(extract('function videoBitrate(', 'async function acquireRecordingLock()'), context);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 6000000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), 48000000);
+});
+
+test('audio mixing is reused across segments and preserves headroom for two sources', () => {
+  let contexts = 0; const gains = [];
+  const context = { mixedAudio: null, mixer: null, displayStream: { getAudioTracks: () => [{}] }, micStream: { getAudioTracks: () => [{}] }, AudioContext: class {
+    constructor() { contexts++; }
+    createMediaStreamDestination() { return { stream: { getAudioTracks: () => [this] } }; }
+    createMediaStreamSource() { return { connect: gain => gain }; }
+    createGain() { const node = { gain: {}, connect() {} }; gains.push(node); return node; }
+  } };
+  vm.runInNewContext(extract('function mixAudio()', 'function audioHintKey()'), context);
+  const first = context.mixAudio();
+  assert.equal(context.mixAudio(), first);
+  assert.equal(contexts, 1);
+  assert.deepEqual(gains.map(node => node.gain.value), [0.5, 0.5]);
+});
+
+test('saved clip duration and markers exclude earlier segments and remain frozen', () => {
+  let elapsedMs = 25000;
+  const context = { finalDuration: 0, finalMarkers: [], segmentStartedElapsed: 20000, elapsed: () => elapsedMs, markers: [{ at: 1000 }, { at: 23000 }] };
+  vm.runInNewContext(extract('function snapshotSegment()', 'async function saveSegmentAndContinue()'), context);
+  context.snapshotSegment();
+  assert.equal(context.finalDuration, 5000);
+  assert.equal(context.finalMarkers.length, 1);
+  assert.equal(context.finalMarkers[0].at, 3000);
+  elapsedMs += 60000;
+  assert.equal(context.finalDuration, 5000);
+});
+
+
+test('MP4 selection requires H.264 plus AAC and never falls back to a mislabeled WebM', () => {
+  const context = { $: () => ({ value: 'mp4' }), MediaRecorder: { isTypeSupported: type => type === 'video/mp4;codecs=avc1,mp4a.40.2' }, recordingMime: 'video/mp4' };
+  vm.runInNewContext(extract('const MP4_TYPES', 'function captureError'), context);
+  assert.equal(context.mediaType(), 'video/mp4;codecs=avc1,mp4a.40.2');
+  assert.equal(context.recordingExtension(), 'mp4');
+  context.MediaRecorder.isTypeSupported = type => type.startsWith('video/webm');
+  assert.equal(context.mediaType(), undefined);
+});
+
+test('Telegram mode refuses to silently record a video without shared audio', async () => {
+  const { context, seen, stream } = captureContext();
+  stream.getAudioTracks = () => [];
+  const field = context.$;
+  context.$ = id => id === 'capture-mode' ? { value: 'telegram' } : field(id);
+  await context.start();
+  assert.equal(seen.recordings.length, 0);
+  assert.equal(seen.releases, 1);
+  assert.equal(seen.notices.at(-1), 'telegramNoAudio');
 });

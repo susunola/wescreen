@@ -1,3 +1,4 @@
+document.documentElement.lang = String(chrome.i18n.getUILanguage?.() || 'en').startsWith('zh') ? 'zh-CN' : 'en';
 const t = (key, fallback) => {
   try { return chrome.i18n.getMessage(key) || fallback; } catch { return fallback; }
 };
@@ -19,6 +20,8 @@ document.querySelector('#open').addEventListener('click', async () => {
   window.close();
 });
 
+for (const [id,key,fallback] of [['url-label','popupUrlLabel','Open a link to record'],['open-link','popupLinkOpen','Open'],['link-hint','popupLinkHint','After it opens, click WeScreen in that tab and start recording.']]) { const node=document.querySelector('#'+id); if(node)node.textContent=t(key,fallback); }
+
 const urlInput = document.querySelector('#record-url');
 document.querySelector('#open-link').addEventListener('click', async () => {
   let url = urlInput.value.trim();
@@ -26,11 +29,12 @@ document.querySelector('#open-link').addEventListener('click', async () => {
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
   try {
     const target = new URL(url);
+    if (!['http:','https:'].includes(target.protocol)) throw new Error('Invalid protocol');
     await chrome.storage.local.set({ pendingLink: target.href, filenameSuggestion: target.hostname.replace(/^www\./, '') });
     await chrome.tabs.create({ url: target.href });
     window.close();
   } catch {
-    urlInput.setCustomValidity('Enter a valid http(s) URL.');
+    urlInput.setCustomValidity(t('popupInvalidUrl','Enter a valid http(s) URL.'));
     urlInput.reportValidity();
   }
 });

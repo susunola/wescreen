@@ -1,0 +1,146 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+let chromium;try{({chromium}=require('playwright'));}catch{}
+const root=path.resolve(__dirname,'..');
+function mockExtension(){
+  const values=()=>JSON.parse(localStorage.getItem('extension-test-storage') || '{"lang":"zh"}');const local={get:async()=>values(),set:async data=>localStorage.setItem('extension-test-storage',JSON.stringify({...values(),...data})),remove:async keys=>{const state=values();for(const key of [].concat(keys))delete state[key];localStorage.setItem('extension-test-storage',JSON.stringify(state));}};
+  window.chrome={storage:{local,session:{get:async()=>({enhancementToken:'browser-test-token'}),set:async()=>{},remove:async()=>{}}},runtime:{onMessage:{addListener(){}},sendMessage:async()=>{}},downloads:{download:async options=>{window.lastDownload=options;return 1;},search:async()=>[{id:1,filename:'/Downloads/audit.mp4',state:'complete',exists:true}],show:async id=>window.shownDownload=id}};
+}
+async function harness(run){
+  const server=http.createServer((req,res)=>{const file=path.join(root,new URL(req.url,'http://localhost').pathname==='/'?'recorder.html':new URL(req.url,'http://localhost').pathname);try{res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'image/png');res.end(fs.readFileSync(file));}catch{res.statusCode=404;res.end();}});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const browser=await chromium.launch({headless:true});const context=await browser.newContext();await context.addInitScript(mockExtension);
+  try{await run(context,`http://127.0.0.1:${server.address().port}/recorder.html`);}finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
+}
+async function pageReady(context,url){const p=await context.newPage();p.setDefaultTimeout(10000);await p.goto(url);await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');return p;}
+async function capture(page,camera=false){
+  await page.evaluate(async camera=>{
+    $('countdown').value='0';$('format').value='mp4';$('clicks').checked=false;$('camera').checked=camera;
+    window.frameTimers={};function frames(color){const canvas=new OffscreenCanvas(320,180),paint=canvas.getContext('2d'),track=new MediaStreamTrackGenerator({kind:'video'}),writer=track.writable.getWriter();let n=0,busy=false;const interval=setInterval(async()=>{if(busy || track.readyState!=='live'){if(track.readyState!=='live')clearInterval(interval);return;}busy=true;const frame=new VideoFrame(canvas,{timestamp:Math.round(performance.now()*1000)});try{paint.fillStyle=color==='#b32' && n%20<10 ? '#226899' : color;paint.fillRect(0,0,320,180);paint.fillStyle='white';paint.fillText(String(n++),10,20);await writer.write(frame);}catch{}finally{frame.close();busy=false;}},33);window.frameTimers[color]=interval;return new MediaStream([track]);}
+    const video=frames('#174');const audio=new AudioContext(),osc=audio.createOscillator(),output=audio.createMediaStreamDestination();osc.connect(output);osc.start();await audio.resume();window.syntheticAudio=audio;
+    navigator.mediaDevices.getDisplayMedia=async()=>new MediaStream([...video.getVideoTracks(),...output.stream.getAudioTracks()]);
+    if(camera){navigator.mediaDevices.getUserMedia=async()=>frames('#b32');window.requestAnimationFrame=()=>{throw new Error('Visible-document compositor must not be used');};}
+    await start();
+  },camera);
+  await page.waitForFunction(()=>recorder?.state==='recording');
+}
+// Poll asynchronous storage predicates explicitly; never treat a Promise object as readiness.
+async function waitForStorage(page,predicate,timeout=15000){const deadline=Date.now()+timeout;while(Date.now()<deadline){if(await page.evaluate(predicate))return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error('Storage predicate did not become true');}
+async function stopCapture(page){await page.evaluate(()=>stop());await page.waitForFunction(()=>!recorder && finalId);}
+const options={skip:!chromium};
+test('stale recovery never overwrites a completed recording, and new starts reread authoritative state',options,async()=>harness(async(cx,url)=>{
+  const a=await pageReady(cx,url);await capture(a);await a.waitForTimeout(2200);const b=await pageReady(cx,url);await b.waitForFunction(()=>!$('recovery').classList.contains('hidden'));
+  await b.locator('#recover').click();assert.match(await b.locator('#notice').textContent(),/另一个/);
+  await a.waitForTimeout(1000);await stopCapture(a);const before=await a.evaluate(async()=>{const e=(await readStore('recordings'))[0];return {id:e.id,size:e.size,duration:e.duration};});
+  await b.locator('#recover').click();await b.waitForFunction(()=>$('recovery').classList.contains('hidden'));
+  const after=await b.evaluate(async()=>{const e=(await readStore('recordings'))[0];return {id:e.id,size:e.size,duration:e.duration};});assert.deepEqual(after,before);assert.ok(before.duration>2500);
+  await b.evaluate(async()=>{const e=(await readStore('recordings'))[0];const blob=await readStore('videos',e.id);await runTx(['chunks','meta'],'readwrite',tx=>{tx.objectStore('chunks').put(blob,'legacy-000000');tx.objectStore('meta').put({session:'legacy',name:'recovered.mp4',mimeType:'video/mp4'},'inProgress');});});
+  // A's recovery UI is stale/hidden: start must still refuse unresolved data.
+  await a.evaluate(()=>start());assert.match(await a.locator('#notice').textContent(),/恢复/);await a.locator('#recover').click();await waitForStorage(a,async()=>(await readStore('recordings')).length===2);
+  await a.evaluate(()=>navigateWorkspace('library'));await a.getByRole('button',{name:'打开播放',exact:true}).first().click();await a.waitForFunction(()=>$('preview').readyState>=2);
+}));
+test('slow archival never delays the next encoder; stop during rollover keeps every completed part',options,async()=>harness(async(cx,url)=>{
+  const page=await pageReady(cx,url);await capture(page);await page.waitForTimeout(1100);
+  const timings=await page.evaluate(async()=>{const old=recorder;window.events=[];old.addEventListener('stop',()=>events.push({name:'old-stop',time:performance.now()}));const original=archiveRecording;archiveRecording=async(...args)=>{await new Promise(r=>setTimeout(r,1200));return original(...args);};await saveSegmentAndContinue();events.unshift({name:'next-active',time:performance.now(),state:recorder.state,oldState:old.state});return events;});
+  assert.equal(timings[0].state,'recording');assert.equal(timings[0].oldState,'inactive');await page.waitForTimeout(1500);assert.equal(await page.evaluate(()=>recorder.state),'recording');await stopCapture(page);assert.equal(await page.evaluate(async()=>(await readStore('recordings')).length),2);
+  await page.evaluate(async()=>{const all=await readStore('recordings');window.partData=await Promise.all(all.map(async e=>{const b=await readStore('videos',e.id);const v=document.createElement('video');v.muted=true;v.src=URL.createObjectURL(b);await new Promise((r,j)=>{v.onloadeddata=r;v.onerror=j;});return {size:b.size,duration:e.duration};}));});assert.equal((await page.evaluate(()=>partData)).every(e=>e.size>0 && e.duration>0),true);
+  await capture(page);await page.waitForTimeout(1100);await page.evaluate(async()=>{window.rollingTest=saveSegmentAndContinue();stop();await rollingTest;});await page.waitForFunction(()=>!recorder);assert.equal(await page.evaluate(async()=>(await pendingSessions()).length),0);
+}));
+test('worker picture-in-picture records moving video without requestAnimationFrame',options,async()=>harness(async(cx,url)=>{
+  const p=await pageReady(cx,url);await capture(p,true);const another=await cx.newPage();await another.goto('about:blank');await p.evaluate(()=>clearInterval(frameTimers['#174']));await p.waitForTimeout(6000);assert.equal(await p.evaluate(()=>recorder.state),'recording');await stopCapture(p);await p.waitForFunction(()=>$('preview').readyState>=2);assert.equal(await p.evaluate(()=>$('preview').videoWidth),320);
+}));
+test('library rename/course consistency, trash restore, permanent deletion, import and narrow layout',options,async()=>harness(async(cx,url)=>{
+  const p=await pageReady(cx,url);await capture(p);await p.waitForTimeout(1200);await stopCapture(p);await p.evaluate(async()=>{const e=(await readStore('recordings'))[0];await updateRecording(e.id,{course:'Course A'});await renderRecordingLibrary();navigateWorkspace('library');});
+  await p.locator('.row-menu summary').click();p.once('dialog',d=>d.accept('Renamed'));await p.getByRole('button',{name:'重命名',exact:true}).click();await p.waitForFunction(()=>$('course-items').textContent.includes('Renamed.mp4'));
+  await p.locator('.row-menu summary').click();await p.getByRole('button',{name:'删除',exact:true}).click();await p.waitForFunction(()=>$('recording-items').children.length===0);assert.equal(await p.evaluate(()=>$('course-items').children.length),0);assert.equal(await p.evaluate(async()=>(await readStore('videos')).length),1);
+  await p.locator('#library-trash').click();await p.getByRole('button',{name:'还原',exact:true}).last().click();await p.locator('#library-trash').click();await p.waitForFunction(()=>$('recording-items').children.length===1);
+  const blob=await p.evaluate(async()=>{const e=(await readStore('recordings'))[0];return Array.from(new Uint8Array(await(await readStore('videos',e.id)).arrayBuffer()));});await p.locator('#import-video').setInputFiles({name:'imported.mp4',mimeType:'video/mp4',buffer:Buffer.from(blob)});await p.waitForFunction(()=>$('recording-items').children.length===2);
+  await p.locator('#select-all').check();await p.locator('#bulk-delete').click();await p.locator('#library-trash').click();await p.locator('#select-all').check();p.once('dialog',d=>d.accept());await p.locator('#bulk-delete').click();await waitForStorage(p,async()=>(await readStore('videos')).length===0);
+  await p.setViewportSize({width:390,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+}));
+test('enhancement quota failure retains result; reopened pages can save once or stream export',options,async()=>harness(async(cx,url)=>{
+  const p=await pageReady(cx,url);await capture(p);await p.waitForTimeout(1200);await stopCapture(p);
+  const payload=Buffer.from(await p.evaluate(async()=>Array.from(new Uint8Array(await finalBlob.arrayBuffer()))));const jobs=new Map();let deletions=0;
+  await cx.route('http://127.0.0.1:8765/**',async route=>{const req=route.request(),u=new URL(req.url()),parts=u.pathname.split('/').filter(Boolean);let body,status=200;
+    if(parts[0]==='health')body={ready:true,ai:true,strong:false};
+    else if(parts.length===1 && req.method()==='POST'){const id='job-'+(jobs.size+1),job={id,state:'done',mode:u.searchParams.get('mode'),preview:u.searchParams.get('preview')==='1',start:Number(u.searchParams.get('start')),sourceId:u.searchParams.get('sourceId'),name:u.searchParams.get('name'),duration:1.2,width:320,height:180,size:payload.length,progress:1,createdAt:Date.now()};jobs.set(id,job);body={id};}
+    else if(parts.length===1)body={jobs:[...jobs.values()]};
+    else if(parts[2]==='result'){await route.fulfill({status:200,contentType:'video/mp4',body:payload});return;}
+    else if(parts[2]==='export')body={url:'http://127.0.0.1:8765/jobs/'+parts[1]+'/result?ticket=temporary-ticket'};
+    else if(req.method()==='DELETE'){jobs.delete(parts[1]);deletions++;body={ok:true};}
+    else body=jobs.get(parts[1]);await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
+  });
+  await p.evaluate(async()=>{const e=(await readStore('recordings'))[0];await openEnhancement(e);});assert.equal(await p.locator('#enhance-mode option[value="strong"]').evaluate(option=>option.disabled),true);
+  await p.evaluate(()=>{$('enhance-start').value='0.2';});await p.locator('#enhance-preview').click();await p.waitForFunction(()=>enhancementPreviewMode==='natural');assert.equal(deletions,1);
+  await p.locator('#enhance-compare').click();await p.waitForTimeout(200);await p.evaluate(()=>{$('enhance-original').pause();$('enhance-original').currentTime=.5;});await p.waitForTimeout(200);assert.ok(Math.abs(await p.evaluate(()=>$('enhance-output').currentTime)-.3)<.16);assert.equal(await p.evaluate(()=>$('enhance-output').paused),true);
+  await p.evaluate(()=>{const original=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(names,...args){if(Array.isArray(names) && names.includes('recordings') && names.includes('tasks'))throw new DOMException('Injected quota failure','QuotaExceededError');return original.call(this,names,...args);};});await p.locator('#enhance-full').click();await p.waitForFunction(()=>!enhancementBusy);assert.equal(deletions,1);assert.equal(jobs.size,1);
+  await p.locator('#enhance-go-tasks').click();await p.reload();await p.waitForFunction(()=>$('library-empty').textContent);await p.evaluate(()=>navigateWorkspace('tasks'));await p.waitForFunction(()=>$('task-items').textContent.includes('直接导出'));
+  await p.getByRole('button',{name:'直接导出 MP4',exact:true}).click();await p.waitForFunction(()=>window.lastDownload?.url?.includes('ticket='));assert.match(await p.evaluate(()=>lastDownload.url),/ticket=temporary-ticket/);assert.doesNotMatch(await p.evaluate(()=>lastDownload.url),/browser-test-token/);
+  const b=await pageReady(cx,url);await Promise.all([p.evaluate(async()=>saveTaskResult((await readStore('tasks'))[0])),b.evaluate(async()=>saveTaskResult((await readStore('tasks'))[0]))]);assert.equal(await p.evaluate(async()=>(await readStore('recordings')).length),2);assert.equal(deletions,1);
+  await p.evaluate(()=>applyLang('en'));await p.evaluate(async()=>openEnhancement((await readStore('recordings'))[0]));const labels=await p.locator('#enhance-panel [data-i18n]').allTextContents();assert.equal(labels.some(x=>/[\u3400-\u9fff]/.test(x)),false);
+}));
+test('blocked database upgrade reports a recoverable error instead of hanging silently',options,async()=>harness(async(cx,url)=>{
+  const hold=await cx.newPage();await hold.goto(url.replace('recorder.html','popup.html'));await hold.evaluate(async()=>{window.held=await new Promise(resolve=>{const req=indexedDB.open('wescreen',3);req.onupgradeneeded=()=>{for(const name of ['meta','chunks','videos'])req.result.createObjectStore(name);req.result.createObjectStore('recordings',{keyPath:'id'});};req.onsuccess=()=>resolve(req.result);});});
+  const p=await cx.newPage();await p.goto(url);await p.waitForFunction(()=>$('notice').textContent.includes('Database upgrade blocked'));await hold.evaluate(()=>held.close());await p.reload();await p.waitForFunction(()=>$('library-empty').textContent);
+}));
+
+test('memory-triggered automatic rotation keeps capture active without a total-library cap',options,async()=>harness(async(cx,url)=>{
+  const p=await pageReady(cx,url);await capture(p);await p.evaluate(()=>{activeSegment.bytes=AUTO_SEGMENT_BYTES;});await p.waitForFunction(()=>activeSegment.index===2,{},{timeout:12000});assert.equal(await p.evaluate(()=>recorder.state),'recording');await p.waitForTimeout(1200);await stopCapture(p);assert.equal(await p.evaluate(async()=>(await readStore('recordings')).length),2);
+}));
+
+test('real local helper crop/enhance frontend integration and completed-result retention',options,async()=>{
+  const {spawn}=require('node:child_process'),os=require('node:os');const work=fs.mkdtempSync(path.join(os.tmpdir(),'wescreen-helper-test-'));
+  const python=path.join(root,'enhancement/.venv/bin/python');if(!fs.existsSync(python))return;
+  let child,port;
+  async function startHelper(){
+    child=spawn(python,[path.join(root,'enhancement/server.py')],{env:{...process.env,WESCREEN_PORT:'0',WESCREEN_WORK_DIR:work,WESCREEN_ENHANCE_TOKEN:'browser-test-token'},stdio:['ignore','pipe','pipe']});
+    port=await new Promise((resolve,reject)=>{let out='';const timeout=setTimeout(()=>reject(new Error('Helper startup timeout')),10000);child.stdout.on('data',chunk=>{out+=chunk;const m=out.match(/Local enhancer: http:\/\/127\.0\.0\.1:(\d+)/);if(m){clearTimeout(timeout);resolve(Number(m[1]));}});child.on('error',reject);child.on('exit',code=>{if(code){clearTimeout(timeout);reject(new Error('Helper exited '+code));}});});
+  }
+  async function stopHelper(){if(child && child.exitCode===null){const closed=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGINT');await closed;}}
+  try{await startHelper();await harness(async(cx,url)=>{
+    await cx.route('http://127.0.0.1:8765/**',async route=>{const response=await route.fetch({url:route.request().url().replace(':8765',':'+port)});await route.fulfill({response});});
+    const p=await pageReady(cx,url);await capture(p);await p.waitForTimeout(2200);await stopCapture(p);await p.evaluate(async()=>openEnhancement((await readStore('recordings'))[0]));
+    await p.locator('#enhance-preview').click();await p.waitForFunction(()=>enhancementPreviewMode==='natural');await p.locator('#enhance-full').click();await p.waitForFunction(()=>!enhancementBusy);assert.equal(await p.evaluate(async()=>(await readStore('recordings')).length),2);
+    await p.locator('#enhance-close').click();await p.evaluate(async()=>openVideoEditor((await readStore('recordings')).find(e=>!e.enhancedFrom)));await p.waitForFunction(()=>editorSize?.width>0);await p.locator('#edit-start').fill('0.2');await p.locator('#edit-end').fill('1.0');await p.locator('#crop-x').fill('16');await p.locator('#crop-y').fill('16');await p.locator('#crop-width').fill('200');await p.locator('#crop-height').fill('100');await p.locator('[data-rotate="90"]').click();await p.locator('#edit-save').click();await p.waitForFunction(()=>!editorSubmitting);
+    const edited=await p.evaluate(async()=>(await readStore('recordings')).find(e=>e.enhancement==='edit'));assert.ok(edited);assert.equal(edited.width,100);assert.equal(edited.height,200);assert.ok(Math.abs(edited.duration-800)<130);
+    const count=await p.evaluate(async()=>(await(await enhancementRequest('/jobs')).json()).jobs.length);assert.equal(count,2);await stopHelper();await startHelper();await p.reload();await p.waitForFunction(()=>$('library-empty').textContent);await p.evaluate(()=>navigateWorkspace('tasks'));await p.waitForFunction(()=>$('task-items').children.length===2);assert.equal(await p.evaluate(async()=>(await(await enhancementRequest('/jobs')).json()).jobs.every(j=>j.state==='done')),true);
+  });}finally{await stopHelper();fs.rmSync(work,{recursive:true,force:true});}
+});
+
+
+test('actual unfinished MP4 chunks remain playable after the recording page closes',options,async()=>harness(async(cx,url)=>{
+  const a=await pageReady(cx,url);await capture(a);await waitForStorage(a,async()=>(await loadChunks(activeSegment.session)).length>0);const b=await pageReady(cx,url);await a.close();await b.locator('#recover').click();await waitForStorage(b,async()=>(await readStore('recordings')).length===1);await b.evaluate(async()=>playRecording((await readStore('recordings'))[0]));await b.waitForFunction(()=>$('preview').readyState>=2);assert.ok(await b.evaluate(()=>finalBlob.size)>0);
+}));
+test('Telegram channel plans persist, recordings advance only their channel and export into its folder',options,async()=>harness(async(cx,url)=>{
+  const p=await pageReady(cx,url);
+  await p.evaluate(()=>{$('capture-mode').value='telegram';applyCapturePreset();$('channel-name').value='Channel A';$('channel-url').value='https://t.me/channel_a';$('channel-episode').value='7';$('channel-plan').value='Video One | https://t.me/channel_a/10\nVideo Two | https://t.me/channel_a/11';});
+  await p.locator('#channel-save-plan').evaluate(button=>button.closest('details').open=true);await p.locator('#channel-save-plan').click();await waitForStorage(p,async()=>(await readStore('meta')).some(e=>e?.channelProfile && e.plan.length===2));
+  const id=await p.evaluate(()=>chosenChannel().id);await p.locator('#channel-plan-item').selectOption(await p.evaluate(()=>chosenChannel().plan[0].id));
+  await capture(p);await p.waitForTimeout(1200);await stopCapture(p);
+  await waitForStorage(p,async()=>(await readStore('meta')).some(e=>e?.channelProfile && e.nextEpisode===8));
+  const entry=await p.evaluate(async()=>(await readStore('recordings'))[0]);assert.equal(entry.channelId,id);assert.equal(entry.episode,7);assert.equal(entry.sourceUrl,'https://t.me/channel_a/10');assert.equal(entry.sourceTitle,'Video One');
+  await p.locator('#download').click();await p.waitForFunction(()=>window.lastDownload?.filename?.startsWith('WeScreen/Telegram/Channel A/'));assert.equal(await p.locator('#channel-video-title').inputValue(),'Video Two');
+  await p.reload();await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');await p.evaluate(id=>loadTelegramProfiles(id),id);assert.equal(await p.evaluate(()=>chosenChannel().plan.length),2);
+  await p.evaluate(()=>{$('capture-mode').value='general';applyCapturePreset();});await capture(p);await p.waitForTimeout(1200);await stopCapture(p);const entries=await p.evaluate(()=>readStore('recordings'));assert.equal(entries.filter(e=>e.channelId===id).length,1);
+}));
+test('channel switch and reload preserve selection; invalid plans keep input and library failures stay visible',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);
+ const ids=await p.evaluate(async()=>{for(const [id,name] of [['a','Channel A'],['b','Channel B']])await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({id,name,channelProfile:true,nextEpisode:1,exportFolder:'',plan:[{id:id+'-task',title:name+' Video',url:'https://t.me/'+id+'/1'}]},'channel:'+id));$('capture-mode').value='telegram';applyCapturePreset();await loadTelegramProfiles('a');return ['a','b'];});
+ await p.locator('#channel-select').selectOption(ids[1]);await p.waitForFunction(()=>$('channel-video-title').value==='Channel B Video');await p.reload();await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');assert.equal(await p.locator('#channel-select').inputValue(),'b');assert.equal(await p.locator('#channel-video-title').inputValue(),'Channel B Video');
+ await p.locator('#channel-plan').evaluate(input=>{input.closest('details').open=true;input.value='invalid draft without link';});await p.locator('#channel-save-plan').click();assert.equal(await p.locator('#channel-plan').inputValue(),'invalid draft without link');assert.equal(await p.evaluate(()=>chosenChannel().plan.length),1);
+ await p.evaluate(()=>{navigateWorkspace('library');librarySelection.add('missing');updateLibrarySelection();removeRecordings=async()=>{throw new Error('Injected removal failure');};});await p.locator('#bulk-delete').click();await p.waitForFunction(()=>$('library-status').textContent.includes('Injected removal failure'));assert.equal(await p.locator('#library-status').isVisible(),true);
+}));
+test('offline helper does not label retained tasks as lost',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);await cx.route('http://127.0.0.1:8765/**',route=>route.abort());await p.evaluate(async()=>{await runTx('tasks','readwrite',tx=>tx.objectStore('tasks').put({id:'retained-job',name:'Retained',state:'done',mode:'natural',createdAt:Date.now()}));navigateWorkspace('tasks');});await p.waitForFunction(()=>$('task-items').textContent.includes('Retained'));assert.match(await p.locator('#tasks-status').textContent(),/断开|未连接|连接/);assert.doesNotMatch(await p.locator('#task-items').textContent(),/任务已不存在|任务不存在|重新处理/);
+}));
+test('portrait rotation controls preview swapped dimensions and channel workbench supports skip/reorder',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);await capture(p);await p.waitForTimeout(1200);await stopCapture(p);await p.evaluate(async()=>openVideoEditor((await readStore('recordings'))[0]));await p.waitForFunction(()=>editorSize && $('rotation-preview').width>0);await p.locator('[data-rotate="90"]').click();assert.equal(await p.locator('#edit-rotation').inputValue(),'90');assert.deepEqual(await p.evaluate(()=>[$('rotation-preview').width,$('rotation-preview').height]),[180,320]);await p.locator('#edit-close').click();
+ await p.evaluate(async()=>{await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({id:'workbench',name:'Test Channel',channelProfile:true,nextEpisode:1,plan:[{id:'one',title:'One',url:'https://t.me/test/1'},{id:'two',title:'Two',url:'https://t.me/test/2'}]},'channel:workbench'));await loadTelegramProfiles('workbench');navigateWorkspace('channels');});await p.waitForFunction(()=>$('channel-plan-rows').children.length===2);await p.locator('#channel-plan-rows li').first().getByRole('button',{name:'跳过',exact:true}).click();await p.waitForFunction(()=>$('channel-plan-rows').textContent.includes('已跳过'));await p.locator('#channel-plan-rows li').last().getByRole('button',{name:'上移',exact:true}).click();await waitForStorage(p,async()=>(await readStore('meta','channel:workbench')).plan[0].id==='two');await p.locator('#channel-start').click();assert.equal(await p.locator('#capture-mode').inputValue(),'telegram');assert.equal(await p.locator('#setup').isVisible(),true);
+}));
+test('persistent batch queue pauses after one job and resumes after reload without duplicates',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);await capture(p);await p.waitForTimeout(1200);await stopCapture(p);const payload=Buffer.from(await p.evaluate(async()=>Array.from(new Uint8Array(await finalBlob.arrayBuffer()))));const jobs=new Map();let submissions=0;
+ await cx.route('http://127.0.0.1:8765/**',async route=>{const req=route.request(),u=new URL(req.url()),parts=u.pathname.split('/').filter(Boolean);let body;if(parts[0]==='health')body={ready:true,ai:true};else if(parts.length===1 && req.method()==='POST'){const id='batch-'+(++submissions);body={id};jobs.set(id,{id,state:'done',batchRef:u.searchParams.get('batchRef'),sourceId:u.searchParams.get('sourceId'),name:u.searchParams.get('name'),mode:u.searchParams.get('mode'),width:320,height:180,duration:1.2,size:payload.length,createdAt:Date.now()});if(submissions===1)await p.evaluate(()=>runTx('meta','readwrite',tx=>tx.objectStore('meta').put({paused:true},'batch-control')));}else if(parts.length===1)body={jobs:[...jobs.values()]};else if(parts[2]==='result'){await route.fulfill({status:200,contentType:'video/mp4',body:payload});return;}else body=jobs.get(parts[1]);await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});});
+ await p.evaluate(async()=>{const source=(await readStore('recordings'))[0];for(const id of ['q1','q2'])await batchUpdate({id,batchItem:true,sourceId:source.id,name:source.name,mode:'natural',state:'waiting',createdAt:Date.now()},{});await runBatch();});assert.equal(submissions,1);await p.reload();await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');await p.evaluate(()=>navigateWorkspace('tasks'));await p.locator('#batch-resume').click();await waitForStorage(p,async()=>(await batchItems()).every(item=>item.state==='done'));assert.equal(submissions,2);assert.equal(await p.evaluate(async()=>(await readStore('recordings')).length),3);
+}));

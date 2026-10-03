@@ -1,0 +1,8 @@
+enhancement/.venv/
+enhancement/.runtime/
+__pycache__/
+*.pyc
+
+# Intermediate local packages; current release packages are tracked.
+store/wescreen-1.5.0.zip
+store/wescreen-helper-1.5.0.zip

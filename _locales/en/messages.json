@@ -1,9 +1,35 @@
 {
-  "extDescription": { "message": "Record your screen, a window, or a tab to WebM — entirely on your device. No account, no upload, no tracking." },
-  "actionTitle": { "message": "Open the WeScreen recorder" },
-  "commandStop": { "message": "Stop the WeScreen recording" },
-  "commandPause": { "message": "Pause or resume the WeScreen recording" },
-  "popupLead": { "message": "Pick what to record and save the video." },
-  "popupPrivacy": { "message": "No account · No upload · No tracking: recordings stay on this device." },
-  "popupOpen": { "message": "Open the recorder" }
+  "extDescription": {
+    "message": "Record screens, windows or tabs to MP4/WebM locally. Manage recordings, crop and trim, and optionally enhance through an authenticated local helper."
+  },
+  "actionTitle": {
+    "message": "Open the WeScreen recorder"
+  },
+  "commandStop": {
+    "message": "Stop the WeScreen recording"
+  },
+  "commandPause": {
+    "message": "Pause or resume the WeScreen recording"
+  },
+  "popupLead": {
+    "message": "Pick what to record and save the video."
+  },
+  "popupPrivacy": {
+    "message": "No account · No upload · No tracking: recordings stay on this device."
+  },
+  "popupOpen": {
+    "message": "Open the recorder"
+  },
+  "popupUrlLabel": {
+    "message": "Open a link to record"
+  },
+  "popupLinkOpen": {
+    "message": "Open"
+  },
+  "popupLinkHint": {
+    "message": "After it opens, click WeScreen in that tab and start recording."
+  },
+  "popupInvalidUrl": {
+    "message": "Enter a valid http(s) URL."
+  }
 }
