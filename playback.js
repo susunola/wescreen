@@ -37,11 +37,11 @@ let activePlaybackId=null,playbackReady=false,playbackGeneration=0,lastPlaybackS
 function savePlaybackState() {
  if(!activePlaybackId || !playbackReady)return;
  const video=$('preview'),id=activePlaybackId;
- const value={time:video.ended ? 0:video.currentTime,rotation:playbackRotation,speed:video.playbackRate,zoom:playbackZoom,brightness:Number($('playback-brightness').value),contrast:Number($('playback-contrast').value),sharpness:Number($('playback-sharpness').value)};
+ const value={instantPreset:instantEnhancement,time:video.ended ? 0:video.currentTime,rotation:playbackRotation,speed:video.playbackRate,zoom:playbackZoom,brightness:Number($('playback-brightness').value),contrast:Number($('playback-contrast').value),sharpness:Number($('playback-sharpness').value)};
  runTx('meta','readwrite',tx=>tx.objectStore('meta').put(value,`playback:${id}`)).catch(error=>{if(id===activePlaybackId)$('playback-status').textContent=error.message;});
 }
 function beginPlaybackSource(id) {
- savePlaybackState();activePlaybackId=id;playbackReady=false;playbackGeneration++;lastPlaybackSave=0;
+ instantEnhancement=null;updateInstantEnhancementButton();savePlaybackState();activePlaybackId=id;playbackReady=false;playbackGeneration++;lastPlaybackSave=0;
  $('playback-status').textContent='';resetPlaybackTuning();$('preview').playbackRate=1;$('playback-speed').value='1';
  refreshPlaybackVersions().catch(error=>$('playback-status').textContent=error.message);
 }
@@ -50,7 +50,7 @@ async function restorePlaybackState() {
  try {
   const state=id ? await readStore('meta',`playback:${id}`):null;
   if(generation!==playbackGeneration)return;
-  if(state){setPlaybackRotation(state.rotation || 0);$('playback-speed').value=String(state.speed || 1);video.playbackRate=Number($('playback-speed').value) || 1;playbackZoom=Math.max(1,Math.min(3,state.zoom || 1));$('playback-zoom').value=String(playbackZoom);for(const key of ['brightness','contrast','sharpness'])$('playback-'+key).value=String(state[key] ?? (key==='sharpness' ? 0:1));applyPlaybackTuning();if(Number.isFinite(video.duration))video.currentTime=Math.max(0,Math.min(state.time || 0,video.duration-.1));}
+  if(state){instantEnhancement=state.instantPreset || null;updateInstantEnhancementButton();setPlaybackRotation(state.rotation || 0);$('playback-speed').value=String(state.speed || 1);video.playbackRate=Number($('playback-speed').value) || 1;playbackZoom=Math.max(1,Math.min(3,state.zoom || 1));$('playback-zoom').value=String(playbackZoom);for(const key of ['brightness','contrast','sharpness'])$('playback-'+key).value=String(state[key] ?? (key==='sharpness' ? 0:1));applyPlaybackTuning();if(Number.isFinite(video.duration))video.currentTime=Math.max(0,Math.min(state.time || 0,video.duration-.1));}
   const pending=pendingPlaybackPosition;
   if(pending?.id===id){pendingPlaybackPosition=null;if(Number.isFinite(video.duration))video.currentTime=Math.min(pending.time,Math.max(0,video.duration-.1));if(pending.playing)video.play().catch(error=>$('playback-status').textContent=error.message);}
   playbackReady=true;layoutPlaybackRotation();
@@ -106,3 +106,38 @@ function attachPlaybackId(id){if(!id || activePlaybackId===id)return;beginPlayba
 for(const event of ['pointerup','pointercancel'])window.addEventListener(event,()=>{if(playbackSeeking){playbackSeeking=false;savePlaybackState();}});
 $('playback-volume').oninput=()=>{$('preview').volume=Number($('playback-volume').value);};
 $('preview').addEventListener('volumechange',()=>{$('playback-volume').value=String($('preview').volume);});
+
+let instantEnhancement=null,playbackAIBusy=false;
+function updateInstantEnhancementButton(){const button=$('playback-instant');button.setAttribute('aria-pressed',String(!!instantEnhancement));button.textContent=instantEnhancement ? E('恢复原画','Restore picture'):L('instantEnhance');}
+$('playback-instant').onclick=()=>{
+ if(instantEnhancement){for(const [key,value] of Object.entries(instantEnhancement))$('playback-'+key).value=value;instantEnhancement=null;}
+ else{instantEnhancement=Object.fromEntries(['brightness','contrast','sharpness'].map(key=>[key,$('playback-'+key).value]));$('playback-brightness').value='1.05';$('playback-contrast').value='1.1';$('playback-sharpness').value='0.2';}
+ applyPlaybackTuning();updateInstantEnhancementButton();$('playback-status').textContent=instantEnhancement ? E('即时增强已开启，仅影响观看，原文件保留。','Instant enhancement enabled for viewing; original file preserved.'):E('已恢复开启增强前的画面设置。','Previous picture settings restored.');
+};
+async function completePlaybackAI(task,savedId){
+ if(!task.playbackAI || activePlaybackId!==task.sourceId || !$('result').getClientRects().length)return;
+ const entry=await readStore('recordings',savedId);if(!entry)return;
+ const video=$('preview');pendingPlaybackPosition={id:savedId,time:video.currentTime,playing:!video.paused};await playRecording(entry);
+ $('playback-status').textContent=E('AI 修复完成，已切换增强版；原视频保留。','AI repair complete. Switched to the enhanced version; original preserved.');
+}
+$('playback-ai').onclick=async()=>{
+ if(playbackAIBusy)return;playbackAIBusy=true;$('playback-ai').disabled=true;
+ const sourceId=activePlaybackId;let task;
+ try{
+  const source=await readStore('recordings',sourceId);if(!source)throw new Error(E('请先打开录像。','Open a recording first.'));
+  $('playback-status').textContent=E('正在连接本机 AI…','Connecting to local AI…');
+  if(!helperHealth)await connectHelper();
+  if(!helperHealth){$('playback-status').textContent=E('AI 修复需要本机处理程序，正在打开连接设置。','AI repair requires the local helper. Opening connection settings.');await openEnhancement(source);return;}
+  const mode=helperHealth.ai ? 'ai':helperHealth.strong ? 'strong':null;
+  if(!mode)throw new Error(E('未安装 AI 模型。请在关于页安装增强包。','No AI model installed. Install the enhancement package from About.'));
+  task=await submitProcessing(source,{mode,preview:false,start:0,playbackAI:true});
+  while(true){
+   const info=await(await enhancementRequest(`/jobs/${task.id}`)).json();
+   if(activePlaybackId===sourceId)$('playback-status').textContent=E('AI 后台修复中，可继续播放 · ','AI repair runs in the background; keep watching · ')+Math.round((info.progress || 0)*100)+'%';
+   if(info.state==='error' || info.state==='cancelled')throw new Error(info.error || L('jobCancelled'));
+   if(info.state==='done'){const id=await saveTaskResult({...task,...info});await completePlaybackAI(task,id);break;}
+   await new Promise(resolve=>setTimeout(resolve,1500));
+  }
+ }catch(error){if(activePlaybackId===sourceId)$('playback-status').textContent=E('AI 修复未完成：','AI repair did not finish: ')+error.message+(task ? E('；可在视频处理页查看或导出结果。','; inspect or export the result from Processing.'):'');}
+ finally{playbackAIBusy=false;$('playback-ai').disabled=false;renderEnhancementTasks().catch(()=>{});}
+};

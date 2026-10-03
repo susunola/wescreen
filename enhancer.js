@@ -163,7 +163,8 @@ async function renderEnhancementTasks() {
     for(const task of [...merged.values()].sort((a,b)=>b.createdAt-a.createdAt)){
       const row=document.createElement('li');row.className='task-row';
       const title=document.createElement('strong');title.textContent=task.name || task.id;row.append(title);
-      const saved=records.find(entry=>entry.helperJobId===task.id),remote=jobs.some(job=>job.id===task.id);
+      let saved=records.find(entry=>entry.helperJobId===task.id);const remote=jobs.some(job=>job.id===task.id);
+      if(task.playbackAI && task.state==='done' && remote && !saved){try{const id=await saveTaskResult(task);saved={id};if(typeof completePlaybackAI==='function')await completePlaybackAI(task,id);}catch(error){$('tasks-status').textContent=error.message;}}
       const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
       if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error || L('taskLost');row.append(error);}
       if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);}
