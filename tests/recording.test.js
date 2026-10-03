@@ -268,3 +268,26 @@ test('Telegram mode refuses to silently record a video without shared audio', as
   assert.equal(seen.releases, 1);
   assert.equal(seen.notices.at(-1), 'telegramNoAudio');
 });
+
+test('completed segments stay in the library without triggering a download', async () => {
+  let downloads = 0, archived = 0;
+  const context = { Blob, recordingMime: 'video/webm', Promise,
+    archiveRecording: async () => { archived++; return 'saved'; },
+    download: () => { downloads++; }, storageError: () => {}, setHint: () => {} };
+  vm.createContext(context);
+  vm.runInContext(extract('async function saveCompletedSegment(', 'async function saveSegmentAndContinue('), context);
+  const state = { chunks: [new Blob(['video'])], recorder: { mimeType: 'video/webm' }, writes: new Set(), index: 1 };
+  assert.equal(await context.saveCompletedSegment(state), 'saved');
+  assert.equal(archived, 1); assert.equal(downloads, 0); assert.equal(state.chunks.length, 0);
+});
+
+test('a failed segment archive does not trigger an unsolicited download', async () => {
+  let downloads = 0;
+  const context = { Blob, recordingMime: 'video/webm', Promise,
+    archiveRecording: async () => { throw new Error('disk failure'); },
+    download: () => { downloads++; }, storageError: () => {}, setHint: () => {} };
+  vm.createContext(context);
+  vm.runInContext(extract('async function saveCompletedSegment(', 'async function saveSegmentAndContinue('), context);
+  await assert.rejects(context.saveCompletedSegment({ chunks: [new Blob(['video'])], recorder: {}, writes: new Set() }), /disk failure/);
+  assert.equal(downloads, 0);
+});

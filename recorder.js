@@ -532,7 +532,7 @@ async function saveCompletedSegment(state) {
   let id = null;
   try { id = await archiveRecording(blob, state.name, state.session, state.index, false, state.details); }
   catch (error) { storageError(); throw error; }
-  finally { download(blob, state.name, id); state.chunks = []; }
+  state.chunks = [];
   state.savedId=id;setHint('segmentSaved', [state.index]);return id;
 }
 async function saveSegmentAndContinue() {
@@ -799,9 +799,7 @@ async function handleRecovery(keep) {
       const stored = await loadChunks(state.session);
       if (keep && stored.length) {
         const blob = new Blob(stored, { type: state.mimeType || 'video/webm' });
-        let id = null;
-        try { id = await archiveRecording(blob, state.name || 'recovered-recording.webm', state.session, state.index || 1, true, { course: state.course || '', episode: state.episode, channelId: state.channelId, channelName: state.channelName, channelUrl: state.channelUrl, sourceUrl: state.sourceUrl, sourceTitle: state.sourceTitle, exportFolder: state.exportFolder, recovered: true }); }
-        finally { download(blob, state.name || 'recovered-recording.webm', id); }
+        await archiveRecording(blob, state.name || 'recovered-recording.webm', state.session, state.index || 1, true, { course: state.course || '', episode: state.episode, channelId: state.channelId, channelName: state.channelName, channelUrl: state.channelUrl, sourceUrl: state.sourceUrl, sourceTitle: state.sourceTitle, exportFolder: state.exportFolder, recovered: true });
       } else await discardSession(state.session);
     }
     await refreshRecovery();

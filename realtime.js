@@ -47,7 +47,7 @@ async function processRealtimeFrame(mediaTime){
 realtimeButton.onclick=async()=>{
  if(realtimeAI.enabled){stopRealtimeAI();return;}
  realtimeButton.disabled=true;realtimeHint.textContent=E('正在检查实时 AI…','Checking realtime AI…');const source=activePlaybackId;
- try{const health=helperHealth || await connectHelper();if(source!==activePlaybackId)return;
+ try{const health=await connectHelper();if(source!==activePlaybackId)return;
   if(!health?.realtime){realtimeHint.textContent=E('请启动或更新本机增强包；需要支持实时 AI 的新版程序。','Start or update the local helper to support realtime AI.');return;}
   realtimeAI.enabled=true;realtimeAI.generation++;realtimeAI.edge=960;realtimeAI.average=0;realtimeAI.failures=0;realtimeAI.slow=0;realtimeAI.frames=[];realtimeButton.setAttribute('aria-pressed','true');
   processRealtimeFrame($('preview').currentTime);scheduleRealtimeAI();
