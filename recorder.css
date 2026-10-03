@@ -209,3 +209,6 @@ details[open] > summary { margin-bottom: 16px; }
 #channel-workbench .channel-heading { display:block; margin-bottom:18px; }
 .setup-form>label { margin-bottom:14px; }
 #setup .record-options legend { margin-bottom:8px; }
+
+/* Separate workspace navigation from page content. */
+.workspace-nav { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 22px; }
