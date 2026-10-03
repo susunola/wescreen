@@ -212,3 +212,9 @@ details[open] > summary { margin-bottom: 16px; }
 
 /* Separate workspace navigation from page content. */
 .workspace-nav { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 22px; }
+
+/* All workspace icons share a single optical box and baseline. */
+.workspace-nav button:not(#live-return) { display:inline-flex; align-items:center; justify-content:center; gap:8px; line-height:20px; }
+.workspace-nav .nav-icon { display:block; width:20px; height:20px; flex:0 0 20px; }
+.workspace-nav button>span[data-i18n] { display:block; line-height:20px; }
+@media(max-width:650px) { .workspace-nav .nav-icon { width:18px; height:18px; flex-basis:18px; } }
