@@ -125,7 +125,7 @@ details[open] > summary { margin-bottom: 16px; }
 #enhance-estimate:empty, #enhance-status:empty { display: none; }
 
 .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.github-link { display: inline-flex; align-items: center; padding: 10px 14px; border: 1px solid #486279; border-radius: 8px; text-decoration: none; white-space: nowrap; }
+.github-link { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #486279; border-radius: 8px; text-decoration: none; white-space: nowrap; }
 
 #course-panel[hidden] { display: none; }
 
@@ -218,3 +218,5 @@ details[open] > summary { margin-bottom: 16px; }
 .workspace-nav .nav-icon { display:block; width:20px; height:20px; flex:0 0 20px; }
 .workspace-nav button>span[data-i18n] { display:block; line-height:20px; }
 @media(max-width:650px) { .workspace-nav .nav-icon { width:18px; height:18px; flex-basis:18px; } }
+
+.github-logo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; filter: invert(1); }
