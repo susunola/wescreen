@@ -222,3 +222,12 @@ details[open] > summary { margin-bottom: 16px; }
 .github-logo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; filter: invert(1); }
 
 #channel-plan-dialog .channel-plan-actions { gap: 16px; margin-top: 4px; }
+
+#playback-stage { position:relative; width:100%; overflow:hidden; background:#050c14; border-radius:8px; }
+#playback-stage #preview { position:absolute; left:50%; top:50%; max-width:none; margin:0; transform-origin:center; object-fit:contain; }
+.playback-toolbar { margin:14px 0; gap:12px; }
+.playback-angle { display:flex; align-items:center; gap:6px; margin:0; font-size:12px; }
+.playback-angle input { width:76px; padding:9px; }
+#rotated-playback-controls[hidden] { display:none; }
+#rotated-seek { flex:1; min-width:100px; width:auto; }
+#playback-shell:fullscreen { background:#050c14; padding:16px; overflow:auto; }
