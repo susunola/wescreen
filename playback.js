@@ -108,7 +108,7 @@ $('playback-volume').oninput=()=>{$('preview').volume=Number($('playback-volume'
 $('preview').addEventListener('volumechange',()=>{$('playback-volume').value=String($('preview').volume);});
 
 let instantEnhancement=null,playbackAIBusy=false;
-function updateInstantEnhancementButton(){const button=$('playback-instant');button.setAttribute('aria-pressed',String(!!instantEnhancement));button.textContent=instantEnhancement ? E('恢复原画','Restore picture'):L('instantEnhance');}
+function updateInstantEnhancementButton(){const button=$('playback-instant');button.setAttribute('aria-pressed',String(!!instantEnhancement));button.textContent=E('即时增强','Instant enhancement');}
 $('playback-instant').onclick=()=>{
  if(instantEnhancement){for(const [key,value] of Object.entries(instantEnhancement))$('playback-'+key).value=value;instantEnhancement=null;}
  else{instantEnhancement=Object.fromEntries(['brightness','contrast','sharpness'].map(key=>[key,$('playback-'+key).value]));$('playback-brightness').value='1.05';$('playback-contrast').value='1.1';$('playback-sharpness').value='0.2';}
@@ -149,10 +149,36 @@ $('preview').addEventListener('loadedmetadata',()=>{$('playback-time').textConte
 let fullscreenControlsTimer;
 function revealFullscreenControls(){
  const shell=$('playback-shell');shell.classList.remove('controls-hidden');clearTimeout(fullscreenControlsTimer);
- if(document.fullscreenElement===shell && !$('preview').paused)fullscreenControlsTimer=setTimeout(()=>{shell.classList.add('controls-hidden');},2200);
+ if(!$('preview').paused)fullscreenControlsTimer=setTimeout(()=>{if(!shell.querySelector('details[open]'))shell.classList.add('controls-hidden');},2200);
 }
 $('playback-shell').addEventListener('pointermove',revealFullscreenControls);
 $('playback-shell').addEventListener('pointerdown',revealFullscreenControls);
 $('preview').addEventListener('play',revealFullscreenControls);
 $('preview').addEventListener('pause',revealFullscreenControls);
 document.addEventListener('fullscreenchange',revealFullscreenControls);
+
+// Cinema controls keep all viewing tools inside the player, including fullscreen.
+const cinemaTransport=$('rotated-playback-controls');
+const qualityMenu=document.createElement('details');qualityMenu.id='playback-quality-menu';qualityMenu.className='cinema-menu';
+const qualitySummary=document.createElement('summary');qualitySummary.textContent=E('画质','Quality');qualitySummary.dataset.i18n='labelQuality';qualityMenu.append(qualitySummary);
+const qualityPanel=document.createElement('div');qualityPanel.className='cinema-popover';qualityPanel.setAttribute('role','group');qualityPanel.setAttribute('aria-label',E('画质设置','Quality settings'));
+const originalPicture=document.createElement('button');originalPicture.type='button';originalPicture.textContent=E('原画','Original');originalPicture.dataset.i18n='originalPicture';originalPicture.onclick=()=>{if(instantEnhancement)$('playback-instant').click();$('playback-tuning-reset').click();};$('playback-instant').dataset.i18n='instantViewing';qualityPanel.append(originalPicture,$('playback-instant'),$('playback-ai'),$('playback-enhance'));qualityMenu.append(qualityPanel);cinemaTransport.insertBefore(qualityMenu,$('playback-pip'));
+const rotationMenu=$('playback-rotation-menu');rotationMenu.classList.add('cinema-menu');const rotationSummary=rotationMenu.querySelector(':scope > summary');rotationSummary.removeAttribute('data-i18n');rotationSummary.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7V3l-4 4a8 8 0 1 0 4 10M20 3h-5"/></svg><span class="sr-only" data-i18n="playerView">旋转与视图</span>';rotationSummary.title=E('旋转与视图','Rotation & view');rotationMenu.querySelector('.playback-toolbar').classList.add('cinema-popover');rotationMenu.querySelector('.playback-toolbar').append(document.querySelector('.playback-tuning'));cinemaTransport.insertBefore(rotationMenu,$('playback-pip'));
+const cinemaMenus=[qualityMenu,rotationMenu];for(const menu of cinemaMenus){menu.querySelector(':scope > summary').addEventListener('click',()=>{cinemaMenus.filter(other=>other!==menu).forEach(other=>other.open=false);revealFullscreenControls();});menu.addEventListener('toggle',revealFullscreenControls);}
+document.addEventListener('pointerdown',event=>{for(const menu of cinemaMenus)if(!menu.contains(event.target))menu.open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')cinemaMenus.forEach(menu=>menu.open=false);});
+for(const [id,delta] of [['playback-back',-10],['playback-forward',10]]){const button=document.createElement('button');button.id=id;button.type='button';button.title=E(delta<0?'后退 10 秒':'快进 10 秒',delta<0?'Back 10 seconds':'Forward 10 seconds');button.setAttribute('aria-label',button.title);button.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${delta<0?'M6 5 2 9l4 4M2 9h11a8 8 0 1 1-7 12':'M18 5l4 4-4 4m4-4H11a8 8 0 1 0 7 12'}"/><text x="8" y="17" font-size="8" stroke="none" fill="currentColor">10</text></svg>`;button.onclick=()=>{const v=$('preview');v.currentTime=Math.max(0,Math.min(Number.isFinite(v.duration)?v.duration:Infinity,v.currentTime+delta));};cinemaTransport.insertBefore(button,$('playback-time'));}
+$('playback-shell').addEventListener('pointerleave',()=>{if(!$('preview').paused && !cinemaMenus.some(menu=>menu.open))$('playback-shell').classList.add('controls-hidden');});
+
+const cinemaThumbnail=document.createElement('div');cinemaThumbnail.className='cinema-thumbnail';cinemaThumbnail.hidden=true;
+const cinemaCanvas=document.createElement('canvas');cinemaCanvas.width=160;cinemaCanvas.height=90;const cinemaTime=document.createElement('span');cinemaThumbnail.append(cinemaCanvas,cinemaTime);document.querySelector('.player-timeline').append(cinemaThumbnail);
+const cinemaScrubVideo=document.createElement('video');cinemaScrubVideo.muted=true;cinemaScrubVideo.preload='metadata';let cinemaHoverTime=0;
+cinemaScrubVideo.addEventListener('seeked',()=>{try{cinemaCanvas.getContext('2d').drawImage(cinemaScrubVideo,0,0,160,90);}catch{}});
+function seekCinemaThumbnail(){if(cinemaScrubVideo.readyState>=1 && !cinemaScrubVideo.seeking)cinemaScrubVideo.currentTime=cinemaHoverTime;}
+cinemaScrubVideo.addEventListener('loadedmetadata',seekCinemaThumbnail);
+$('rotated-seek').addEventListener('pointermove',event=>{const v=$('preview');if(!Number.isFinite(v.duration)||v.duration<=0)return;const bounds=event.currentTarget.getBoundingClientRect(),fraction=Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width));cinemaHoverTime=Math.min(v.duration-.01,fraction*v.duration);cinemaTime.textContent=fmt(cinemaHoverTime*1000);cinemaThumbnail.hidden=false;cinemaThumbnail.style.left=`${Math.max(84,Math.min(bounds.width-84,event.clientX-bounds.left))}px`;if(cinemaScrubVideo.src!==v.currentSrc){cinemaScrubVideo.src=v.currentSrc;cinemaScrubVideo.load();}else seekCinemaThumbnail();});
+$('rotated-seek').addEventListener('pointerleave',()=>cinemaThumbnail.hidden=true);
+
+$('preview').addEventListener('loadedmetadata',()=>{cinemaScrubVideo.removeAttribute('src');cinemaScrubVideo.load();cinemaThumbnail.hidden=true;});
+const cinemaFooter=document.createElement('div');cinemaFooter.className='cinema-footer';const cinemaMetadata=document.createElement('span');cinemaMetadata.textContent=E('本地视频 · 原文件保留','Local video · Original preserved');cinemaFooter.append(cinemaMetadata,$('download'));$('playback-shell').append(cinemaFooter);
+$('preview').addEventListener('loadedmetadata',()=>{const v=$('preview');cinemaMetadata.textContent=`${v.videoWidth} × ${v.videoHeight} · ${E('本地视频','Local video')}`;});
