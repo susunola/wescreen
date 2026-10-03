@@ -30,14 +30,14 @@ async function discoverHelperToken(){
 async function connectHelper(){
  if(helperConnecting)return helperConnecting;
  helperConnecting=(async()=>{
-  enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');
+  $('helper-check').disabled=true;$('helper-check').textContent=E('连接中…','Connecting…');enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');
   try{
    if(!enhancementToken)await discoverHelperToken();
    try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
    $('helper-status').textContent=L('connectReady');$('helper-connection').open=false;updateEnhancementMode();await renderEnhancementTasks();return helperHealth;
-  }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('本机程序已连接另一扩展。请在原扩展目录更新版本，或使用高级连接设置。','Helper is paired with another extension. Update the original extension directory or use Advanced connection settings.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');updateEnhancementMode();return null;}
- })();try{return await helperConnecting;}finally{helperConnecting=null;updateTaskConnection(!!helperHealth);}
+  }catch(error){$('helper-status').textContent=/paired with another/.test(error.message) ? E('旧扩展配对阻止了连接。在本机增强包中双击 reset-connection.command，再点击自动连接。录像和处理结果会保留。','Old extension pairing blocks this connection. Open reset-connection.command in the local helper package, then retry. Videos and results are preserved.') : E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');updateEnhancementMode();return null;}
+ })();try{return await helperConnecting;}finally{helperConnecting=null;$('helper-check').disabled=false;$('helper-check').textContent=L('autoConnect');updateTaskConnection(!!helperHealth);}
 }
 function enhancementControls(busy) {
   enhancementBusy=busy;$('enhance-progress').hidden=!busy;$('enhance-cancel').hidden=!busy;

@@ -55,3 +55,7 @@ FSRCNN x2，来自 https://github.com/Saafke/FSRCNN_Tensorflow ，Apache 2.0，�
 模型 SHA-256：`366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c`。推理前验证该摘要。
 
 OpenCV 说明：https://docs.opencv.org/5.0/extra_modules/dnn_superres.html
+
+## 重置旧扩展配对
+
+更换安装目录或从开发版切换商店版后，如果提示连接另一扩展，请关闭旧扩展，在增强包目录双击 `reset-connection.command`，或运行 `bash enhancement/reset-connection.command`。然后回到当前扩展点击自动连接。只重置配对，不删除录像、结果或模型。
