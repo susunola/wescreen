@@ -57,6 +57,7 @@ function savePlaybackState() {
  runTx('meta','readwrite',tx=>tx.objectStore('meta').put(value,`playback:${id}`)).catch(error=>{if(id===activePlaybackId)$('playback-status').textContent=error.message;});
 }
 function beginPlaybackSource(id) {
+ if(typeof playerColor!=='undefined'){playerColor={mode:'unknown'};nativeSmartHDR=false;}
  instantEnhancement=null;updateInstantEnhancementButton();savePlaybackState();activePlaybackId=id;playbackReady=false;playbackGeneration++;lastPlaybackSave=0;
  $('playback-status').textContent='';$('playback-name').textContent=finalName || E('视频播放','Video playback');resetPlaybackTuning();$('preview').playbackRate=1;$('playback-speed').value='1';
  refreshPlaybackVersions().catch(error=>$('playback-status').textContent=error.message);
@@ -79,6 +80,7 @@ $('preview').addEventListener('timeupdate',()=>{if(Date.now()-lastPlaybackSave>2
 for(const event of ['pause','seeked','ended'])$('preview').addEventListener(event,savePlaybackState);
 window.addEventListener('pagehide',savePlaybackState);
 function applyPlaybackTuning(){
+ if(typeof playerColor!=='undefined' && playerColor.mode==='hdr'){$('preview').style.filter='none';return;}
  const sharp=Number($('playback-sharpness').value);
  $('playback-sharp-kernel').setAttribute('kernelMatrix',`0 ${-sharp} 0 ${-sharp} ${1+4*sharp} ${-sharp} 0 ${-sharp} 0`);
  $('preview').style.filter=`brightness(${$('playback-brightness').value}) contrast(${$('playback-contrast').value})${sharp ? ' url(#playback-sharp)':''}`;savePlaybackState();

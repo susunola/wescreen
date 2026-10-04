@@ -196,6 +196,7 @@ function clearPreview() {
 }
 function setPreview(blob) {
   if(typeof beginPlaybackSource==='function')beginPlaybackSource(finalId);
+  if(typeof detectPlaybackColor==='function')detectPlaybackColor(blob);
   clearPreview();
   if(typeof resetPlaybackRotation==='function')resetPlaybackRotation();
   const video = $('preview');

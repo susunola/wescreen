@@ -1,5 +1,5 @@
 // Best-effort live neural SR. Audio and playback clock always stay on the original video.
-const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1,project:null,lossless:false,rgb:false,maxLong:1080,maxShort:1080,outputScale:1,engine:null,nextAt:0};
+const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1,project:null,lossless:false,rgb:false,maxLong:1080,maxShort:1080,outputScale:1,engine:null,nextAt:0,timelyStreak:0};
 const realtimeCanvas=document.createElement('canvas');realtimeCanvas.id='realtime-ai-canvas';realtimeCanvas.hidden=true;$('playback-stage').prepend(realtimeCanvas);
 const realtimeCapture=document.createElement('canvas');
 const realtimeButton=document.createElement('button');realtimeButton.id='playback-realtime';realtimeButton.type='button';realtimeButton.dataset.i18n='smartRealtime';realtimeButton.textContent=L('smartRealtime');realtimeButton.setAttribute('aria-pressed','false');qualityPanel.insertBefore(realtimeButton,$('playback-instant'));
@@ -9,7 +9,7 @@ new MutationObserver(syncRealtimeLayout).observe($('preview'),{attributes:true,a
 function stopRealtimeAI(message=''){
  realtimeAI.enabled=false;realtimeAI.generation++;realtimeAI.abort?.abort();realtimeAI.abort=null;realtimeAI.busy=false;
  if(realtimeAI.callback!==null){if($('preview').cancelVideoFrameCallback)$('preview').cancelVideoFrameCallback(realtimeAI.callback);else cancelAnimationFrame(realtimeAI.callback);}realtimeAI.callback=null;
- realtimeCanvas.hidden=true;realtimeButton.setAttribute('aria-pressed','false');realtimeHint.textContent=message;realtimeAI.frames=[];
+ realtimeCanvas.hidden=true;realtimeAI.timelyStreak=0;realtimeButton.setAttribute('aria-pressed','false');realtimeHint.textContent=message;realtimeAI.frames=[];
 }
 function scheduleRealtimeAI(){
  if(!realtimeAI.enabled || realtimeAI.callback!==null || $('preview').paused)return;
@@ -28,6 +28,7 @@ async function processRealtimeFrame(mediaTime){
   let frame;if(realtimeAI.rgb){const rgba=realtimeCapture.getContext('2d').getImageData(0,0,realtimeCapture.width,realtimeCapture.height).data;frame=new Uint8Array(realtimeCapture.width*realtimeCapture.height*3);for(let i=0,j=0;i<rgba.length;i+=4){frame[j++]=rgba[i];frame[j++]=rgba[i+1];frame[j++]=rgba[i+2];}}else frame=await new Promise(resolve=>realtimeCapture.toBlob(resolve,mime,.94));if(!frame)throw new Error('Frame unavailable');
   if(generation!==realtimeAI.generation)return;
   const controller=new AbortController();realtimeAI.abort=controller;const timeout=setTimeout(()=>controller.abort(),realtimeAI.rgb?5000:1800);
+  if(typeof playerColor!=='undefined' && playerColor.mode==='hdr'){stopRealtimeAI();return;}
   let response;try{response=await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':mime,...(realtimeAI.rgb?{'X-Frame-Width':String(realtimeCapture.width),'X-Frame-Height':String(realtimeCapture.height),'X-Protect-Text':'1',...(realtimeAI.outputScale>=2?{'X-Output-Scale':String(parseFloat(video.style.width)>video.videoWidth*1.05 || parseFloat(video.style.height)>video.videoHeight*1.05?2:1)}:{})}:{})},signal:controller.signal});}finally{clearTimeout(timeout);}
   let bitmap;if(realtimeAI.rgb){const rgb=new Uint8Array(await response.arrayBuffer()),w=Number(response.headers.get('X-Frame-Width')||realtimeCapture.width),h=Number(response.headers.get('X-Frame-Height')||realtimeCapture.height);if(!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||w>3840||h>3840||w*h>1920*1080*4)throw new Error('Invalid RGB dimensions');if(rgb.length!==w*h*3)throw new Error('Invalid RGB result');const rgba=new Uint8ClampedArray(w*h*4);for(let i=0,j=0;i<rgb.length;i+=3){rgba[j++]=rgb[i];rgba[j++]=rgb[i+1];rgba[j++]=rgb[i+2];rgba[j++]=255;}bitmap=await createImageBitmap(new ImageData(rgba,w,h));}else bitmap=await createImageBitmap(await response.blob());
   try{
@@ -35,9 +36,11 @@ async function processRealtimeFrame(mediaTime){
    const elapsed=performance.now()-started;realtimeAI.average=realtimeAI.average ? realtimeAI.average*.75+elapsed*.25:elapsed;
    realtimeAI.failures=0;
    // Preserve the original clock: late AI frames must not cover newer video frames.
-   const timely=!playbackSeeking && Math.abs(video.currentTime-mediaTime)<=.15;
+   const timely=!playbackSeeking && Math.abs(video.currentTime-mediaTime)<=.15 && (video.paused || realtimeAI.average<=150);
+   realtimeAI.timelyStreak=timely?realtimeAI.timelyStreak+1:0;
+   const present=timely && (video.paused || realtimeAI.timelyStreak>=3);
    if(!timely)realtimeCanvas.hidden=true;
-   if(timely){realtimeCanvas.width=bitmap.width;realtimeCanvas.height=bitmap.height;const outputContext=realtimeCanvas.getContext('2d');outputContext.imageSmoothingEnabled=true;outputContext.imageSmoothingQuality='high';outputContext.drawImage(bitmap,0,0);syncRealtimeLayout();realtimeAI.mediaTime=mediaTime;realtimeCanvas.hidden=false;realtimeAI.frames.push(performance.now());realtimeAI.frames=realtimeAI.frames.slice(-20);}
+   if(present){if(realtimeCanvas.width!==bitmap.width)realtimeCanvas.width=bitmap.width;if(realtimeCanvas.height!==bitmap.height)realtimeCanvas.height=bitmap.height;const outputContext=realtimeCanvas.getContext('2d');outputContext.imageSmoothingEnabled=true;outputContext.imageSmoothingQuality='high';outputContext.drawImage(bitmap,0,0);syncRealtimeLayout();realtimeAI.mediaTime=mediaTime;realtimeCanvas.hidden=false;realtimeAI.frames.push(performance.now());realtimeAI.frames=realtimeAI.frames.slice(-20);}
    realtimeAI.nextAt=performance.now()+Math.max(0,realtimeAI.average-33);
    const frames=realtimeAI.frames,fps=frames.length>1 ? Math.round((frames.length-1)*1000/(frames.at(-1)-frames[0])):0;
    realtimeHint.textContent=(realtimeAI.engine || 'FSRCNN fallback')+` · ${bitmap.width}×${bitmap.height}${fps ? ` · ${fps} fps`:''}`+E(' · 速度不足时隔帧，分辨率固定',' · Frames skipped under load; resolution stays fixed');
@@ -58,7 +61,7 @@ realtimeButton.onclick=async()=>{
  }finally{realtimeButton.disabled=false;}
 };
 originalPicture.addEventListener('click',()=>stopRealtimeAI());
-$('preview').addEventListener('play',scheduleRealtimeAI);
+$('preview').addEventListener('play',()=>{realtimeCanvas.hidden=true;realtimeAI.timelyStreak=0;scheduleRealtimeAI();});
 $('preview').addEventListener('seeking',()=>{realtimeAI.generation++;realtimeAI.request++;realtimeAI.busy=false;realtimeAI.nextAt=0;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;});
 $('preview').addEventListener('seeked',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
 $('preview').addEventListener('pause',()=>{if(realtimeAI.enabled){realtimeAI.generation++;realtimeAI.request++;realtimeAI.abort?.abort();realtimeAI.busy=false;realtimeAI.nextAt=0;processRealtimeFrame($('preview').currentTime);}});

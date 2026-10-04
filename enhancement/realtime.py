@@ -94,6 +94,19 @@ def enhance_frame(data, model_path, model_hash, lossless=False):
     return encoded.tobytes(), (time.perf_counter()-started)*1000
 
 
+def balanced_sdr_tone(frame):
+    """Bounded luminance detail: protect highlights, blacks and chromaticity."""
+    import cv2
+    import numpy as np
+    pixels=frame.astype(np.float32)
+    luminance=pixels[...,0]*.0722+pixels[...,1]*.7152+pixels[...,2]*.2126
+    base=cv2.GaussianBlur(luminance,(0,0),3)
+    weight=np.clip((luminance-16)/48,0,1)*np.clip((235-luminance)/48,0,1)
+    delta=np.clip((luminance-base)*.06,-2,2)*weight
+    # Equal channel adjustment preserves hue; never stretch endpoints.
+    return np.clip(pixels+delta[...,None],0,255).round().astype(np.uint8)
+
+
 def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, output_scale=1):
     """Full-resolution spatial fallback with optional genuine 2x output."""
     if min(width,height)<2 or max(width,height)>1920 or min(width,height)>1080 or len(data)!=width*height*3:
@@ -120,5 +133,6 @@ def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, 
                 mask=cv2.resize(mask,size,interpolation=cv2.INTER_LINEAR)
             alpha=np.clip(mask,0,1)[...,None]
             restored=np.clip(restored.astype(np.float32)*(1-alpha)+weak.astype(np.float32)*alpha,0,255).round().astype(np.uint8)
+        restored=balanced_sdr_tone(restored)
         output=cv2.cvtColor(restored,cv2.COLOR_BGR2RGB)
     return output.tobytes(),(time.perf_counter()-started)*1000
