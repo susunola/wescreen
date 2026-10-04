@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.23.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.24.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -95,3 +95,5 @@ The five workspaces share a compact charcoal and champagne interface. Recording 
 Use **Open local video**, or drop a video onto the library/player, for direct File-backed playback without importing. Supported codecs depend on the browser; use **Import video** to keep a persistent library copy.
 
 The dedicated **Player** tab opens local files without importing and plays recordings selected in the library. Recording completion keeps the review and offers **Play now**. Telegram setup lives in its dedicated tab.
+
+Privacy password is **off by default**. Set a custom password under About → Privacy password to protect library/player access. Unlock lasts for the current page; reload or Lock now requires the password again. Passwords are stored only as a salted PBKDF2 verifier. This is an interface lock, not encryption of video files. Changing or disabling protection requires the current password; forgotten passwords cannot be recovered from this UI. Existing recordings are unchanged.

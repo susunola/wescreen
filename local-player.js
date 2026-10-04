@@ -10,6 +10,7 @@
   function metadata(file){return new Promise((resolve,reject)=>{const video=document.createElement('video'),url=URL.createObjectURL(file);let timer;const finish=(error)=>{clearTimeout(timer);video.removeAttribute('src');video.load();URL.revokeObjectURL(url);error?reject(error):resolve();};video.preload='metadata';video.onloadedmetadata=()=>finish();video.onerror=()=>finish(new Error(E('浏览器无法解码此文件。请使用兼容的 MP4 / WebM，或先转换编码。','This browser cannot decode the file. Use a compatible MP4 / WebM or convert its codec first.')));timer=setTimeout(()=>finish(new Error(E('读取视频超时，请检查文件是否完整或存储设备是否可用。','Video loading timed out. Check the file and storage device.'))),15000);video.src=url;});}
   async function open(file){
     if(!file || opening)return;
+    if(typeof privacy!=='undefined' && !await privacy.request())return;
     if(recorder || displayStream)throw new Error(E('请先结束录制，再打开本地视频。','Finish recording before opening a local video.'));
     if(!file.size || !(/^video\//.test(file.type) || /\.(mp4|webm|mov|m4v|mkv|ogv)$/i.test(file.name)))throw new Error(E('请选择视频文件。','Choose a video file.'));
     opening=true;buttons.forEach(button=>button.disabled=true);

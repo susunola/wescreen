@@ -6,6 +6,7 @@ for (const lang of ['zh','en']) Object.assign(I18N[lang],UI_TEXT[lang]);
 let recordingMonitor=null,monitorLastFrames=0,monitorSilenceAt=0;
 let workspaceView = 'capture', liveMeter = null;
 function navigateWorkspace(view) {
+  if(typeof privacy!=='undefined' && (view==='library'||view==='player'||(view==='capture'&&recordingView==='result')) && !privacy.canAccess()){privacy.request().then(allowed=>{if(allowed)navigateWorkspace(view);});return;}
   if(view!=='player' && document.body.classList.contains('cinema-mode'))setTheatreMode(false);
   workspaceView = view;
   $('player-view').classList.toggle('hidden',view!=='player');

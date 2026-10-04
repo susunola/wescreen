@@ -67,7 +67,8 @@ async function loadRecordingPart(index,time=null,playing=false){
  if(time!==null)pendingPlaybackPosition={id:entry.id,time,playing,view};setPreview(blob);
  if(playbackParts.length>1){$('playback-name').textContent=playbackParts[0].name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,'')+' · '+(index+1)+' / '+playbackParts.length;$('preview').addEventListener('loadedmetadata',()=>{setPlaybackRotation(rotation);$('preview').playbackRate=speed;$('playback-speed').value=String(speed);},{once:true});}
 }
-async function playRecording(entry) {
+async function playRecording(entry,options={}) {
+  if(!options.recordingComplete && typeof privacy!=='undefined' && !await privacy.request())return;
   if(typeof savePlaybackState==='function')savePlaybackState();
   const all=(await readStore('recordings')).filter(e=>!e.deletedAt);
   const group=recordingGroups(all).find(e=>e.id===entry.id || e._parts?.some(p=>p.id===entry.id));
