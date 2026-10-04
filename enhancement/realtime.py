@@ -113,6 +113,34 @@ def balanced_sdr_tone(frame):
     return np.clip(pixels+delta[...,None],0,255).round().astype(np.uint8)
 
 
+def clean_compression(frame):
+    """Reduce small flat-area codec noise without smoothing contrast edges."""
+    import cv2
+    import numpy as np
+    grey=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+    kernel=np.ones((3,3),np.uint8)
+    span=cv2.dilate(grey,kernel).astype(np.float32)-cv2.erode(grey,kernel)
+    # Feather the threshold; constant colors and strong boundaries stay intact.
+    amount=np.clip((28-span)/20,0,1)[...,None]*.45
+    filtered=cv2.bilateralFilter(frame,3,10,10)
+    return np.clip(frame.astype(np.float32)+(filtered.astype(np.float32)-frame)*amount,0,255).round().astype(np.uint8)
+
+
+def adaptive_detail(frame):
+    """Sharpen visible luma texture, rejecting tiny noise and new edge extrema."""
+    import cv2
+    import numpy as np
+    pixels=frame.astype(np.float32)
+    luma=pixels[...,0]*.0722+pixels[...,1]*.7152+pixels[...,2]*.2126
+    fine=luma-cv2.GaussianBlur(luma,(3,3),.65)
+    detail=np.sign(fine)*np.maximum(np.abs(fine)-3,0)
+    weight=np.clip((luma-16)/32,0,1)*np.clip((240-luma)/32,0,1)
+    delta=np.clip(detail*.28,-3,3)*weight
+    kernel=np.ones((3,3),np.uint8)
+    target=np.clip(luma+delta,cv2.erode(luma,kernel),cv2.dilate(luma,kernel))
+    return np.clip(pixels+(target-luma)[...,None],0,255).round().astype(np.uint8)
+
+
 def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, output_scale=1):
     """Full-resolution spatial fallback with optional genuine 2x output."""
     if min(width,height)<2 or max(width,height)>1920 or min(width,height)>1080 or len(data)!=width*height*3:
@@ -124,11 +152,10 @@ def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, 
     with _LOCK:
         bgr=cv2.cvtColor(np.frombuffer(data,np.uint8).reshape(height,width,3),cv2.COLOR_RGB2BGR)
         size=(width*output_scale,height*output_scale)
-        restored=upsample(bgr,model_path,model_hash)
+        restored=upsample(clean_compression(bgr),model_path,model_hash)
         if output_scale==1: restored=cv2.resize(restored,size,interpolation=cv2.INTER_AREA)
-        # Small-radius, low-strength sharpening; no large halo around strokes.
-        blur=cv2.GaussianBlur(restored,(3,3),.6)
-        restored=cv2.addWeighted(restored,1.14,blur,-.14,0)
+        # Content-dependent luma sharpening replaces global channel sharpening.
+        restored=adaptive_detail(restored)
         if protect_text:
             edges=cv2.Canny(cv2.cvtColor(bgr,cv2.COLOR_BGR2GRAY),60,140)
             mask=cv2.dilate(edges,np.ones((3,3),np.uint8)).astype(np.float32)/255
