@@ -26,10 +26,18 @@ def diagnose(frame):
         grid=means[7::8];normal=np.delete(means,np.arange(7,len(means),8))
         scores.append(max(0,float(np.mean(grid)-np.mean(normal))))
     block=max(scores,default=0)
+    colour=cv2.cvtColor(frame,cv2.COLOR_BGR2YCrCb)
+    chroma=[]
+    for channel in (1,2):
+        values=colour[...,channel]
+        residual=np.abs(values.astype(np.float32)-cv2.medianBlur(values,3))
+        candidates=residual[(cv2.dilate(grey,np.ones((3,3),np.uint8)).astype(float)-cv2.erode(grey,np.ones((3,3),np.uint8)))<24]
+        chroma.append(float(np.percentile(candidates,70)) if candidates.size>=32 else 0)
+    chroma_noise=max(chroma)
     # This is a softness indicator, not a claimed reconstruction of source pixels.
     soft=lap<80 and float(np.percentile(span,90))>3
     return {'noise':round(noise,2),'blocks':round(block,2),'detail':round(lap,2),
-            'soft':soft,'degraded':noise>1.5 or block>1.5 or soft,
+            'chromaNoise':round(chroma_noise,2),'soft':soft,'degraded':noise>1.5 or block>1.5 or chroma_noise>2 or soft,
             'contentWidth':int(crop.shape[1]),'contentHeight':int(crop.shape[0])}
 
 
@@ -77,19 +85,34 @@ def text_protection(frame):
     return cv2.GaussianBlur(mask,(5,5),1)
 
 
+def clean_chroma(frame,profile):
+    """Suppress coloured codec speckles without blurring luminance detail."""
+    strength=float(np.clip((profile.get('chromaNoise',0)-1.5)/6,0,1))
+    if strength==0:return frame
+    colour=cv2.cvtColor(frame,cv2.COLOR_BGR2YCrCb)
+    for channel in (1,2):
+        raw=colour[...,channel]
+        filtered=cv2.bilateralFilter(raw,5,12+12*strength,3)
+        colour[...,channel]=np.clip(raw.astype(float)+(filtered.astype(float)-raw)*(.35+.4*strength),0,255).round().astype(np.uint8)
+    return cv2.cvtColor(colour,cv2.COLOR_YCrCb2BGR)
+
+
 def restore(frame,temporal,timestamp,neural=None,profile=None,text=False,output_scale=1):
     if text:
         # No temporal or generative pixels in explicitly recorded desktop text.
         repaired=adaptive_detail(frame)
     else:
-        repaired=clean_blocks(clean_compression(temporal.apply(frame,timestamp)))
+        repaired=clean_chroma(clean_blocks(clean_compression(temporal.apply(frame,timestamp))),profile or {})
         if neural and profile and profile['degraded']:
             prediction=neural(repaired,output_scale)
             base=cv2.resize(repaired,(prediction.shape[1],prediction.shape[0]),interpolation=cv2.INTER_LANCZOS4)
             # Keep source identity/color; no separate face synthesis.
             mask=text_protection(frame)
             mask=cv2.resize(mask,(prediction.shape[1],prediction.shape[0]),interpolation=cv2.INTER_LINEAR)[...,None]
-            blend=(1-mask)*.55
+            # More model contribution for diagnosed soft/blocked sources; keep
+            # clean sources unchanged and retain subtitle protection.
+            amount=.68 if profile.get('soft') else (.62 if profile.get('blocks',0)>1.5 else .55)
+            blend=(1-mask)*amount
             repaired=np.clip(base.astype(float)+(prediction.astype(float)-base)*blend,0,255).round().astype(np.uint8)
         elif output_scale==2:
             repaired=cv2.resize(repaired,None,fx=2,fy=2,interpolation=cv2.INTER_LANCZOS4)

@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'enhancement'))
-from smart_restore import TemporalRepair,diagnose,restore,text_protection
+from smart_restore import TemporalRepair,diagnose,restore,text_protection,clean_chroma
 
 class SmartRestoreTest(unittest.TestCase):
     def test_noise_detection_and_diagnostics_ignore_borders(self):
@@ -62,3 +62,15 @@ class SmartRestoreTest(unittest.TestCase):
         self.assertGreater(float(mask[80:105,20:160].max()),.9)
         self.assertTrue(np.any((mask>0)&(mask<1)))
         self.assertEqual(float(text_protection(np.full_like(image,128)).max()),0)
+
+    def test_chroma_speckles_reduce_without_luma_blur(self):
+        rng=np.random.default_rng(42)
+        ycc=np.full((96,128,3),128,np.uint8);ycc[:,64:,0]=180
+        ycc[...,1:]=128+rng.integers(-10,11,(96,128,2))
+        frame=cv2.cvtColor(ycc,cv2.COLOR_YCrCb2BGR)
+        profile=diagnose(frame);self.assertGreater(profile['chromaNoise'],2)
+        out=cv2.cvtColor(clean_chroma(frame,profile),cv2.COLOR_BGR2YCrCb)
+        before=cv2.cvtColor(frame,cv2.COLOR_BGR2YCrCb)
+        self.assertLess(np.mean((out[...,1:].astype(float)-128)**2),np.mean((before[...,1:].astype(float)-128)**2)*.8)
+        self.assertLessEqual(np.abs(out[...,0].astype(int)-before[...,0]).max(),1)
+        np.testing.assert_array_equal(clean_chroma(frame,{'chromaNoise':0}),frame)
