@@ -19,7 +19,7 @@
       finalId=null;finalBlob=file;finalSize=file.size;finalName=file.name;finalDuration=0;finalMarkers=[];
       $('review-frames').replaceChildren();$('review-summary').textContent=E('本地文件 · 直接播放，未存入录像库。','Local file · direct playback, not imported into the library.');$('result-warning').hidden=true;
       $('player-empty-status').textContent='';setPreview(file);navigateWorkspace('player');
-      $('preview').addEventListener('loadedmetadata',()=>{finalDuration=Number.isFinite($('preview').duration)?$('preview').duration*1000:0;$('preview').play().catch(()=>{});},{once:true});
+      $('preview').addEventListener('loadedmetadata',()=>{finalDuration=Number.isFinite($('preview').duration)?$('preview').duration*1000:0;requestPlayerPlayback();},{once:true});
     }finally{opening=false;buttons.forEach(button=>button.disabled=false);}
   }
   input.onchange=async()=>{const file=input.files[0];input.value='';try{await open(file);}catch(error){notice(error.message);}};

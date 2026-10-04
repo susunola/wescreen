@@ -7,7 +7,7 @@ function setSeekFromPointer(event){const bounds=seekRange.getBoundingClientRect(
 seekRange.addEventListener('pointerdown',event=>{
  if(event.button!==0)return;event.preventDefault();seekRange.focus({preventScroll:true});
  const priorPlaying=seekGesture?.playing ?? !$('preview').paused;seekGesture={serial:++seekSerial,pointer:event.pointerId,x:event.clientX,playing:priorPlaying,dragged:false,committed:false};partLoadGeneration++;
- playbackSeeking=true;clearTimeout(seekKeyboardTimer);seekRange.setPointerCapture(event.pointerId);$('preview').pause();
+ playbackSeeking=true;clearTimeout(seekKeyboardTimer);seekRange.setPointerCapture(event.pointerId);requestPlayerPlayback(false);
  realtimeAI.generation++;realtimeAI.request++;realtimeAI.busy=false;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;revealFullscreenControls();
  setSeekFromPointer(event);
 });
@@ -22,7 +22,7 @@ async function commitSeekTarget(event){
   await seekRecordingTimeline(time,playing);
   if(serial!==seekSerial)return;
   // play() waits for the requested frame itself; do not add an artificial seek debounce here.
-  if(playing){if(pendingPlaybackPosition)pendingPlaybackPosition.playing=true;else $('preview').play().catch(error=>{if(serial===seekSerial)$('playback-status').textContent=error.message;});}
+  if(playing){if(pendingPlaybackPosition)pendingPlaybackPosition.playing=true;else await requestPlayerPlayback();}
   savePlaybackState();
   const report=()=>{if(serial!==seekSerial)return;const v=$('preview');if(!v.seeking && Math.abs(playbackTimelineTime()-time)<.2)seekRange.dataset.responseMs=String(Math.round(performance.now()-started));else if(v.requestVideoFrameCallback && performance.now()-started<8000)v.requestVideoFrameCallback(report);};
   if($('preview').requestVideoFrameCallback)$('preview').requestVideoFrameCallback(report);else $('preview').addEventListener('seeked',report,{once:true});

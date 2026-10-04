@@ -26,7 +26,20 @@ $('preview').addEventListener('loadedmetadata',restorePlaybackState);
 new ResizeObserver(layoutPlaybackRotation).observe($('playback-stage'));
 document.addEventListener('fullscreenchange',layoutPlaybackRotation);
 $('playback-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('playback-shell').requestFullscreen();layoutPlaybackRotation();requestAnimationFrame(layoutPlaybackRotation);}catch(error){setNotice(error.message);}};
-$('rotated-play').onclick=()=>{const video=$('preview');if(video.paused)video.play().catch(error=>setNotice(error.message));else video.pause();};
+let playbackTransportIntent=0;
+async function requestPlayerPlayback(playing=true){
+ const video=$('preview'),intent=++playbackTransportIntent,generation=playbackGeneration;
+ if(!playing){video.pause();return;}
+ if(typeof privacy!=='undefined' && !await privacy.request())return;
+ if(intent!==playbackTransportIntent || generation!==playbackGeneration)return;
+ $('playback-status').textContent='';
+ try{await video.play();}catch(error){
+  // A newer pause, seek or source change legitimately cancels an outstanding play.
+  if(intent!==playbackTransportIntent || generation!==playbackGeneration || error.name==='AbortError')return;
+  $('playback-status').textContent=error.name==='NotAllowedError'?E('请点击播放继续。','Click Play to continue.'):error.message;
+ }
+}
+$('rotated-play').onclick=()=>requestPlayerPlayback($('preview').paused);
 $('rotated-mute').onclick=()=>{$('preview').muted=!$('preview').muted;};
 function updateRecordingTimeline(){const total=playbackTimelineTotal(),time=playbackTimelineTime();if(!playbackSeeking){if(total>0)$('rotated-seek').value=String(time/total);$('playback-time').textContent=fmt(time*1000)+' / '+fmt(total*1000);}}
 $('preview').addEventListener('timeupdate',updateRecordingTimeline);
@@ -49,13 +62,14 @@ function beginPlaybackSource(id) {
  refreshPlaybackVersions().catch(error=>$('playback-status').textContent=error.message);
 }
 async function restorePlaybackState() {
- const generation=playbackGeneration,id=activePlaybackId,video=$('preview');layoutPlaybackRotation();
+ const generation=playbackGeneration,id=activePlaybackId,video=$('preview'),restoreIntent=playbackTransportIntent;layoutPlaybackRotation();
  try {
   const state=id ? await readStore('meta',`playback:${id}`):null;
   if(generation!==playbackGeneration)return;
+  if(restoreIntent!==playbackTransportIntent){playbackReady=true;pendingPlaybackPosition=null;layoutPlaybackRotation();return;}
   if(state){if($('playback-ambient-toggle')){$('playback-ambient-toggle').checked=!!state.ambient;ambientCanvas.hidden=!state.ambient;}video.volume=state.volume ?? video.volume;video.muted=state.muted ?? video.muted;playbackFill=!!state.fill;updateFitButton();playbackPan=state.pan || {x:0,y:0};instantEnhancement=state.instantPreset || null;updateInstantEnhancementButton();setPlaybackRotation(state.rotation || 0);$('playback-speed').value=String(state.speed || 1);video.playbackRate=Number($('playback-speed').value) || 1;playbackZoom=Math.max(1,Math.min(3,state.zoom || 1));$('playback-zoom').value=String(playbackZoom);for(const key of ['brightness','contrast','sharpness'])$('playback-'+key).value=String(state[key] ?? (key==='sharpness' ? 0:1));applyPlaybackTuning();if(Number.isFinite(video.duration))video.currentTime=Math.max(0,Math.min(state.time || 0,video.duration-.1));}
   const pending=pendingPlaybackPosition;
-  if(pending?.id===id){pendingPlaybackPosition=null;if(pending.view)applyPlaybackView(pending.view);if(Number.isFinite(video.duration))video.currentTime=Math.min(pending.time,Math.max(0,video.duration-.1));if(pending.playing)video.play().catch(error=>$('playback-status').textContent=error.message);}
+  if(pending?.id===id){pendingPlaybackPosition=null;if(pending.view)applyPlaybackView(pending.view);if(Number.isFinite(video.duration))video.currentTime=Math.min(pending.time,Math.max(0,video.duration-.1));if(pending.playing)requestPlayerPlayback();}
   playbackReady=true;layoutPlaybackRotation();
  }catch(error){if(generation===playbackGeneration){playbackReady=true;$('playback-status').textContent=error.message;}}
 }
@@ -92,7 +106,7 @@ $('playback-version').onchange=async()=>{const id=$('playback-version').value,vi
 $('playback-enhance').onclick=async()=>{try{const entry=await readStore('recordings',activePlaybackId);if(entry)await openEnhancement(entry);}catch(error){$('playback-status').textContent=error.message;}};
 $('enhance-panel').addEventListener('close',()=>refreshPlaybackVersions().catch(()=>{}));
 document.addEventListener('keydown',event=>{
- if(!$('result').getClientRects().length || document.querySelector('dialog[open]') || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,select,textarea,button,[contenteditable=true]'))return;
+ if(!$('player-view').getClientRects().length || document.querySelector('dialog[open]') || event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input,select,textarea,button,[contenteditable=true]'))return;
  const video=$('preview');if(!video.videoWidth)return;
  switch(event.key.toLowerCase()){
   case ' ':$('rotated-play').click();break;
@@ -119,7 +133,7 @@ $('playback-instant').onclick=()=>{
  applyPlaybackTuning();updateInstantEnhancementButton();$('playback-status').textContent=instantEnhancement ? E('即时增强已开启，仅影响观看，原文件保留。','Instant enhancement enabled for viewing; original file preserved.'):E('已恢复开启增强前的画面设置。','Previous picture settings restored.');
 };
 async function completePlaybackAI(task,savedId){
- if(!task.playbackAI || activePlaybackId!==task.sourceId || !$('result').getClientRects().length)return;
+ if(!task.playbackAI || activePlaybackId!==task.sourceId || !$('player-view').getClientRects().length)return;
  const entry=await readStore('recordings',savedId);if(!entry)return;
  const video=$('preview');pendingPlaybackPosition={id:savedId,time:video.currentTime,playing:!video.paused,view:currentPlaybackView()};await playRecording(entry);
  $('playback-status').textContent=E('AI 修复完成，已切换增强版；原视频保留。','AI repair complete. Switched to the enhanced version; original preserved.');
