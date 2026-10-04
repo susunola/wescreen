@@ -1,4 +1,5 @@
 function enhancementErrorText(message){
+ if(/Another enhancement is running|Helper busy/.test(message))return E('本机正在处理另一个任务，请在“视频处理”查看进度，完成后重试。','Another local task is running. Check Video processing and retry when it finishes.');
  if(/Face restoration is not installed/.test(message))return E('脸部模型尚未安装或验证失败。运行本机增强包中的 install-face.command 后重新连接。','Face model is not installed or verification failed. Run install-face.command and reconnect.');
  if(/No usable face detected/.test(message))return E('没有检测到可修复的脸。遮挡过重无法可靠还原，请换一段五官更清楚的片段。','No usable face was detected. Heavy masking cannot be reliably restored; try a clearer clip.');
  if(/Complete and confirm a face preview/.test(message))return E('请先用当前参数生成脸部预览，并确认后再处理整段。','Complete and confirm a face preview with the current settings first.');
@@ -133,6 +134,9 @@ async function submitProcessing(source,options) {
   if(options.landscape)query.set('landscape','1');
   if(options.rotation!==undefined)query.set('rotation',String(options.rotation));
   if(options.batchRef)query.set('batchRef',options.batchRef);
+  // Full processing owns the helper slot; await cancellation of our playback worker.
+  if(typeof stopRealtimeAI==='function')stopRealtimeAI();
+  if(typeof stopSmartBackground==='function' && !await stopSmartBackground())throw new Error(E('后台修复尚未停止，请检查本机连接后重试。','Background repair could not stop; check the helper connection and retry.'));
   const job=await(await enhancementRequest('/jobs?'+query,{method:'POST',body:blob,headers:{'Content-Type':blob.type || 'application/octet-stream'}})).json();
   const task={id:job.id,sourceId:source.id,name:source.name,course:source.course || '',markers:source.markers || [],createdAt:Date.now(),state:'queued',exportFolder:source.exportFolder,...options};
   // The helper also persists sourceId/name, so a quota failure here cannot orphan the result.
@@ -174,6 +178,7 @@ async function enhanceVideo(preview) {
   if(!Number.isFinite(start) || start<0){enhancementStatus(E('预览起点无效。','Invalid preview start.'));return;}
   const began=performance.now();let task=null;enhancementControls(true);
   try {
+    enhancementStatus(E('正在停止观看增强并提交任务…','Stopping playback repair and submitting task…'));$('enhance-progress').value=0;
     task=await submitProcessing(source,{mode,preview,start,previewSeconds,...(mode==='face'?{faceFidelity:Number(faceFidelity.value),strength:Number($('enhance-strength').value),facePreviewId:facePreviewReceipt?.id}:{})});enhancementJob=task.id;$('enhance-cancel').disabled=false;
     while(true){
       const info=await(await enhancementRequest(`/jobs/${task.id}`)).json();$('enhance-progress').value=info.progress || 0;

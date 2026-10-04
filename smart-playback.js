@@ -1,6 +1,7 @@
 // Background restoration overlays only synchronized, completed video chunks.
 // The original video is always the audio/transport clock. Private cache is ephemeral.
 const smartBackground={enabled:false,generation:0,session:null,abort:null,busy:false,poll:null,callback:null,chunkSeconds:4,chunks:new Map(),bytes:0,current:-1,source:null,pending:null,failed:new Set(),status:null,stage:'',started:0,pendingStarted:0};
+let smartCleanup=Promise.resolve(true);
 let smartSubtitleTrack=null,smartSubtitleSource=null,smartSubtitleKey='';
 const smartVideo=document.createElement('video');smartVideo.id='smart-restored-video';smartVideo.muted=true;smartVideo.playsInline=true;smartVideo.preload='auto';smartVideo.hidden=true;$('playback-stage').prepend(smartVideo);
 function smartProgressText(){
@@ -38,7 +39,8 @@ function stopSmartBackground(){
  for(const chunk of smartBackground.chunks.values())URL.revokeObjectURL(chunk.url);
  smartBackground.chunks.clear();smartBackground.failed.clear();smartBackground.bytes=0;smartBackground.current=-1;smartBackground.session=null;smartBackground.pending=null;smartBackground.busy=false;smartBackground.source=null;smartBackground.status=null;smartBackground.stage='';smartBackground.started=0;smartBackground.pendingStarted=0;
  updateSmartBadge();
- if(old)enhancementRequest('/smart/'+old,{method:'DELETE',keepalive:true,signal:AbortSignal.timeout(15000)}).catch(()=>{});
+ if(old){const request=enhancementRequest('/smart/'+old,{method:'DELETE',keepalive:true,signal:AbortSignal.timeout(15000)}).then(()=>true,()=>false);smartCleanup=Promise.all([smartCleanup,request]).then(results=>results.every(Boolean));}
+ return smartCleanup;
 }
 function smartCachePut(index,blob,info){
  if(blob.size>128*1024*1024)throw new Error('Smart chunk exceeds browser cache limit');
@@ -116,7 +118,7 @@ async function startSmartBackground(health,entry){
  try{
   const result=await(await enhancementRequest('/smart/sources?content='+encodeURIComponent(entry?.captureContent||'auto'),{method:'POST',body:finalBlob,headers:{'Content-Type':finalBlob.type||'application/octet-stream'},signal:controller.signal})).json();
   if(generation!==smartBackground.generation){enhancementRequest('/smart/'+result.id,{method:'DELETE'}).catch(()=>{});return false;}
-  smartBackground.session=result.id;smartBackground.chunkSeconds=result.chunkSeconds;realtimeButton.setAttribute('aria-pressed','true');
+  smartCleanup=Promise.resolve(true);smartBackground.session=result.id;smartBackground.chunkSeconds=result.chunkSeconds;realtimeButton.setAttribute('aria-pressed','true');
   pumpSmartChunks();scheduleSmartPresentation();return true;
  }catch(error){if(generation===smartBackground.generation){stopSmartBackground();realtimeHint.textContent=E('后台修复无法启动，使用实时轻量增强。','Background repair unavailable; using lightweight enhancement.');}return false;}
 }
