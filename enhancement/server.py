@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from realtime import enhance_frame
+from face import face_ready, run_face, file_sha256
 from pairing import connect_origin
 from tail import trim_static_tail
 from merge import handle_media_post
@@ -66,7 +67,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding','faceFidelity','facePreviewId','faceRestoredFrames','faceSourceHash')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -220,6 +221,7 @@ def run_job(job):
     try:
         with open(source.parent / 'ffmpeg.log', 'wb') as log:
             job['log'] = log
+            if job['mode']=='face': job['faceSourceHash']=file_sha256(source)
             audio_encode,color_encode,hdr = source_encoding(source)
             tone_map = bool(job.get('toneMap'))
             width, height, fps, duration = probe(source, allow_hdr=tone_map)
@@ -265,6 +267,8 @@ def run_job(job):
                 process=checked_process(job,['ffmpeg','-nostdin','-y','-v','error',*INPUT_OPTIONS,'-i',str(source),*trim,'-map','0:v:0','-map','0:a:0','-c:v','copy','-af',audio_filter,'-c:a','aac','-b:a','192k','-ar','48000','-movflags','+faststart','-progress','pipe:1',str(output)],stdout=subprocess.PIPE,text=True)
                 for line in process.stdout: update_ffmpeg_progress(job,line,limit)
                 if process.wait()!=0: raise RuntimeError('Audio processing failed')
+            elif job['mode'] == 'face':
+                run_face(job, source, output, width, height, fps, limit, encode, checked_process)
             elif job['mode'] == 'strong':
                 run_seed(job, source, output, width, height, trim, encode)
             elif job['mode'] != 'ai':
@@ -461,8 +465,10 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError: return self.reply(400, {'error': 'Invalid preview duration'})
         if preview_seconds not in (3, 5, 10): return self.reply(400, {'error': 'Preview duration must be 3, 5 or 10 seconds'})
         mode = query.get('mode', ['basic'])[0]
-        if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit','audio','trimstatic','watermark'):
+        if parsed.path != '/jobs' or mode not in (*FILTERS, 'ai', 'strong', 'edit','audio','trimstatic','watermark','face'):
             return self.reply(400, {'error': 'Invalid processing mode'})
+        if mode == 'face' and not face_ready():
+            return self.reply(503, {'error': 'Face restoration is not installed. Run enhancement/install-face.command first.'})
         if mode == 'strong' and not seed_ready():
             return self.reply(503, {'error': 'SeedVR2 is not installed. Run enhancement/install-seedvr.sh first.'})
         try:
@@ -482,6 +488,13 @@ class Handler(BaseHTTPRequestHandler):
             if audio_preset not in ('voice','night','level'):raise ValueError('Invalid audio preset')
             strength=float(query.get('strength',['1'])[0])
             if not 0 <= strength <= 1: raise ValueError('Enhancement strength must be 0–1')
+            face_fidelity=float(query.get('faceFidelity',['0.8'])[0])
+            if not 0 <= face_fidelity <= 1: raise ValueError('Face fidelity must be 0–1')
+            face_preview_id=query.get('facePreviewId',[''])[0]
+            if mode=='face' and query.get('preview')!=['1']:
+                with GUARD: face_preview=JOBS.get(face_preview_id)
+                if not face_preview or face_preview['state']!='done' or not face_preview['preview'] or face_preview['mode']!='face' or face_preview.get('faceFidelity')!=face_fidelity or face_preview.get('strength')!=strength:
+                    raise ValueError('Complete and confirm a face preview with the same settings first.')
             rotation = float(query.get('rotation', ['0'])[0])
             if not (0 <= rotation <= 360): raise ValueError('Invalid rotation')
             start = float(query.get('start', ['0'])[0]); end = float(query.get('end', ['0'])[0])
@@ -510,9 +523,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             SLOT.release(); shutil.rmtree(directory, ignore_errors=True)
             return self.reply(400, {'error': str(error)})
+        if mode=='face' and query.get('preview')!=['1']:
+            try:
+                matches=hmac.compare_digest(file_sha256(source),face_preview.get('faceSourceHash',''))
+                if not matches: raise ValueError('Face preview belongs to another video; preview this source first.')
+            except (OSError,ValueError) as error:
+                SLOT.release();shutil.rmtree(directory,ignore_errors=True)
+                return self.reply(400,{'error':str(error)})
         capture_content=query.get('captureContent',['auto'])[0]
         if capture_content not in ('auto','detail','motion'): capture_content='auto'
-        job = dict(id=identifier,encoding=encoding,captureContent=capture_content,toneMap=query.get('toneMap',['0'])==['1'],watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
+        job = dict(id=identifier,faceFidelity=face_fidelity,facePreviewId=face_preview_id,encoding=encoding,captureContent=capture_content,toneMap=query.get('toneMap',['0'])==['1'],watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
         try:
             persist_job(job)
             with GUARD: JOBS[identifier] = job
@@ -535,7 +555,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'version':'1.20.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeEngine':'FSRCNN fallback','realtimeTemporal':False,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.22.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeEngine':'FSRCNN fallback','realtimeTemporal':False,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None

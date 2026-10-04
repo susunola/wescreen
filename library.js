@@ -102,8 +102,19 @@ async function renderRecordingLibrary() {
     for (const entry of entries) { let root = byId.get(entry._messageParent) || entry, ancestry = new Set([root.id]); while(byId.has(root.enhancedFrom || root._messageParent) && !ancestry.has(root.enhancedFrom || root._messageParent)){root=byId.get(root.enhancedFrom || root._messageParent);ancestry.add(root.id);} append(root); }
     entries.splice(0, entries.length, ...ordered);
   }
-  const pageCount = Math.max(1, Math.ceil(entries.length / LIBRARY_PAGE_SIZE)); libraryPage = Math.min(libraryPage, pageCount - 1);
-  const visibleEntries = entries.slice(libraryPage * LIBRARY_PAGE_SIZE, (libraryPage + 1) * LIBRARY_PAGE_SIZE);
+  // Paginate whole version groups so a restoration never lands on another page from its source.
+  const pageGroups = new Map(), entryMap = new Map(entries.map(entry => [entry.id, entry]));
+  for (const entry of entries) {
+    let root = entry; const visited = new Set([entry.id]);
+    while ($('library-group').checked && entryMap.has(root.enhancedFrom || root._messageParent) && !visited.has(root.enhancedFrom || root._messageParent)) {
+      root = entryMap.get(root.enhancedFrom || root._messageParent); visited.add(root.id);
+    }
+    if (!pageGroups.has(root.id)) pageGroups.set(root.id, []);
+    pageGroups.get(root.id).push(entry);
+  }
+  const groups = [...pageGroups.values()];
+  const pageCount = Math.max(1, Math.ceil(groups.length / LIBRARY_PAGE_SIZE)); libraryPage = Math.min(libraryPage, pageCount - 1);
+  const visibleEntries = groups.slice(libraryPage * LIBRARY_PAGE_SIZE, (libraryPage + 1) * LIBRARY_PAGE_SIZE).flat();
   $('library-page').textContent = `${libraryPage + 1} / ${pageCount}`; $('library-prev').disabled = libraryPage === 0; $('library-next').disabled = libraryPage >= pageCount - 1;
   const entryIds = new Set(visibleEntries.map(entry => entry.id));
   for (const id of librarySelection) if (!entryIds.has(id)) librarySelection.delete(id);
@@ -113,7 +124,7 @@ async function renderRecordingLibrary() {
   $('library-trash').textContent = L(libraryTrash ? 'backLibrary' : 'trash');
   const list = $('recording-items'); list.replaceChildren();
   for (const entry of visibleEntries) {
-    const row = document.createElement('li'); row.className = 'media-row' + ((entry.enhancedFrom || entry._messageParent) && $('library-group').checked ? ' derived-row' : ''); row.dataset.recordingId = entry.id;
+    const row = document.createElement('li'); row.className = 'media-row' + ((entry.enhancedFrom || entry._messageParent) && $('library-group').checked ? ' derived-row' : ''); row.dataset.recordingId = entry.id; row.dataset.parentId = entry.enhancedFrom || entry._messageParent || "";
     const check = document.createElement('input'); check.type = 'checkbox'; check.className = 'row-select'; check.checked = librarySelection.has(entry.id); check.setAttribute('aria-label', L('selectRecording', entry.name));
     check.onchange = () => { if (check.checked) librarySelection.add(entry.id); else librarySelection.delete(entry.id); updateLibrarySelection(); }; row.append(check);
     const image = document.createElement('img'); image.src = entry.thumbnail || 'assets/logo.png'; image.alt = ''; image.className = 'recording-thumbnail'; const thumbnail=document.createElement('button');thumbnail.type='button';thumbnail.className='thumbnail-play';thumbnail.setAttribute('aria-label',L('openRecording')+' '+entry.name);thumbnail.onclick=()=>playRecording(entry).catch(workspaceError);thumbnail.append(image);const overlay=document.createElement('span');overlay.className='thumbnail-overlay';overlay.textContent='▶';thumbnail.append(overlay);const duration=document.createElement('span');duration.className='thumbnail-duration';duration.textContent=entry.duration ? fmt(entry.duration) : '--:--';thumbnail.append(duration);row.append(thumbnail);
@@ -165,7 +176,7 @@ function updateLibrarySelection() {
   $('bulk-hint').hidden=librarySelection.size>0;
   $('batch-add').disabled = !librarySelection.size || libraryTrash;$('bulk-delete').disabled = !librarySelection.size; $('bulk-restore').disabled = !librarySelection.size; $('bulk-restore').hidden = !libraryTrash;
   $('bulk-delete').textContent = L(libraryTrash ? 'deletePermanently' : 'moveTrash') + (librarySelection.size ? ` (${librarySelection.size})` : '');
-  const checks = [...document.querySelectorAll('.row-select')]; $('select-all').checked = Boolean(checks.length && checks.every(check => check.checked));
+  const checks = [...document.querySelectorAll('.row-select')].filter(check => check.getClientRects().length); $('select-all').checked = Boolean(checks.length && checks.every(check => check.checked));
 }
 async function importRecording(file) {
   if (!file || !/\.(mp4|webm)$/i.test(file.name)) throw new Error(L('importFormat'));

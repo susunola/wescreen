@@ -1,0 +1,32 @@
+const {chromium}=require('playwright');
+const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert/strict'),{spawnSync}=require('child_process');
+(async()=>{const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'wescreen-studio-')),screens=path.resolve(root,'../audit-2026-10-04/studio');fs.mkdirSync(screens,{recursive:true});let context;
+try{
+ context=await chromium.launchPersistentContext(path.join(temp,'profile'),{channel:'chromium',headless:true,viewport:{width:1440,height:1000},args:[`--disable-extensions-except=${root}`,`--load-extension=${root}`,'--autoplay-policy=no-user-gesture-required']});
+ await context.route('http://127.0.0.1:8765/**',route=>route.abort());
+ const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host,page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`chrome-extension://${id}/recorder.html`);await page.waitForFunction(()=>document.documentElement.dataset.ready==='true');await page.evaluate(()=>applyLang('zh'));
+ assert.equal(await page.locator('.studio-source').count(),1);assert.equal(await page.locator('.studio-record-settings #framerate').count(),1);
+ assert.equal(await page.evaluate(async()=>(await document.fonts.load('500 16px "WeScreen Source Han Sans"','录制视频')).length),1);
+ await page.screenshot({path:path.join(screens,'01-record.png'),fullPage:true});
+ const clip=path.join(temp,'clip.mp4');assert.equal(spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','testsrc2=size=640x360:rate=30','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','3','-c:v','libx264','-c:a','aac',clip]).status,0);
+ await page.evaluate(async b64=>{const blob=new Blob([Uint8Array.from(atob(b64),c=>c.charCodeAt(0))],{type:'video/mp4'});await runTx(['recordings','videos'],'readwrite',tx=>{for(const e of [{id:'studio-original',name:'Studio-demo.mp4'},{id:'studio-restored',name:'Studio-demo-natural.mp4',enhancedFrom:'studio-original',enhancement:'natural'}]){tx.objectStore('recordings').put({...e,size:blob.size,duration:3000,width:640,height:360,createdAt:Date.now()});tx.objectStore('videos').put(blob,e.id);}});await renderRecordingLibrary();navigateWorkspace('library');},fs.readFileSync(clip).toString('base64'));
+ await page.waitForFunction(()=>document.querySelector('.studio-versions .derived-row'));assert.equal(await page.locator('#recording-items > .media-row').count(),1);assert.equal(await page.locator('.studio-versions').getAttribute('open'),null);
+ await page.locator('.studio-versions>summary').click();assert.equal(await page.locator('.derived-row').isVisible(),true);await page.locator('.studio-versions>summary').click();
+ await page.locator('#recording-items > .media-row > .row-select').check();await page.locator('[data-library-layout=cards]').click();assert.equal(await page.locator('#recording-items > .media-row > .row-select').isChecked(),true);await page.locator('[data-library-layout=rows]').click();await page.screenshot({path:path.join(screens,'03-library.png'),fullPage:true});
+ await page.evaluate(async()=>{await playRecording(await readStore('recordings','studio-original'));});await page.waitForFunction(()=>playbackReady&&$('preview').readyState>=2);await page.screenshot({path:path.join(screens,'06-player.png'),fullPage:true});
+ await page.locator('#playback-quality-menu>summary').click();assert.equal(await page.locator('#playback-quality-menu .cinema-popover>button').count(),3);await page.screenshot({path:path.join(screens,'07-quality.png'),fullPage:true});await page.locator('#playback-quality-menu>summary').click();
+ await page.locator('#playback-fullscreen').click();await page.waitForFunction(()=>document.fullscreenElement?.id==='playback-shell');assert.equal(await page.evaluate(()=>Math.round($('playback-shell').getBoundingClientRect().height)),1000);await page.screenshot({path:path.join(screens,'08-fullscreen.png')});await page.evaluate(()=>document.exitFullscreen());
+ await page.evaluate(async()=>{await openEnhancement(await readStore('recordings','studio-original'));});await page.screenshot({path:path.join(screens,'09-repair.png'),fullPage:true});assert.equal(await page.locator('.studio-repair-parameters #enhance-mode').count(),1);await page.locator('#enhance-close').click();
+ // Direct local playback is File-backed and never modifies the library.
+ const before=await page.evaluate(async()=>(await readStore('recordings')).map(e=>e.id).sort());
+ await page.locator('#local-video-file').setInputFiles(clip);
+ await page.waitForFunction(()=>playbackReady&&finalId===null&&finalBlob instanceof File&&$('preview').readyState>=2);
+ assert.deepEqual(await page.evaluate(async()=>(await readStore('recordings')).map(e=>e.id).sort()),before);
+ assert.equal(await page.locator('#playback-name').textContent(),'clip.mp4');
+ await page.evaluate(()=>$('preview').pause());await page.locator('#rotated-seek').click();await page.waitForFunction(()=>!$('preview').paused&&$('preview').currentTime>0);
+ await page.locator('#local-video-file').setInputFiles({name:'broken.mp4',mimeType:'video/mp4',buffer:Buffer.from('invalid video')});
+ await page.waitForFunction(()=>/无法解码|cannot decode/.test($('playback-status').textContent));assert.equal(await page.evaluate(()=>finalName),'clip.mp4');
+ for(const [view,name]of [['channels','02-telegram'],['tasks','04-processing'],['about','05-about']]){await page.evaluate(view=>navigateWorkspace(view),view);await page.screenshot({path:path.join(screens,name+'.png'),fullPage:true});}
+ for(const lang of ['zh','en']){await page.evaluate(lang=>applyLang(lang),lang);await page.setViewportSize({width:390,height:844});for(const view of ['capture','channels','library','tasks','about']){await page.evaluate(view=>{navigateWorkspace(view);if(view==='capture')show('setup');},view);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,lang+' '+view+' overflow');}}
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({version:await page.evaluate(()=>chrome.runtime.getManifest().version),fiveTabs:true,rowVersions:true,selectionPreserved:true,sourceHan:true,nativeFullscreen:true,localPlaybackWithoutImport:true,invalidFileRetainsSource:true,mobileLanguages:['zh','en'],screens,errors}));
+}finally{await context?.close();fs.rmSync(temp,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exit(1)});

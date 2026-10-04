@@ -49,7 +49,7 @@ async function initWorkspace() {
   for (const id of ['library-sort','library-group','library-kind']) $(id).onchange=()=>{libraryPage=0;renderRecordingLibrary().catch(workspaceError);};
   $('library-prev').onclick=()=>{libraryPage--;renderRecordingLibrary().catch(workspaceError);};$('library-next').onclick=()=>{libraryPage++;renderRecordingLibrary().catch(workspaceError);};
   $('library-trash').onclick=()=>{ libraryTrash=!libraryTrash;libraryPage=0;librarySelection.clear();renderRecordingLibrary().catch(workspaceError); };
-  $('select-all').onchange=()=>{ document.querySelectorAll('.row-select').forEach(check=>{ check.checked=$('select-all').checked;const id=check.closest('li').dataset.recordingId;if(check.checked)librarySelection.add(id);else librarySelection.delete(id); });updateLibrarySelection(); };
+  $('select-all').onchange=()=>{ [...document.querySelectorAll('.row-select')].filter(check=>check.getClientRects().length).forEach(check=>{ check.checked=$('select-all').checked;const id=check.closest('li').dataset.recordingId;if(check.checked)librarySelection.add(id);else librarySelection.delete(id); });updateLibrarySelection(); };
   $('bulk-delete').onclick=()=>removeRecordings([...librarySelection],libraryTrash).catch(workspaceError);
   $('bulk-restore').onclick=async()=>{try{for(const id of librarySelection)await updateRecording(id,{deletedAt:null});librarySelection.clear();await renderRecordingLibrary();}catch(error){workspaceError(error);}};
   $('import-video').onchange=async()=>{ try{await importRecording($('import-video').files[0]);}catch(error){$('library-status').textContent=error.message;}finally{$('import-video').value='';} };

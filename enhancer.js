@@ -1,4 +1,7 @@
 function enhancementErrorText(message){
+ if(/Face restoration is not installed/.test(message))return E('脸部模型尚未安装或验证失败。运行本机增强包中的 install-face.command 后重新连接。','Face model is not installed or verification failed. Run install-face.command and reconnect.');
+ if(/No usable face detected/.test(message))return E('没有检测到可修复的脸。遮挡过重无法可靠还原，请换一段五官更清楚的片段。','No usable face was detected. Heavy masking cannot be reliably restored; try a clearer clip.');
+ if(/Complete and confirm a face preview/.test(message))return E('请先用当前参数生成脸部预览，并确认后再处理整段。','Complete and confirm a face preview with the current settings first.');
  if(/SeedVR2 currently supports up to/.test(message))return E('这段视频超过强力 AI 的 1080p 输入上限。请选择“自然修复”保留原分辨率；强力 AI 支持横版 1920×1080 或竖版 1080×1920。','This video exceeds the Strong AI 1080p input limit. Choose Natural restoration to preserve its original resolution.');
  return message;
 }
@@ -79,7 +82,7 @@ function updateEnhancementMode() {
 }
 async function openEnhancement(entry=null) {
   if(enhancementBusy){navigateWorkspace('tasks');return;}
-  enhancementSource=entry;hdrInput.checked=false;masterInput.checked=false;enhancementPreviewMode=null;comparisonActive=false;clearEnhancementPreview();
+  enhancementSource=entry;if(typeof facePreviewReceipt!=='undefined')facePreviewReceipt=null;hdrInput.checked=false;masterInput.checked=false;enhancementPreviewMode=null;comparisonActive=false;clearEnhancementPreview();
   $('enhance-title').textContent=entry ? E('画质增强：','Enhance: ')+entry.name : L('helperConnection');
   $('enhance-estimate').textContent='';$('enhance-start').value='0';$('enhance-progress').value=0;
   $('enhance-panel').showModal();$('helper-connection').open=false;
@@ -88,7 +91,7 @@ async function openEnhancement(entry=null) {
   await connectHelper();
 }
 function resultName(task) {
-  const label=task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? 'merged' : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
+  const label=task.mode==='face' ? 'face-generated' : task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? 'merged' : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
   return `${(task.name || 'video').replace(/\.(mp4|webm)$/i,'')}-${label}${task.encoding==='master'?'-444-master':''}${task.preview ? '-preview' : ''}.mp4`;
 }
 const hdrChoice=document.createElement('label');hdrChoice.className='check';const hdrInput=document.createElement('input');hdrInput.type='checkbox';hdrInput.id='enhance-hdr-sdr';hdrChoice.append(hdrInput,document.createTextNode(E('HDR 转 SDR（另存，原视频保留）','Convert HDR to SDR (save a copy)')));$('enhance-mode-hint').after(hdrChoice);
@@ -102,6 +105,10 @@ async function submitProcessing(source,options) {
   query.set('captureContent',source.captureContent || 'auto');
   if(options.toneMap ?? (source===enhancementSource && hdrInput.checked))query.set('toneMap','1');
   if($('enhance-strength') && ['natural','basic','light','ai'].includes(options.mode))query.set('strength',options.strength ?? $('enhance-strength').value);
+  if(options.mode==='face'){
+    query.set('faceFidelity',String(options.faceFidelity ?? faceFidelity.value));query.set('strength',String(options.strength ?? $('enhance-strength').value));
+    if(!options.preview){if(!options.facePreviewId && (!facePreviewMatches() || !faceConfirm.checked))throw new Error(E('先预览并确认脸部变化。','Preview and confirm the face changes first.'));query.set('facePreviewId',options.facePreviewId || facePreviewReceipt.id);}
+  }
   if(options.audioPreset)query.set('audioPreset',options.audioPreset);
   if(options.watermark)query.set('watermark',options.watermark.join(','));
   if(options.requireSilence!==undefined)query.set('requireSilence',options.requireSilence?'1':'0');
@@ -151,7 +158,7 @@ async function enhanceVideo(preview) {
   if(!Number.isFinite(start) || start<0){enhancementStatus(E('预览起点无效。','Invalid preview start.'));return;}
   const began=performance.now();let task=null;enhancementControls(true);
   try {
-    task=await submitProcessing(source,{mode,preview,start,previewSeconds});enhancementJob=task.id;$('enhance-cancel').disabled=false;
+    task=await submitProcessing(source,{mode,preview,start,previewSeconds,...(mode==='face'?{faceFidelity:Number(faceFidelity.value),strength:Number($('enhance-strength').value),facePreviewId:facePreviewReceipt?.id}:{})});enhancementJob=task.id;$('enhance-cancel').disabled=false;
     while(true){
       const info=await(await enhancementRequest(`/jobs/${task.id}`)).json();$('enhance-progress').value=info.progress || 0;
       const phase=info.detail?.phase;enhancementStatus(info.stage==='SeedVR2' ? `SeedVR2 · ${phase || E('加载模型 / 重建细节','Loading / restoring')}${info.detail ? ` ${info.detail.batch}/${info.detail.batches}`:''}` : E('本机处理中：','Processing locally: ')+Math.round((info.progress || 0)*100)+'%');
@@ -168,8 +175,9 @@ async function enhanceVideo(preview) {
             $('enhance-estimate').textContent=E('预览耗时 ','Preview took ')+Math.ceil(seconds)+E(' 秒',' seconds')+(estimate ? E('；整段粗略估计 ','; full video roughly ')+Math.ceil(estimate/60)+E(' 分钟，随素材和负载变化。',' minutes; varies with content and load.'):'');
             enhancementStatus(E('预览已完成，检查字幕、人脸和运动后再处理整段。','Preview ready. Check text, faces and motion before processing the full video.'));
           }
-          // A successfully fetched preview is disposable; full results are never automatically deleted.
-          await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await runTx('tasks','readwrite',tx=>tx.objectStore('tasks').delete(task.id));
+          // Face previews remain locally available as receipts for full processing.
+          if(mode==='face'){facePreviewReceipt={id:task.id,signature:faceSettingsSignature()};faceConfirm.checked=false;}
+          else {await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await runTx('tasks','readwrite',tx=>tx.objectStore('tasks').delete(task.id));}
         }else{await saveTaskResult({...task,...info});enhancementStatus(E('已另存到录像库，本机结果也保留，可从任务中导出。','Saved to the library. The local result is also retained and can be exported from Tasks.'));}
         break;
       }
@@ -194,11 +202,11 @@ async function renderEnhancementTasks() {
       const title=document.createElement('strong');title.textContent=task.name || task.id;row.append(title);
       let saved=records.find(entry=>entry.helperJobId===task.id);const remote=jobs.some(job=>job.id===task.id);
       if(task.playbackAI && task.state==='done' && remote && !saved){try{const id=await saveTaskResult(task);saved={id};if(typeof completePlaybackAI==='function')await completePlaybackAI(task,id);}catch(error){$('tasks-status').textContent=error.message;}}
-      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit'),merge:E('合并','Merge'),audio:E('声音修复','Audio repair')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
+      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit'),merge:E('合并','Merge'),audio:E('声音修复','Audio repair'),face:E('脸部修复（生成式）','Face restoration (generative)')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
       if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error ? enhancementErrorText(task.error) : L('taskLost');row.append(error);}
       if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);const percent=document.createElement('span');percent.className='task-percent';percent.textContent=Math.round((task.progress || 0)*100)+'%';row.append(percent);}
       const buttons=document.createElement('div');buttons.className='controls task-actions';
-      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.smartTail)await queueSmartTail(source.id,task.requireSilence!==false);else if(task.mode==='merge')await mergeRecordingParts(source,task.compatible);else await submitProcessing(source,{mode:task.mode,encoding:task.encoding,toneMap:task.toneMap,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength,watermark:task.watermark,requireSilence:task.requireSilence});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
+      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.smartTail)await queueSmartTail(source.id,task.requireSilence!==false);else if(task.mode==='merge')await mergeRecordingParts(source,task.compatible);else await submitProcessing(source,{mode:task.mode,encoding:task.encoding,toneMap:task.toneMap,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength,faceFidelity:task.faceFidelity,facePreviewId:task.facePreviewId,watermark:task.watermark,requireSilence:task.requireSilence});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
       if(task.state==='done' && remote){if(!saved)buttons.append(libraryButton('saveLibrary',async()=>{await saveTaskResult(task);await renderEnhancementTasks();}));buttons.append(libraryButton('exportResult',()=>exportTask(task)));}
       if(['queued','processing'].includes(task.state) && remote)buttons.append(libraryButton('cancelTask',async()=>{await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await renderEnhancementTasks();}));
       else buttons.append(libraryButton('deleteTask',async()=>{

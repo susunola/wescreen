@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.20.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.22.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -85,3 +85,11 @@ Professional audio offers 192 kbps speech or 256 kbps music for both the main re
 Visual processing copies compatible audio packets and preserves SDR color tags. Explicit HDR-to-SDR conversion requires FFmpeg's zscale/tonemap filters; on Mac use `brew install ffmpeg-full` and restart the helper. The original stays in the library. Realtime AI uses lossless PNG with the new helper and retains the chosen mode across parts of the same recording; slower machines fall back to original frames.
 
 Upgrade the existing extension in its original directory. Do not uninstall it first or change its extension ID: recordings and playback history stay in the existing database.
+
+Experimental face restoration is available under Player settings → Tools → Face restoration. Install the optional local model with `enhancement/install-face.command`, preview and compare, then confirm full processing. It is generative and may alter facial features; heavy masking cannot be reliably reversed. Original media and audio are retained. See [helper setup and CodeFormer licensing](enhancement/README.md#experimental-local-face-restoration).
+
+### Studio interface
+
+The five workspaces share a compact charcoal and champagne interface. Recording settings sit beside the source view; the library defaults to rows, with related versions expandable beneath the original and an optional grid view. Restoration uses a parameter sidebar and comparison workspace. Chinese uses bundled Source Han Sans (SIL OFL); English prefers system SF Pro on macOS and falls back to the platform font elsewhere. Update the existing extension in place to retain recordings.
+
+Use **Open local video**, or drop a video onto the library/player, for direct File-backed playback without importing. Supported codecs depend on the browser; use **Import video** to keep a persistent library copy.

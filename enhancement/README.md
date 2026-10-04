@@ -87,3 +87,11 @@ OpenCV 说明：https://docs.opencv.org/5.0/extra_modules/dnn_superres.html
 Picture-only jobs copy compatible AAC, ALAC and MP3 audio instead of encoding it again. Other audio is converted to AAC at 256 kbps for MP4 compatibility. SDR color tags are propagated. Explicit HDR conversion is limited to Natural/Brightness/Edit modes and outputs BT.709 SDR; install `ffmpeg-full` on Mac for zscale support. The server prefers its keg binary when present, without replacing the system FFmpeg.
 
 `/health` reports `toneMap` and `realtimeLossless`. Realtime frame requests accept bounded PNG or JPEG; PNG requests receive PNG output. Original media and saved tasks are preserved during upgrades.
+
+## Experimental local face restoration
+
+Run `bash enhancement/install-face.sh` after the basic helper setup (Python 3.11–3.12). The optional CodeFormer runtime is isolated in `.runtime/face-venv`; its source is pinned and its approximately 545 MB of weights are validated before `/health` advertises `face`. It selects MPS on supported Mac hardware, CUDA on supported NVIDIA systems, otherwise CPU. Source resolution, background and compatible source audio are retained; decoded frames stream through one model instance per job.
+
+Use Player settings → Tools → Face restoration. Preview a 3, 5 or 10 second segment, compare faces and motion, then explicitly confirm full processing with unchanged settings. The helper requires a successful matching preview and identical source bytes. Preview receipts remain in Processing tasks until explicitly deleted. Outputs use `face-generated` in their names and are saved separately. Heavy masking can cause detection failure; the job then reports failure instead of claiming successful recovery. This is generative single-frame restoration, not recovery of authenticated facial identity, reference-frame reconstruction or ProPainter video inpainting.
+
+CodeFormer has the [S-Lab non-commercial license](https://github.com/sczhou/CodeFormer/blob/master/LICENSE). Commercial use requires separate permission. We do not bundle its source or weights in the helper ZIP; the optional installer downloads them from the official repository/releases.
