@@ -25,6 +25,24 @@ def smart_ready():
     except (OSError,ValueError,KeyError,TypeError):return False
 
 
+def content_bounds(frame):
+    """Only exclude uniform near-black outer bars from model computation."""
+    import numpy as np
+    grey=frame.max(axis=2)
+    rows=np.where(np.percentile(grey,95,axis=1)>12)[0]
+    cols=np.where(np.percentile(grey,95,axis=0)>12)[0]
+    h,w=frame.shape[:2]
+    if not len(rows) or not len(cols):return (0,0,w,h)
+    y1,y2=int(rows[0]),int(rows[-1])+1;x1,x2=int(cols[0]),int(cols[-1])+1
+    # Ignore tiny borders and reject implausibly small detected content.
+    if y1<16:y1=0
+    if h-y2<16:y2=h
+    if x1<16:x1=0
+    if w-x2<16:x2=w
+    if min(y2-y1,x2-x1)<32 or (y2-y1)*(x2-x1)<h*w*.15:return (0,0,w,h)
+    return x1,y1,x2,y2
+
+
 class NeuralRepair:
     def __init__(self,denoise=.35,guide_long_side=640):
         self.guide_long_side=max(640,min(960,int(guide_long_side)))
@@ -53,6 +71,21 @@ class NeuralRepair:
         import cv2
         import numpy as np
         h,w=frame.shape[:2]
+        x1,y1,x2,y2=content_bounds(frame)
+        if (x1,y1,x2,y2)!=(0,0,w,h):
+            content=self(frame[y1:y2,x1:x2],scale)
+            result=cv2.resize(frame,(w*scale,h*scale),interpolation=cv2.INTER_LANCZOS4) if scale!=1 else frame.copy()
+            region=result[y1*scale:y2*scale,x1*scale:x2*scale]
+            # Feather only boundaries adjacent to excluded bars; preserve the
+            # original transition instead of creating a hard processed seam.
+            alpha=np.ones(content.shape[:2],np.float32);halo=min(8*scale,min(alpha.shape)//2)
+            ramp=np.linspace(0,1,halo,dtype=np.float32)
+            if x1:alpha[:,:halo]*=ramp[None,:]
+            if x2<w:alpha[:,-halo:]*=ramp[::-1][None,:]
+            if y1:alpha[:halo]*=ramp[:,None]
+            if y2<h:alpha[-halo:]*=ramp[::-1,None]
+            result[y1*scale:y2*scale,x1*scale:x2*scale]=np.clip(region.astype(np.float32)+(content.astype(np.float32)-region)*alpha[...,None],0,255).round().astype(np.uint8)
+            return result
         if max(h,w)<=960:return self.infer_tiles(frame,scale)
         # Large recordings often contain enlarged low-quality content. Infer a
         # bounded guide, then add its low-frequency residual to native pixels.

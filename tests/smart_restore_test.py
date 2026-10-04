@@ -107,3 +107,19 @@ class SmartRestoreTest(unittest.TestCase):
         self.assertEqual(out.shape,frame.shape)
         self.assertLessEqual(np.abs(out.astype(int)-frame.astype(int)).max(),12)
         np.testing.assert_array_equal(out[:,599:601],frame[:,599:601])
+
+    def test_model_focuses_on_content_and_preserves_black_borders(self):
+        from smart_model import NeuralRepair,content_bounds
+        model=NeuralRepair.__new__(NeuralRepair);sizes=[]
+        def prediction(frame,scale):
+            sizes.append(frame.shape)
+            return np.clip(frame.astype(int)+5,0,255).astype(np.uint8)
+        model.infer_tiles=prediction
+        frame=np.zeros((600,1200,3),np.uint8);frame[:,400:800]=100
+        self.assertEqual(content_bounds(frame),(400,0,800,600))
+        out=model(frame,1)
+        self.assertEqual(sizes,[(600,400,3)])
+        np.testing.assert_array_equal(out[:,:400],frame[:,:400]);np.testing.assert_array_equal(out[:,800:],frame[:,800:])
+        self.assertEqual(out[:,408:792].min(),105)
+        np.testing.assert_array_equal(out[:,400],frame[:,400])
+        white=np.full_like(frame,255);self.assertEqual(content_bounds(white),(0,0,1200,600))
