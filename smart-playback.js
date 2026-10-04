@@ -85,7 +85,7 @@ function presentSmartChunk(){
  smartVideo.playbackRate=v.playbackRate*(Math.abs(drift)>.06?(drift>0?1.2:.8):1);
  if(v.paused)smartVideo.pause();else if(smartVideo.paused)smartVideo.play().catch(()=>{smartVideo.hidden=true;});
  syncSmartLayout();syncSmartSubtitles(chunk.info.start);realtimeCanvas.hidden=true;
- smartVideo.hidden=smartVideo.seeking||Math.abs(drift)>.08||(!v.paused&&smartVideo.paused);
+ smartVideo.hidden=smartVideo.seeking||Math.abs(drift)>(smartVideo.hidden?.06:.12)||(!v.paused&&smartVideo.paused);
 }
 async function pumpSmartChunks(){
  if(!smartBackground.enabled||smartBackground.busy||!smartBackground.session)return;
@@ -93,6 +93,13 @@ async function pumpSmartChunks(){
  const controller=new AbortController();smartBackground.abort=controller;
  try{
   if(smartBackground.pending!==null){
+   const wanted=Math.floor(v.currentTime/smartBackground.chunkSeconds);
+   if(!smartBackground.chunks.has(wanted)&&Math.abs(smartBackground.pending-wanted)>1){
+    await enhancementRequest(`/smart/${session}/chunks/${smartBackground.pending}`,{method:'DELETE',signal:controller.signal});
+    if(generation!==smartBackground.generation)return;
+    smartBackground.pending=null;smartBackground.status=null;smartBackground.stage='';
+    return;
+   }
    const index=smartBackground.pending,info=await(await enhancementRequest(`/smart/${session}/chunks/${index}`,{signal:controller.signal})).json();
    if(generation!==smartBackground.generation)return;
    smartStatus(info);
@@ -107,11 +114,11 @@ async function pumpSmartChunks(){
    if(index!==undefined){await enhancementRequest(`/smart/${session}/chunks/${index}`,{method:'POST',signal:controller.signal});if(generation!==smartBackground.generation)return;smartBackground.pending=index;smartBackground.pendingStarted=performance.now();smartStatus({state:'queued',progress:0});}
   }
  }catch(error){if(generation===smartBackground.generation&&error.name!=='AbortError'){smartBackground.stage='error';updateSmartBadge();realtimeHint.textContent=E('后台修复暂不可用，原视频继续播放。','Background repair unavailable; original keeps playing.');}}
- finally{if(generation===smartBackground.generation){smartBackground.busy=false;smartBackground.poll=setTimeout(pumpSmartChunks,1000);}}
+ finally{if(generation===smartBackground.generation){smartBackground.busy=false;clearTimeout(smartBackground.poll);smartBackground.poll=setTimeout(pumpSmartChunks,smartBackground.pending===null?100:1000);}}
 }
 async function startSmartBackground(health,entry){
  if(!health?.smartChunks || !(finalBlob instanceof Blob) || typeof playerColor!=='undefined'&&playerColor.mode==='hdr')return false;
- stopSmartBackground();stopRealtimeAI();
+ const expectedSource=$('preview').currentSrc;await stopSmartBackground();if(expectedSource!==$('preview').currentSrc)return false;stopRealtimeAI();
  smartBackground.enabled=true;smartBackground.started=performance.now();updateSmartBadge();smartBackground.source=$('preview').currentSrc;const generation=++smartBackground.generation;
  realtimeHint.textContent=E('正在准备本机修复缓存 · 可继续播放','Preparing local repair cache · Playback continues');
  const controller=new AbortController();smartBackground.abort=controller;

@@ -67,3 +67,26 @@ class SmartCacheTest(unittest.TestCase):
             self.request(f'/smart/{sid}','DELETE')
         self.assertFalse((self.root/'cache'/sid).exists())
         self.assertTrue(server.SLOT.acquire(blocking=False));server.SLOT.release()
+
+    def test_cancel_chunk_keeps_source_and_allows_repair_again(self):
+        original_popen=subprocess.Popen
+        def slow_worker(command,**kwargs):
+            return original_popen([sys.executable,'-c','import time;time.sleep(30)'],**kwargs)
+        sid=json.loads(self.request('/smart/sources','POST',self.original))['id']
+        with patch.object(smart_cache.subprocess,'Popen',side_effect=slow_worker):
+            self.request(f'/smart/{sid}/chunks/0','POST',b'')
+            deadline=time.monotonic()+5
+            while time.monotonic()<deadline:
+                if json.loads(self.request(f'/smart/{sid}/chunks/0'))['state']=='processing':break
+                time.sleep(.02)
+            self.request(f'/smart/{sid}/chunks/0','DELETE')
+        self.assertEqual(smart_cache.SESSIONS[sid]['source'].read_bytes(),self.original)
+        self.assertNotIn(0,smart_cache.SESSIONS[sid]['chunks'])
+        self.assertFalse(smart_cache.SESSIONS[sid]['cancel'].is_set())
+        self.request(f'/smart/{sid}/chunks/0','POST',b'')
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            info=json.loads(self.request(f'/smart/{sid}/chunks/0'))
+            if info['state'] in ('done','error'):break
+            time.sleep(.1)
+        self.assertEqual(info['state'],'done',info)

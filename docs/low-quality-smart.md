@@ -15,3 +15,7 @@ Additional final-engine synthetic benchmark: warm 640x360 MPS 2x inference with 
 ## Unified playback workflow
 
 Smart best is the only restoration entry point. Library actions open Smart best playback; offline restoration and batch-enhancement controls are removed. Historical recordings and processed results remain available. Heavy repair uses temporary synchronized chunks on the local helper, without cloud uploads.
+
+## Seek priority and presentation stability
+
+A seek more than one chunk away cancels unrelated work without uploading the source again or discarding completed chunks. Current playback repair is submitted before prefetching. Cached video becomes visible within 60 ms of the source clock and remains visible until drift exceeds 120 ms; larger drift falls back to the original frame while the secondary clock catches up. Original audio remains authoritative.

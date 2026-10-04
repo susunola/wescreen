@@ -127,6 +127,17 @@ def handle_smart(handler,method,api):
         index=int(parts[3])
         if not 0<=index<math.ceil(session['media'][3]/CHUNK_SECONDS):raise ValueError('Chunk outside source duration')
         with GUARD:chunk=session['chunks'].get(index)
+        if method=='DELETE':
+            # Cancel only this chunk; retain the uploaded source and other cached chunks.
+            worker=session.get('worker');process=session.get('process')
+            if chunk and chunk['state'] in ('queued','processing'):
+                if process and process.poll() is None:api['stop_process'](process)
+                if worker:worker.join(timeout=10)
+                if worker and worker.is_alive():handler.reply(409,{'error':'Chunk cancellation pending'});return True
+            with GUARD:
+                removed=session['chunks'].pop(index,None)
+                if removed:removed['path'].unlink(missing_ok=True)
+            handler.reply(200,{'cancelled':True});return True
         if method=='POST':
             if chunk and chunk['state'] in ('queued','processing','done'):
                 chunk['touch']=time.monotonic();handler.reply(200,public_chunk(chunk));return True
