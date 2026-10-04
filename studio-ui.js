@@ -64,21 +64,26 @@
   window.addEventListener('wescreen-language',refresh);refresh();
 })();
 
-// Recording console: preserve control IDs and media nodes while grouping their roles.
+// Floating recording console; all original media/control nodes keep their handlers.
 (() => {
- const recording=$('recording'),stage=document.createElement('div');stage.className='recording-preview-stage';
- const heading=document.createElement('div');heading.className='recording-console-title';const title=document.createElement('strong'),caption=document.createElement('span');heading.append(title,caption);recording.querySelector('.record-head').prepend(heading);
- const labels=()=>{title.textContent=E('录制工作台','Recording studio');caption.textContent=E('本机录制 · 原视频保留','Local capture · Originals preserved');tools.textContent=E('更多录制工具','Recording tools');};
- $('live-preview').before(stage);stage.append($('live-preview'));
- const dock=document.createElement('div');dock.className='recording-control-dock';
- const transport=document.createElement('div');transport.className='recording-transport';
- const secondary=document.createElement('details');secondary.className='recording-secondary';const tools=document.createElement('summary');tools.textContent=E('更多录制工具','Recording tools');secondary.append(tools);
- for(const id of ['pause','mark','stop'])transport.append($(id));
- for(const id of ['next-channel-video','copy-next-message','floating-controls','capture-monitor-live'])if($(id))secondary.append($(id));
- const old=recording.querySelector(':scope > .controls');old?.remove();
- dock.append(transport,recording.querySelector('.source-status'),secondary);stage.after(dock);
- const diagnostics=document.createElement('details');diagnostics.className='recording-diagnostics';
- const summary=document.createElement('summary');summary.textContent=E('录制诊断','Recording diagnostics');diagnostics.append(summary);
- for(const id of ['recording-health','capture-quality-stats'])if($(id))diagnostics.append($(id));
- recording.append(diagnostics);labels();window.addEventListener('wescreen-language',labels);window.addEventListener('wescreen-language',()=>summary.textContent=E('录制诊断','Recording diagnostics'));
+ const recording=$('recording'),head=recording.querySelector('.record-head');
+ const make=(tag,cls)=>{const el=document.createElement(tag);el.className=cls;return el;};
+ const heading=make('div','recording-console-title'),title=document.createElement('strong'),caption=document.createElement('span');heading.append(title,caption);head.prepend(heading);
+ const status=make('div','recording-console-status');status.append(head.querySelector('.live'));head.querySelector('#timer').before(status);status.append($('timer'));head.append(status);
+ const stage=make('div','recording-preview-stage');$('live-preview').before(stage);stage.append($('live-preview'));
+ const dock=make('div','recording-control-dock'),transport=make('div','recording-transport');
+ for(const id of ['pause','stop','mark','capture-monitor-live'])transport.append($(id));
+ const audio=recording.querySelector('.source-status label'),db=document.createElement('span');db.className='recording-db';db.textContent='−∞ dB';audio.append(db);
+ const secondary=make('details','recording-secondary'),tools=document.createElement('summary');tools.textContent='⋯';secondary.append(tools);
+ for(const id of ['next-channel-video','copy-next-message','floating-controls'])secondary.append($(id));
+ const diagnostics=make('details','recording-diagnostics'),summary=document.createElement('summary');diagnostics.append(summary);
+ for(const id of ['recording-health','capture-quality-stats'])diagnostics.append($(id));secondary.append(diagnostics);
+ const source=recording.querySelector('.source-status');head.append($('source-info'));source.remove();
+ recording.querySelector(':scope > .controls')?.remove();dock.append(transport,audio,$('memory'),secondary);stage.append(dock);
+ const footer=make('div','recording-console-footer'),local=document.createElement('span'),original=document.createElement('span');footer.append(local,original);stage.after(footer);$('recording-hint').hidden=true;
+ const sync=()=>{title.textContent=E('录制工作台','Recording studio');caption.textContent=$('filename').value || E('本机录制','Local recording');local.textContent=E('● 本机保存','● Saved locally');original.textContent=E('原视频保留','Originals preserved');summary.textContent=E('录制诊断','Recording diagnostics');tools.title=E('更多录制工具','Recording tools');tools.setAttribute('aria-label',tools.title);for(const id of ['pause','stop','mark','capture-monitor-live']){const button=$(id);button.title=button.textContent;button.setAttribute('aria-label',button.textContent);if(id==='pause')button.dataset.paused=String(typeof recorder!=='undefined'&&recorder?.state==='paused');}db.textContent=$('live-level').value>0 ? (20*Math.log10($('live-level').value/4)).toFixed(0)+' dB':'−∞ dB';};
+ new MutationObserver(sync).observe($('pause'),{childList:true});
+ new MutationObserver(sync).observe(recording,{attributes:true,attributeFilter:['class']});
+ new MutationObserver(sync).observe($('live-level'),{attributes:true,attributeFilter:['value']});
+ window.addEventListener('wescreen-language',sync);sync();
 })();

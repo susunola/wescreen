@@ -131,8 +131,8 @@ async function renderChannelWorkbench(){
 }
 
 // No guessed playback controls. Auto-stop is available only for a verified source video.
-let telegramEndTimer=null,telegramEndBusy=false,telegramEndEpoch=0,telegramSourceStarted=false;
-function stopTelegramSourceMonitor(){clearInterval(telegramEndTimer);telegramEndTimer=null;telegramEndEpoch++;telegramSourceStarted=false;telegramAutoPause=false;telegramBufferSince=0;telegramLastTime=null;telegramUnverified=0;telegramCaptureNotice='';}
+let telegramEndTimer=null,telegramEndBusy=false,telegramEndEpoch=0,telegramSourceStarted=false,telegramLengthLimit=null,telegramLimitStart=0;
+function stopTelegramSourceMonitor(){clearInterval(telegramEndTimer);telegramEndTimer=null;telegramEndEpoch++;telegramSourceStarted=false;telegramLengthLimit=null;telegramLimitStart=0;telegramAutoPause=false;telegramBufferSince=0;telegramLastTime=null;telegramUnverified=0;telegramCaptureNotice='';}
 function startTelegramSourceMonitor(){
  stopTelegramSourceMonitor();if($('capture-mode').value!=='telegram'||$('capture-method').value!=='tab'||!captureChannelContext?.messageId)return;
  const epoch=telegramEndEpoch;
@@ -145,6 +145,13 @@ function startTelegramSourceMonitor(){
    if(compositor?.telegramCrop)compositor.worker.postMessage({type:'region',region:status?.verified?status.region:null});
    if(!status?.verified){if(compositor?.telegramCrop&&++telegramUnverified>=2&&recorder.state==='recording'){pause(true);telegramAutoPause=true;telegramCaptureNotice=E('目标视频暂时无法核对，已暂停录制；确认原消息后继续。','Cannot verify the target video. Recording paused; confirm the original message to continue.');}return;}
    telegramUnverified=0;
+   if(telegramLengthLimit===null&&Number.isFinite(status.duration)&&status.duration>0){
+    const start=Number.isFinite(captureChannelContext.sourceStartTime)?captureChannelContext.sourceStartTime:status.time;
+    telegramLengthLimit=Math.max(0,status.duration-start)*1000;telegramLimitStart=typeof elapsed==='function'?segmentStartedElapsed:Date.now();
+   }
+   const recorded=typeof elapsed==='function'?elapsed()-telegramLimitStart:Date.now()-telegramLimitStart;
+   const lengthReached=telegramLengthLimit!==null&&telegramLengthLimit>0&&recorded>=telegramLengthLimit;
+
    const diagnostic=activeSegment?.channelMetadata?.captureDiagnostics;if(diagnostic){if(!Number.isFinite(diagnostic.sourceStartTime))diagnostic.sourceStartTime=status.time;diagnostic.sourceEndTime=status.time;diagnostic.sourceDuration=status.duration;diagnostic.sourceWidth=status.videoWidth;diagnostic.sourceHeight=status.videoHeight;}
    const stalled=!status.ended&&!status.paused&&status.readyState<3&&telegramLastTime!==null&&Math.abs(status.time-telegramLastTime)<.05;
    telegramLastTime=status.time;
@@ -152,11 +159,11 @@ function startTelegramSourceMonitor(){
    else{telegramBufferSince=0;if(telegramAutoPause&&status.readyState>=3&&!status.paused&&!status.ended&&(!compositor?.telegramCrop||status.region)){telegramAutoPause=false;telegramCaptureNotice='';if(recorder.state==='paused')pause(true);}}
 
    if(status.time>.3&&!status.ended)telegramSourceStarted=true;
-   if(telegramSourceStarted&&status.ended&&status.duration>0&&status.time>=status.duration-.15){
+   if(telegramSourceStarted&&status.duration>0&&((status.ended&&status.time>=status.duration-.15)||status.time>=status.duration-.04||lengthReached)){
     stopTelegramSourceMonitor();$('recording-alert').hidden=false;$('recording-alert').textContent=E('目标视频已播放结束，正在保存录像。','The verified source video ended. Saving the recording.');stop();
    }
   }catch{/* Losing access must never stop or redirect a recording. */}finally{telegramEndBusy=false;}
- },1000);
+ },250);
 }
 
 let telegramCaptureNotice='',telegramCaptureCropSize=null,telegramAutoPause=false,telegramBufferSince=0,telegramLastTime=null,telegramUnverified=0;
