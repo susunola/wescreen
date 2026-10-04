@@ -20,6 +20,10 @@ from pairing import connect_origin
 from tail import trim_static_tail
 from merge import handle_media_post
 
+for ffmpeg_bin in ('/opt/homebrew/opt/ffmpeg-full/bin','/usr/local/opt/ffmpeg-full/bin'):
+    if Path(ffmpeg_bin,'ffmpeg').is_file():
+        os.environ['PATH']=ffmpeg_bin+os.pathsep+os.environ.get('PATH','');break
+
 ROOT = Path(__file__).resolve().parent
 MODEL = ROOT / 'models' / 'FSRCNN_x2.pb'
 MODEL_HASH = '366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c'
@@ -28,16 +32,18 @@ FILTERS = {
     'basic': 'hqdn3d=1.2:1.2:3:3,eq=contrast=1.03:brightness=0.01:saturation=1.02,unsharp=5:5:0.35:5:5:0',
     'light': 'hqdn3d=1:1:2:2,eq=contrast=1.06:brightness=0.025:gamma=1.08:saturation=1.04,unsharp=5:5:0.25:5:5:0',
 }
-def enhancement_filter(mode, strength=1):
-    if strength == 1: return FILTERS[mode]
+def enhancement_filter(mode, strength=1, content='auto'):
     if strength == 0: return 'null'
-    denoise = (1.2 if mode == 'basic' else 1) * strength
-    temporal = (3 if mode == 'basic' else 2) * strength
-    filters = [f'hqdn3d={denoise}:{denoise}:{temporal}:{temporal}']
-    if mode == 'natural': filters.insert(0, 'deblock=filter=weak:block=8')
+    if strength == 1 and content == 'auto': return FILTERS[mode]
+    filters=[]
+    if content != 'detail':
+        denoise=(1.2 if mode == 'basic' else 1)*strength
+        temporal=(3 if mode == 'basic' else 2)*strength*(.25 if content == 'motion' else 1)
+        filters.append(f'hqdn3d={denoise}:{denoise}:{temporal}:{temporal}')
+        if mode == 'natural': filters.insert(0,'deblock=filter=weak:block=8')
     if mode == 'basic': filters.append(f'eq=contrast={1+.03*strength}:brightness={.01*strength}:saturation={1+.02*strength}')
     if mode == 'light': filters.append(f'eq=contrast={1+.06*strength}:brightness={.025*strength}:gamma={1+.08*strength}:saturation={1+.04*strength}')
-    sharpen = {'natural':.2, 'basic':.35, 'light':.25}[mode] * strength
+    sharpen=(.1 if content == 'detail' else {'natural':.2,'basic':.35,'light':.25}[mode])*strength
     filters.append(f'unsharp=5:5:{sharpen}:5:5:0')
     return ','.join(filters)
 
@@ -59,7 +65,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -105,7 +111,7 @@ def run_seed(job, source, output, width, height, trim, encode):
         raise ValueError('SeedVR2 currently supports up to 1920x1080 input (1080x1920 portrait). Use Natural restoration to preserve larger sources.')
     # Normalize rotation/timestamps and trim BEFORE inference, keeping previews bounded.
     prepared = source.parent / 'seed-input.mp4'
-    process = checked_process(job, ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-crf', '16', str(prepared)])
+    process = checked_process(job, ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', '-c:v', 'libx264', '-crf', '0', str(prepared)])
     if process.wait() != 0:
         raise RuntimeError('Could not prepare SeedVR2 input')
     restored = source.parent / 'seed-output.mp4'
@@ -128,13 +134,13 @@ def run_seed(job, source, output, width, height, trim, encode):
 INPUT_OPTIONS = ['-protocol_whitelist', 'file,pipe', '-format_whitelist', 'mov,matroska,webm']
 
 
-def probe(path):
+def probe(path, allow_hdr=False):
     result = subprocess.run(['ffprobe', '-v', 'error', *INPUT_OPTIONS, '-show_streams', '-show_format', '-of', 'json', str(path)], capture_output=True, text=True, timeout=30, check=True)
     info = json.loads(result.stdout)
     video = next((stream for stream in info['streams'] if stream['codec_type'] == 'video'), None)
     if not video:
         raise ValueError('No decodable video track')
-    if video.get('color_transfer') in ('smpte2084', 'arib-std-b67'):
+    if video.get('color_transfer') in ('smpte2084', 'arib-std-b67') and not allow_hdr:
         raise ValueError('HDR input requires a separate tone-mapping workflow; this enhancer accepts SDR video')
     width, height = int(video['width']), int(video['height'])
     rotation = next((data.get('rotation', 0) for data in video.get('side_data_list', []) if 'rotation' in data), 0)
@@ -149,6 +155,25 @@ def probe(path):
     duration = float(info.get('format', {}).get('duration') or video.get('duration') or 0)
     return width, height, fps, duration
 
+
+def source_encoding(path):
+    result = subprocess.run(['ffprobe', '-v', 'error', *INPUT_OPTIONS, '-show_streams', '-of', 'json', str(path)], capture_output=True, text=True, timeout=30, check=True)
+    streams = json.loads(result.stdout)['streams']
+    audio = next((item for item in streams if item['codec_type'] == 'audio'), {})
+    video = next(item for item in streams if item['codec_type'] == 'video')
+    audio_options = ['-c:a', 'copy'] if audio.get('codec_name') in ('aac', 'alac', 'mp3') or not audio else ['-c:a', 'aac', '-b:a', '256k']
+    color_options = []
+    for key, flag in [('color_space', '-colorspace'), ('color_transfer', '-color_trc'), ('color_primaries', '-color_primaries'), ('color_range', '-color_range')]:
+        if video.get(key) and video[key] not in ('unknown', 'unspecified'):
+            color_options.extend([flag, video[key]])
+    return audio_options, color_options, video.get('color_transfer') in ('smpte2084', 'arib-std-b67')
+
+def tone_map_ready():
+    try:
+        return ' zscale ' in subprocess.check_output(['ffmpeg','-hide_banner','-filters'],stderr=subprocess.DEVNULL,text=True,timeout=5)
+    except (OSError,subprocess.SubprocessError):return False
+
+HDR_TO_SDR = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=mobius:desat=2,zscale=t=bt709:m=bt709:r=limited,format=yuv420p'
 
 def update_ffmpeg_progress(job, line, duration):
     # FFmpeg can emit N/A before the first output timestamp is available.
@@ -194,7 +219,13 @@ def run_job(job):
     try:
         with open(source.parent / 'ffmpeg.log', 'wb') as log:
             job['log'] = log
-            width, height, fps, duration = probe(source)
+            audio_encode,color_encode,hdr = source_encoding(source)
+            tone_map = bool(job.get('toneMap'))
+            width, height, fps, duration = probe(source, allow_hdr=tone_map)
+            if hdr and tone_map and not tone_map_ready():
+                raise ValueError('HDR conversion requires FFmpeg with zscale. On Mac install ffmpeg-full and restart the helper.')
+            if hdr and tone_map and job['mode'] not in FILTERS and job['mode'] != 'edit':
+                raise ValueError('HDR to SDR supports Natural, Brightness and Edit modes; AI requires an SDR source')
             start = float(job.get('start', 0))
             end = float(job.get('end', 0))
             if duration and start >= duration:
@@ -206,7 +237,7 @@ def run_job(job):
             if not job['preview'] and job['mode'] != 'edit':
                 start = 0; limit = duration
             job['seek'] = ['-ss', str(start)] if start else []
-            job.update(state='processing', duration=limit, width=width, height=height)
+            job.update(state='processing', duration=limit, width=width, height=height,frameRate=fps)
             persist_job(job) if job.get('id') else None
             # Conservative temporary-space budget; actual disk pressure is checked while processing.
             pixels = width * height * (4 if job['mode'] == 'ai' else 1)
@@ -214,7 +245,7 @@ def run_job(job):
             if shutil.disk_usage(source.parent).free < budget:
                 raise ValueError('Not enough disk space for this job. Trim the video or free space first.')
             trim = ['-t', str(limit)] if limit else []
-            encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart']
+            encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', *audio_encode, *( ['-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv'] if hdr and tone_map else color_encode), '-movflags', '+faststart']
             if job['mode']=='trimstatic':
                 trim_static_tail(job,source,output,duration,globals())
             elif job['mode']=='audio':
@@ -235,8 +266,10 @@ def run_job(job):
             elif job['mode'] == 'strong':
                 run_seed(job, source, output, width, height, trim, encode)
             elif job['mode'] != 'ai':
-                video_filter=watermark_filter(job,width,height) if job['mode']=='watermark' else edit_filter(job,width,height) if job['mode']=='edit' else enhancement_filter(job['mode'],job.get('strength',1)) + ',pad=ceil(iw/2)*2:ceil(ih/2)*2'
+                video_filter=watermark_filter(job,width,height) if job['mode']=='watermark' else edit_filter(job,width,height) if job['mode']=='edit' else enhancement_filter(job['mode'],job.get('strength',1),job.get('captureContent','auto')) + ',pad=ceil(iw/2)*2:ceil(ih/2)*2'
                 command = ['ffmpeg', '-nostdin', '-y', '-v', 'error', *INPUT_OPTIONS, *job.get('seek', []), '-i', str(source), *trim, '-map', '0:v:0', '-map', '0:a:0?', '-vf',video_filter, *encode, '-progress', 'pipe:1', str(output)]
+                if hdr and tone_map:
+                    command[command.index('-vf')+1] = HDR_TO_SDR + ',' + video_filter
                 process = checked_process(job, command, stdout=subprocess.PIPE, text=True)
                 for line in process.stdout:
                     update_ffmpeg_progress(job, line, limit)
@@ -388,17 +421,18 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError: size = 0
             if not 0 < size <= 2 * 1024 * 1024:
                 return self.reply(413, {'error': 'Realtime frame must be under 2 MB'})
-            if self.headers.get('Content-Type', '').split(';')[0] != 'image/jpeg':
-                return self.reply(415, {'error': 'Realtime input must be JPEG'})
+            if self.headers.get('Content-Type', '').split(';')[0] not in ('image/jpeg','image/png'):
+                return self.reply(415, {'error': 'Realtime input must be JPEG or PNG'})
             if not SLOT.acquire(blocking=False):
                 return self.reply(409, {'error': 'Helper is busy; showing original video'})
             try:
                 self.connection.settimeout(5)
                 data = self.rfile.read(size)
                 if len(data) != size: raise ValueError('Incomplete realtime frame')
-                result, elapsed = enhance_frame(data, MODEL, MODEL_HASH)
+                lossless=self.headers.get('Content-Type','').split(';')[0]=='image/png'
+                result, elapsed = enhance_frame(data, MODEL, MODEL_HASH, lossless=lossless)
                 self.send_response(200); self.cors_headers()
-                self.send_header('Content-Type', 'image/jpeg')
+                self.send_header('Content-Type', 'image/png' if lossless else 'image/jpeg')
                 self.send_header('Content-Length', str(len(result)))
                 self.send_header('X-Inference-Ms', str(round(elapsed, 2)))
                 self.end_headers(); self.wfile.write(result)
@@ -466,7 +500,9 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:
             SLOT.release(); shutil.rmtree(directory, ignore_errors=True)
             return self.reply(400, {'error': str(error)})
-        job = dict(id=identifier,watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
+        capture_content=query.get('captureContent',['auto'])[0]
+        if capture_content not in ('auto','detail','motion'): capture_content='auto'
+        job = dict(id=identifier,captureContent=capture_content,toneMap=query.get('toneMap',['0'])==['1'],watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
         try:
             persist_job(job)
             with GUARD: JOBS[identifier] = job
@@ -489,7 +525,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'version':'1.17.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.18.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None

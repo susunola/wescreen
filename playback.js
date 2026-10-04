@@ -59,7 +59,8 @@ async function restorePlaybackState() {
   playbackReady=true;layoutPlaybackRotation();
  }catch(error){if(generation===playbackGeneration){playbackReady=true;$('playback-status').textContent=error.message;}}
 }
-$('playback-speed').onchange=()=>{$('preview').playbackRate=Number($('playback-speed').value);savePlaybackState();};
+$('preview').preservesPitch=true;
+$('playback-speed').onchange=()=>{$('preview').preservesPitch=true;$('preview').playbackRate=Number($('playback-speed').value);savePlaybackState();};
 $('preview').addEventListener('timeupdate',()=>{if(Date.now()-lastPlaybackSave>2000){lastPlaybackSave=Date.now();savePlaybackState();}});
 for(const event of ['pause','seeked','ended'])$('preview').addEventListener(event,savePlaybackState);
 window.addEventListener('pagehide',savePlaybackState);

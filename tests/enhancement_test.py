@@ -296,5 +296,37 @@ class RealtimeTest(unittest.TestCase):
             self.assertEqual(error.exception.code,413)
         finally: http.shutdown(); http.server_close(); thread.join()
 
+class QualityPreservationTest(unittest.TestCase):
+    setUp=EnhancementTest.setUp
+    tearDown=EnhancementTest.tearDown
+    job=EnhancementTest.job
+    def test_visual_restoration_preserves_audio_packets(self):
+        def packets(path):
+            return subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-map','0:a:0','-c:a','copy','-f','adts','pipe:1'])
+        before=packets(self.source)
+        job=self.job('natural');job.update(preview=False,captureContent='motion')
+        server.SLOT.acquire();server.run_job(job)
+        self.assertEqual(job['state'],'done',job.get('error'))
+        self.assertEqual(packets(job['output']),before)
+
+    def test_hdr_requires_explicit_conversion_and_output_is_bt709(self):
+        subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=160x90:rate=12','-t','1','-c:v','libx264','-pix_fmt','yuv420p10le','-x264-params','colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc',str(self.source)],check=True)
+        with self.assertRaisesRegex(ValueError,'HDR'):server.probe(self.source)
+        job=self.job('natural');job.update(preview=False,toneMap=True)
+        server.SLOT.acquire();server.run_job(job)
+        self.assertEqual(job['state'],'done',job.get('error'))
+        info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(job['output'])]))['streams'][0]
+        self.assertEqual(info['color_transfer'],'bt709');self.assertEqual(info['color_primaries'],'bt709')
+
+    def test_lossless_live_frame_is_png_and_dimensions_bounded(self):
+        import cv2
+        import numpy as np
+        from realtime import frame_dimensions,enhance_frame
+        ok,encoded=cv2.imencode('.png',np.zeros((90,160,3),dtype=np.uint8));self.assertTrue(ok)
+        result,elapsed=enhance_frame(encoded.tobytes(),server.MODEL,server.MODEL_HASH,lossless=True)
+        self.assertTrue(result.startswith(b'\x89PNG'));self.assertEqual(cv2.imdecode(np.frombuffer(result,np.uint8),1).shape[:2],(180,320));self.assertGreater(elapsed,0)
+        bad=bytearray(encoded.tobytes());bad[16:20]=(10000).to_bytes(4,'big')
+        with self.assertRaises(ValueError):frame_dimensions(bad)
+
 if __name__ == '__main__':
     unittest.main()

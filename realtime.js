@@ -1,5 +1,5 @@
 // Best-effort live neural SR. Audio and playback clock always stay on the original video.
-const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1};
+const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1,project:null,lossless:false};
 const realtimeCanvas=document.createElement('canvas');realtimeCanvas.id='realtime-ai-canvas';realtimeCanvas.hidden=true;$('playback-stage').prepend(realtimeCanvas);
 const realtimeCapture=document.createElement('canvas');
 const realtimeButton=document.createElement('button');realtimeButton.id='playback-realtime';realtimeButton.type='button';realtimeButton.dataset.i18n='smartRealtime';realtimeButton.textContent=L('smartRealtime');realtimeButton.setAttribute('aria-pressed','false');qualityPanel.insertBefore(realtimeButton,$('playback-instant'));
@@ -23,10 +23,11 @@ async function processRealtimeFrame(mediaTime){
  realtimeCapture.width=Math.max(2,Math.round(video.videoWidth*scale));realtimeCapture.height=Math.max(2,Math.round(video.videoHeight*scale));
  try{
   realtimeCapture.getContext('2d').drawImage(video,0,0,realtimeCapture.width,realtimeCapture.height);
-  const frame=await new Promise(resolve=>realtimeCapture.toBlob(resolve,'image/jpeg',.94));if(!frame)throw new Error('Frame unavailable');
+  const mime=realtimeAI.lossless?'image/png':'image/jpeg';
+  const frame=await new Promise(resolve=>realtimeCapture.toBlob(resolve,mime,.94));if(!frame)throw new Error('Frame unavailable');
   if(generation!==realtimeAI.generation)return;
-  realtimeAI.abort=new AbortController();const timeout=setTimeout(()=>realtimeAI.abort?.abort(),1800);
-  let response;try{response=await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':'image/jpeg'},signal:realtimeAI.abort.signal});}finally{clearTimeout(timeout);}
+  const controller=new AbortController();realtimeAI.abort=controller;const timeout=setTimeout(()=>controller.abort(),1800);
+  let response;try{response=await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':mime},signal:controller.signal});}finally{clearTimeout(timeout);}
   const bitmap=await createImageBitmap(await response.blob());
   try{
    if(generation!==realtimeAI.generation || !realtimeAI.enabled)return;
@@ -52,7 +53,7 @@ realtimeButton.onclick=async()=>{
   if($('realtime-text-protect')?.checked && entry?.captureContent==='detail'){realtimeHint.textContent=E('桌面文字保护已开启，保持原画。','Desktop text protection keeps the original.');return;}
   if(Math.max($('preview').videoWidth,$('preview').videoHeight)>1920 || Math.min($('preview').videoWidth,$('preview').videoHeight)>1080){realtimeHint.textContent=E('高清源保持原画，避免缩小后再放大。需要修复请使用后台自然修复。','Keeping the high-resolution original. Use background Natural restoration for repair.');return;}
   if(!health?.realtime){realtimeHint.textContent=E('请启动或更新本机增强包；需要支持实时 AI 的新版程序。','Start or update the local helper to support realtime AI.');return;}
-  realtimeAI.enabled=true;realtimeAI.generation++;realtimeAI.edge=960;realtimeAI.average=0;realtimeAI.failures=0;realtimeAI.slow=0;realtimeAI.frames=[];realtimeButton.setAttribute('aria-pressed','true');
+  realtimeAI.enabled=true;realtimeAI.project=playbackProjectId();realtimeAI.lossless=!!health.realtimeLossless;realtimeAI.generation++;realtimeAI.edge=960;realtimeAI.average=0;realtimeAI.failures=0;realtimeAI.slow=0;realtimeAI.frames=[];realtimeButton.setAttribute('aria-pressed','true');
   processRealtimeFrame($('preview').currentTime);scheduleRealtimeAI();
  }finally{realtimeButton.disabled=false;}
 };
@@ -61,6 +62,11 @@ $('preview').addEventListener('play',scheduleRealtimeAI);
 $('preview').addEventListener('seeking',()=>{realtimeAI.generation++;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;});
 $('preview').addEventListener('seeked',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
 $('preview').addEventListener('pause',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
-$('preview').addEventListener('loadedmetadata',()=>stopRealtimeAI());
+$('preview').addEventListener('loadedmetadata',()=>{
+ if(!realtimeAI.enabled)return;
+ const v=$('preview');if(realtimeAI.project!==playbackProjectId() || Math.max(v.videoWidth,v.videoHeight)>1920 || Math.min(v.videoWidth,v.videoHeight)>1080){stopRealtimeAI();return;}
+ realtimeAI.generation++;realtimeAI.request++;realtimeAI.abort?.abort();realtimeAI.busy=false;realtimeCanvas.hidden=true;realtimeAI.mediaTime=-1;
+ processRealtimeFrame(v.currentTime);scheduleRealtimeAI();
+});
 window.addEventListener('pagehide',()=>stopRealtimeAI());
 new MutationObserver(()=>{if($('result').classList.contains('hidden'))stopRealtimeAI();}).observe($('result'),{attributes:true,attributeFilter:['class']});

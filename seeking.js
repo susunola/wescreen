@@ -8,7 +8,7 @@ seekRange.addEventListener('pointerdown',event=>{
  if(event.button!==0)return;event.preventDefault();seekRange.focus({preventScroll:true});
  const priorPlaying=seekGesture?.playing ?? !$('preview').paused;seekGesture={serial:++seekSerial,pointer:event.pointerId,x:event.clientX,playing:priorPlaying,dragged:false,committed:false};partLoadGeneration++;
  playbackSeeking=true;clearTimeout(seekKeyboardTimer);seekRange.setPointerCapture(event.pointerId);$('preview').pause();
- realtimeAI.generation++;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;revealFullscreenControls();
+ realtimeAI.generation++;realtimeAI.request++;realtimeAI.busy=false;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;revealFullscreenControls();
  setSeekFromPointer(event);
 });
 seekRange.addEventListener('pointermove',event=>{if(seekGesture?.pointer===event.pointerId){if(Math.abs(event.clientX-seekGesture.x)>4)seekGesture.dragged=true;setSeekFromPointer(event);}});
@@ -16,7 +16,7 @@ seekRange.oninput=()=>{playbackSeeking=true;paintSeekTarget();if(!seekGesture){c
 async function commitSeekTarget(event){
  const gesture=seekGesture;if(gesture?.committed)return;if(event?.pointerId!==undefined&&gesture?.pointer!==event.pointerId)return;
  if(gesture)gesture.committed=true;clearTimeout(seekKeyboardTimer);
- const serial=gesture?.serial ?? ++seekSerial,time=seekTarget(),playing=gesture?(gesture.dragged?gesture.playing:true):!$('preview').paused;
+ const started=performance.now();const serial=gesture?.serial ?? ++seekSerial,time=seekTarget(),playing=gesture?(gesture.dragged?gesture.playing:true):!$('preview').paused;
  cinemaThumbnail.hidden=true;
  try{
   await seekRecordingTimeline(time,playing);
@@ -24,6 +24,8 @@ async function commitSeekTarget(event){
   // play() waits for the requested frame itself; do not add an artificial seek debounce here.
   if(playing){if(pendingPlaybackPosition)pendingPlaybackPosition.playing=true;else $('preview').play().catch(error=>{if(serial===seekSerial)$('playback-status').textContent=error.message;});}
   savePlaybackState();
+  const report=()=>{if(serial!==seekSerial)return;const v=$('preview');if(!v.seeking && Math.abs(playbackTimelineTime()-time)<.2)seekRange.dataset.responseMs=String(Math.round(performance.now()-started));else if(v.requestVideoFrameCallback && performance.now()-started<8000)v.requestVideoFrameCallback(report);};
+  if($('preview').requestVideoFrameCallback)$('preview').requestVideoFrameCallback(report);else $('preview').addEventListener('seeked',report,{once:true});
  }catch(error){if(serial===seekSerial)$('playback-status').textContent=error.message;}
  finally{if(serial===seekSerial){seekGesture=null;playbackSeeking=false;revealFullscreenControls();}}
 }

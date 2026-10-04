@@ -33,9 +33,18 @@ def jpeg_dimensions(data):
     raise ValueError('Invalid JPEG dimensions')
 
 
-def enhance_frame(data, model_path, model_hash):
+def frame_dimensions(data):
+    if data.startswith(b'\x89PNG\r\n\x1a\n') and len(data)>=33 and data[12:16]==b'IHDR':
+        width=int.from_bytes(data[16:20],'big');height=int.from_bytes(data[20:24],'big')
+        if min(width,height)<2 or max(width,height)>960 or min(width,height)>540:
+            raise ValueError('Realtime frame supports up to 960x540 (portrait allowed)')
+        return width,height
+    return jpeg_dimensions(data)
+
+
+def enhance_frame(data, model_path, model_hash, lossless=False):
     global _MODEL
-    width, height = jpeg_dimensions(data)
+    width, height = frame_dimensions(data)
     import cv2
     import numpy as np
     started = time.perf_counter()
@@ -53,6 +62,6 @@ def enhance_frame(data, model_path, model_hash):
         # Mild spatial denoise before actual neural super-resolution.
         cleaned = cv2.bilateralFilter(frame, 3, 12, 12)
         enhanced = _MODEL.upsample(cleaned)
-        ok, encoded = cv2.imencode('.jpg', enhanced, [cv2.IMWRITE_JPEG_QUALITY, 94])
+        ok, encoded = cv2.imencode('.png' if lossless else '.jpg', enhanced, [cv2.IMWRITE_PNG_COMPRESSION, 1] if lossless else [cv2.IMWRITE_JPEG_QUALITY, 94])
         if not ok: raise RuntimeError('Could not encode enhanced frame')
     return encoded.tobytes(), (time.perf_counter()-started)*1000

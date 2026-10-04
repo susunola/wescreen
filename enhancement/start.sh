@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+for full_ffmpeg in /opt/homebrew/opt/ffmpeg-full/bin /usr/local/opt/ffmpeg-full/bin; do
+  if [ -x "$full_ffmpeg/ffmpeg" ]; then export PATH="$full_ffmpeg:$PATH"; break; fi
+done
 if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
   if command -v brew >/dev/null; then
     echo 'Installing FFmpeg with Homebrew…'

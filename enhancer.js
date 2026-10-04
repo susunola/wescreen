@@ -78,7 +78,7 @@ function updateEnhancementMode() {
 }
 async function openEnhancement(entry=null) {
   if(enhancementBusy){navigateWorkspace('tasks');return;}
-  enhancementSource=entry;enhancementPreviewMode=null;comparisonActive=false;clearEnhancementPreview();
+  enhancementSource=entry;hdrInput.checked=false;enhancementPreviewMode=null;comparisonActive=false;clearEnhancementPreview();
   $('enhance-title').textContent=entry ? E('画质增强：','Enhance: ')+entry.name : L('helperConnection');
   $('enhance-estimate').textContent='';$('enhance-start').value='0';$('enhance-progress').value=0;
   $('enhance-panel').showModal();$('helper-connection').open=false;
@@ -90,10 +90,13 @@ function resultName(task) {
   const label=task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? 'merged' : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
   return `${(task.name || 'video').replace(/\.(mp4|webm)$/i,'')}-${label}${task.preview ? '-preview' : ''}.mp4`;
 }
+const hdrChoice=document.createElement('label');hdrChoice.className='check';const hdrInput=document.createElement('input');hdrInput.type='checkbox';hdrInput.id='enhance-hdr-sdr';hdrChoice.append(hdrInput,document.createTextNode(E('HDR 转 SDR（另存，原视频保留）','Convert HDR to SDR (save a copy)')));$('enhance-mode-hint').after(hdrChoice);
 async function submitProcessing(source,options) {
   enhancementToken=$('enhance-token').value.trim();if(!enhancementToken)throw new Error(L('helperOffline'));
   const blob=await readStore('videos',source.id);if(!blob)throw new Error(L('errEmpty'));
   const query=new URLSearchParams({mode:options.mode,preview:options.preview ? '1':'0',start:String(options.start || 0),end:String(options.end || 0),sourceId:source.id,name:source.name});
+  query.set('captureContent',source.captureContent || 'auto');
+  if(options.toneMap ?? (source===enhancementSource && hdrInput.checked))query.set('toneMap','1');
   if($('enhance-strength') && ['natural','basic','light','ai'].includes(options.mode))query.set('strength',options.strength ?? $('enhance-strength').value);
   if(options.audioPreset)query.set('audioPreset',options.audioPreset);
   if(options.watermark)query.set('watermark',options.watermark.join(','));
@@ -121,7 +124,7 @@ async function saveTaskResult(task) {
     const blob=await(await enhancementRequest(`/jobs/${task.id}/result`)).blob();
     const original=await readStore('recordings',task.sourceId);
     const id=crypto.randomUUID();let savedId=id;
-    const entry={id,name:resultName(task),size:blob.size,createdAt:Date.now(),duration:info.duration*1000,width:info.width,height:info.height,course:task.course || original?.course || '',markers:task.mode==='trimstatic' || task.smartTail ? (original?.markers || []).filter(m=>m.at<info.duration*1000) : task.mode==='edit' ? (original?.markers || []).filter(m=>m.at>=task.start*1000 && (!task.end || m.at<task.end*1000)).map(m=>({...m,at:m.at-task.start*1000})) : original?.markers || task.markers || [],enhancedFrom:task.sourceId,enhancement:task.mode,helperJobId:task.id,channelId:original?.channelId,channelName:original?.channelName,channelUrl:original?.channelUrl,sourceUrl:original?.sourceUrl,channelTaskId:original?.channelTaskId,exportFolder:original?.exportFolder || task.exportFolder};
+    const entry={id,frameRate:info.frameRate || original?.frameRate,averageMuxBitrate:blob.size*8/Math.max(.001,info.duration),name:resultName(task),size:blob.size,createdAt:Date.now(),duration:info.duration*1000,width:info.width,height:info.height,course:task.course || original?.course || '',markers:task.mode==='trimstatic' || task.smartTail ? (original?.markers || []).filter(m=>m.at<info.duration*1000) : task.mode==='edit' ? (original?.markers || []).filter(m=>m.at>=task.start*1000 && (!task.end || m.at<task.end*1000)).map(m=>({...m,at:m.at-task.start*1000})) : original?.markers || task.markers || [],enhancedFrom:task.sourceId,enhancement:task.mode,helperJobId:task.id,channelId:original?.channelId,channelName:original?.channelName,channelUrl:original?.channelUrl,sourceUrl:original?.sourceUrl,channelTaskId:original?.channelTaskId,exportFolder:original?.exportFolder || task.exportFolder};
     await runTx(['recordings','videos','tasks'],'readwrite',tx=>{
       const request=tx.objectStore('recordings').getAll();request.onsuccess=()=>{
         const duplicate=request.result.find(item=>item.helperJobId===task.id);
@@ -191,7 +194,7 @@ async function renderEnhancementTasks() {
       if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error ? enhancementErrorText(task.error) : L('taskLost');row.append(error);}
       if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);const percent=document.createElement('span');percent.className='task-percent';percent.textContent=Math.round((task.progress || 0)*100)+'%';row.append(percent);}
       const buttons=document.createElement('div');buttons.className='controls task-actions';
-      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.smartTail)await queueSmartTail(source.id,task.requireSilence!==false);else if(task.mode==='merge')await mergeRecordingParts(source,task.compatible);else await submitProcessing(source,{mode:task.mode,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength,watermark:task.watermark,requireSilence:task.requireSilence});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
+      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.smartTail)await queueSmartTail(source.id,task.requireSilence!==false);else if(task.mode==='merge')await mergeRecordingParts(source,task.compatible);else await submitProcessing(source,{mode:task.mode,toneMap:task.toneMap,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength,watermark:task.watermark,requireSilence:task.requireSilence});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
       if(task.state==='done' && remote){if(!saved)buttons.append(libraryButton('saveLibrary',async()=>{await saveTaskResult(task);await renderEnhancementTasks();}));buttons.append(libraryButton('exportResult',()=>exportTask(task)));}
       if(['queued','processing'].includes(task.state) && remote)buttons.append(libraryButton('cancelTask',async()=>{await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await renderEnhancementTasks();}));
       else buttons.append(libraryButton('deleteTask',async()=>{
@@ -233,3 +236,5 @@ $('compare-zoom').oninput=()=>{for(const id of ['enhance-original','enhance-outp
 const compareSides=document.querySelectorAll('.enhance-comparison > div');for(const side of compareSides)side.addEventListener('scroll',()=>{const other=[...compareSides].find(item=>item!==side);if(!other)return;const x=side.scrollLeft/(side.scrollWidth-side.clientWidth || 1),y=side.scrollTop/(side.scrollHeight-side.clientHeight || 1);if(Math.abs(other.scrollLeft-x*(other.scrollWidth-other.clientWidth))>1)other.scrollLeft=x*(other.scrollWidth-other.clientWidth);if(Math.abs(other.scrollTop-y*(other.scrollHeight-other.clientHeight))>1)other.scrollTop=y*(other.scrollHeight-other.clientHeight);});
 
 $('preview-seconds').onchange=updateEnhancementMode;setInterval(()=>{if($('enhance-panel').open && !helperHealth && !enhancementBusy)connectHelper();},3000);
+
+window.addEventListener('wescreen-language',()=>{hdrChoice.lastChild.textContent=E('HDR 转 SDR（另存，原视频保留）','Convert HDR to SDR (save a copy)');});

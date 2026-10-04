@@ -21,6 +21,8 @@ async function removeRecordings(ids, permanent = false) {
     }
   });
   if (typeof notifyPlaybackLibraryChanged === 'function') notifyPlaybackLibraryChanged();
+  for(const id of ids)playbackBlobCache.delete(id);
+  if(ids.includes(playbackNextPart?.id))playbackNextPart=null;
   if (ids.includes(finalId)) { clearPreview(); finalBlob = null; finalId = null; finalSize = 0; recordingView = 'setup'; navigateWorkspace(workspaceView); }
   librarySelection.clear(); await renderRecordingLibrary(); renderStorageHint();
 }
@@ -44,7 +46,10 @@ function recordingGroups(entries) {
   return groups.map(parts=>{parts.sort((a,b)=>(a.part || Number(a.name.match(/-part-(\d+)/)?.[1]) || 1)-(b.part || Number(b.name.match(/-part-(\d+)/)?.[1]) || 1));const first=parts[0];return parts.length===1 ? first:{...first,name:first.name.replace(/-part-\d+(?=\.(?:mp4|webm)$)/i,''),_parts:parts,duration:parts.reduce((n,e)=>n+(e.duration||0),0),size:parts.reduce((n,e)=>n+e.size,0)};}).concat(entries.filter(e=>e.enhancedFrom));
 }
 let playbackParts=[],playbackPartIndex=0,partLoadGeneration=0,playbackNextPart=null;
-function preloadRecordingPart(){const next=playbackParts[playbackPartIndex+1];playbackNextPart=next ? {id:next.id,blob:readStore('videos',next.id)}:null;}
+const playbackBlobCache=new Map();
+function cachedPlaybackBlob(id){if(!playbackBlobCache.has(id)){const pending=readStore('videos',id);playbackBlobCache.set(id,pending);pending.catch(()=>{if(playbackBlobCache.get(id)===pending)playbackBlobCache.delete(id);});while(playbackBlobCache.size>3)playbackBlobCache.delete(playbackBlobCache.keys().next().value);}return playbackBlobCache.get(id);}
+function preloadRecordingPart(){const next=playbackParts[playbackPartIndex+1];playbackNextPart=next ? {id:next.id,blob:cachedPlaybackBlob(next.id)}:null;playbackNextPart?.blob.catch(()=>{});}
+
 function playbackTimelineTotal(){return playbackParts.length>1 ? playbackParts.reduce((n,e)=>n+(e.duration||0)/1000,0):Number.isFinite($('preview').duration)?$('preview').duration:0;}
 function playbackTimelineTime(){return playbackParts.slice(0,playbackPartIndex).reduce((n,e)=>n+(e.duration||0)/1000,0)+$('preview').currentTime;}
 async function seekRecordingTimeline(time,playing=!$('preview').paused){
@@ -55,7 +60,8 @@ async function seekRecordingTimeline(time,playing=!$('preview').paused){
 }
 async function loadRecordingPart(index,time=null,playing=false){
  const generation=++partLoadGeneration,entry=playbackParts[index];if(!entry)return;
- const blob=await (playbackNextPart?.id===entry.id ? playbackNextPart.blob:readStore('videos',entry.id));if(generation!==partLoadGeneration)return;if(!blob)throw new Error(L('errEmpty'));
+ const current=await readStore('recordings',entry.id);if(generation!==partLoadGeneration)return;if(!current || current.deletedAt){playbackBlobCache.delete(entry.id);throw new Error(E('此录像已删除。','This recording was deleted.'));}
+ const blob=await (playbackNextPart?.id===entry.id ? playbackNextPart.blob:cachedPlaybackBlob(entry.id));if(generation!==partLoadGeneration)return;if(!blob)throw new Error(L('errEmpty'));
  const view=playbackReady?currentPlaybackView():null;const rotation=typeof playbackRotation==='number'?playbackRotation:0,speed=$('preview').playbackRate;
  playbackPartIndex=index;preloadRecordingPart();finalBlob=blob;finalSize=blob.size;finalId=entry.id;finalName=entry.name;finalDuration=playbackTimelineTotal()*1000;finalMarkers=entry.markers||[];
  if(time!==null)pendingPlaybackPosition={id:entry.id,time,playing,view};setPreview(blob);
@@ -66,7 +72,7 @@ async function playRecording(entry) {
   const all=(await readStore('recordings')).filter(e=>!e.deletedAt);
   const group=recordingGroups(all).find(e=>e.id===entry.id || e._parts?.some(p=>p.id===entry.id));
   if (!group) throw new Error(E('此录像已删除。','This recording was deleted.'));
-  playbackParts=group?._parts || [entry];playbackPartIndex=0;
+  playbackBlobCache.clear();playbackParts=group?._parts || [entry];playbackPartIndex=0;
   const resume=playbackParts.length>1 ? await readStore('meta','continuous:'+(playbackParts[0].recordingGroupId || playbackParts[0].id)):null;
   await loadRecordingPart(resume && playbackParts.some(e=>e.id===resume.partId) ? playbackParts.findIndex(e=>e.id===resume.partId):0,resume?.time ?? null);
   renderRecordingReview(playbackParts[0]).catch(error=>$('review-summary').textContent=error.message);$('result-warning').hidden=true;show('result');
@@ -173,3 +179,5 @@ async function importRecording(file) {
     saveThumbnail(file,id).catch(()=>{}); libraryTrash = false; await renderRecordingLibrary(); navigateWorkspace('library');
   } finally { video.removeAttribute('src');video.load();URL.revokeObjectURL(url); }
 }
+
+window.addEventListener('pagehide',()=>{playbackBlobCache.clear();playbackNextPart=null;});
