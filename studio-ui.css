@@ -180,3 +180,31 @@
 .studio-ui #live-preview{width:100%;height:auto;min-height:0;max-height:none;display:block;object-fit:contain}
 .studio-ui .recording-control-dock{position:relative;left:auto;bottom:auto;transform:none;margin:20px auto 0;width:max-content;max-width:100%;border-radius:18px}
 @media(max-width:600px){.studio-ui .recording-control-dock{width:100%;margin-top:14px;border-radius:12px}}
+
+/* Approved workbench: restrained header, source-sized preview, separate instrument dock. */
+.studio-ui #recording .record-head{align-items:center;margin-bottom:24px;gap:8px 28px}
+.studio-ui .recording-console-title strong{font-size:28px;font-weight:600;letter-spacing:-.6px}
+.studio-ui .recording-console-title span{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.studio-ui #recording .record-head .recording-console-status{flex-direction:column;align-items:flex-end;gap:5px;grid-row:1}
+.studio-ui #recording .live{font-size:11px;letter-spacing:0;color:#d8dbe0}
+.studio-ui #recording #timer{font-size:42px;line-height:1.1;letter-spacing:1px;font-variant-numeric:tabular-nums;font-weight:400}
+.studio-ui #recording .recording-console-status[data-paused=true] .live::before{background:#decba4;box-shadow:none}
+.studio-ui #recording #source-info{grid-column:2;grid-row:2;text-align:right;font-size:11px;line-height:1.5;overflow-wrap:anywhere;max-width:340px;justify-self:end}
+.studio-ui .recording-preview-stage{border-radius:10px;border-color:#ffffff0c}
+.studio-ui #live-preview{border-radius:9px}
+.studio-ui .recording-control-dock{gap:28px;padding:18px 26px;border-radius:24px;background:#181b1e;border-color:#ffffff18;box-shadow:0 8px 28px #0002;backdrop-filter:none;margin-top:22px}
+.studio-ui .recording-transport{gap:18px;flex-wrap:nowrap}
+.studio-ui .recording-transport button{width:48px;height:48px;min-width:48px!important;min-height:48px;transition:background .15s,box-shadow .15s}
+.studio-ui .recording-transport button:focus-visible,.studio-ui .recording-secondary>summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.studio-ui .recording-transport #pause{border-color:#d8dbe0!important}
+.studio-ui .recording-transport #stop{background:#f04454!important;box-shadow:none}
+.studio-ui .recording-transport #mark{margin-left:8px}
+.studio-ui .recording-control-dock>label{grid-template-columns:160px auto;padding-left:26px;gap:8px 16px;border-color:#ffffff16}
+.studio-ui #live-level{width:160px;height:10px;accent-color:#72c28a}
+.studio-ui #live-level::-webkit-meter-bar{background:#30363b;border:0;border-radius:2px}
+.studio-ui #live-level::-webkit-meter-optimum-value{background:#72c28a;border-radius:2px}
+.studio-ui .recording-db{font-size:12px}
+.studio-ui #recording #memory{font-size:12px;max-width:180px;padding-left:26px;border-color:#ffffff16;color:#b8bec6}
+.studio-ui .recording-console-footer{margin-top:20px;padding:14px 0;font-size:11px}
+@media(max-width:900px){.studio-ui .recording-control-dock{gap:16px;padding:16px 18px}.studio-ui .recording-control-dock>label{grid-template-columns:100px auto;padding-left:16px}.studio-ui #live-level{width:100px}.studio-ui .recording-transport{gap:10px}}
+@media(max-width:600px){.studio-ui #recording .record-head{gap:8px 12px}.studio-ui .recording-console-title{min-width:0}.studio-ui .recording-console-title strong{font-size:22px}.studio-ui .recording-console-title span{font-size:11px}.studio-ui #recording #timer{font-size:30px}.studio-ui #recording #source-info{max-width:170px;font-size:10px}.studio-ui .recording-control-dock{padding:14px 10px;gap:8px;border-radius:16px;justify-content:space-between}.studio-ui .recording-transport{gap:4px}.studio-ui .recording-transport button{width:36px;height:36px;min-width:36px!important;min-height:36px}.studio-ui .recording-transport #mark{margin-left:0}.studio-ui .recording-control-dock>label{grid-template-columns:60px;padding-left:10px}.studio-ui #live-level{width:60px}.studio-ui .recording-db{display:none}}

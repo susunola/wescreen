@@ -64,7 +64,7 @@
   window.addEventListener('wescreen-language',refresh);refresh();
 })();
 
-// Floating recording console; all original media/control nodes keep their handlers.
+// Recording workbench; all original media/control nodes keep their handlers.
 (() => {
  const recording=$('recording'),head=recording.querySelector('.record-head');
  const make=(tag,cls)=>{const el=document.createElement(tag);el.className=cls;return el;};
@@ -80,10 +80,10 @@
  for(const id of ['recording-health','capture-quality-stats'])diagnostics.append($(id));secondary.append(diagnostics);
  const source=recording.querySelector('.source-status');head.append($('source-info'));source.remove();
  recording.querySelector(':scope > .controls')?.remove();dock.append(transport,audio,$('memory'),secondary);stage.after(dock);
- const sizePreview=()=>{const video=$('live-preview');if(video.videoWidth&&video.videoHeight)stage.style.setProperty('--recording-preview-width',(Math.max(220,window.innerHeight*.66)*video.videoWidth/video.videoHeight)+'px');};
+ const sizePreview=()=>{const video=$('live-preview');if(video.videoWidth&&video.videoHeight)stage.style.setProperty('--recording-preview-width',(Math.max(220,window.innerHeight*.62)*video.videoWidth/video.videoHeight)+'px');};
  $('live-preview').addEventListener('loadedmetadata',sizePreview);window.addEventListener('resize',sizePreview);
  const footer=make('div','recording-console-footer'),local=document.createElement('span'),original=document.createElement('span');footer.append(local,original);dock.after(footer);$('recording-hint').hidden=true;
- const sync=()=>{title.textContent=E('录制工作台','Recording studio');caption.textContent=$('filename').value || E('本机录制','Local recording');local.textContent=E('● 本机保存','● Saved locally');original.textContent=E('原视频保留','Originals preserved');summary.textContent=E('录制诊断','Recording diagnostics');tools.title=E('更多录制工具','Recording tools');tools.setAttribute('aria-label',tools.title);for(const id of ['pause','stop','mark','capture-monitor-live']){const button=$(id);button.title=button.textContent;button.setAttribute('aria-label',button.textContent);if(id==='pause')button.dataset.paused=String(typeof recorder!=='undefined'&&recorder?.state==='paused');}db.textContent=$('live-level').value>0 ? (20*Math.log10($('live-level').value/4)).toFixed(0)+' dB':'−∞ dB';};
+ const sync=()=>{status.dataset.paused=String(typeof recorder!=='undefined'&&recorder?.state==='paused');status.querySelector('.live').textContent=E(status.dataset.paused==='true'?'已暂停':'正在录制',status.dataset.paused==='true'?'Paused':'Recording');title.textContent=E('录制工作台','Recording studio');caption.textContent=$('filename').value || E('本机录制','Local recording');local.textContent=E('● 本机保存','● Saved locally');original.textContent=E('原视频保留','Originals preserved');summary.textContent=E('录制诊断','Recording diagnostics');tools.title=E('更多录制工具','Recording tools');tools.setAttribute('aria-label',tools.title);for(const id of ['pause','stop','mark','capture-monitor-live']){const button=$(id);button.title=button.textContent;button.setAttribute('aria-label',button.textContent);if(id==='pause')button.dataset.paused=String(typeof recorder!=='undefined'&&recorder?.state==='paused');}db.textContent=$('live-level').value>0 ? (20*Math.log10($('live-level').value/4)).toFixed(0)+' dB':'−∞ dB';};
  new MutationObserver(sync).observe($('pause'),{childList:true});
  new MutationObserver(sync).observe(recording,{attributes:true,attributeFilter:['class']});
  new MutationObserver(sync).observe($('live-level'),{attributes:true,attributeFilter:['value']});
