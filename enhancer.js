@@ -51,19 +51,29 @@ async function repairHelperPairing(){
 async function connectHelper(options={}){
  // A user retry must not disappear into a background discovery already in flight.
  if(helperConnecting){const result=await helperConnecting;if(result || !options.repair)return result;}
- if(options.launch){const link=document.createElement('a');link.href='wescreen-helper://start';document.body.append(link);link.click();link.remove();}
  helperConnectionEpoch++;
  helperConnecting=(async()=>{
   $('helper-check').disabled=true;$('helper-check').textContent=E('连接中…','Connecting…');enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');$('tasks-status').textContent=$('helper-status').textContent;
   try{
    try{
-    if(options.launch){const deadline=Date.now()+12000;while(true){try{await discoverHelperToken();break;}catch(error){if(/paired/.test(error.message) || Date.now()>=deadline)throw error;await new Promise(resolve=>setTimeout(resolve,600));}}}
+    if(options.launch){
+     // Probe first: a running helper needs pairing, not another external start request.
+     try{await discoverHelperToken();}catch(error){
+      if(/paired/.test(error.message))throw error;
+      if(!/fetch|Failed|Network|timed out|timeout|aborted/i.test(error.message))throw error;
+      const link=document.createElement('a');link.href='wescreen-helper://start';document.body.append(link);link.click();link.remove();
+      const deadline=Date.now()+12000;while(true){try{await discoverHelperToken();break;}catch(startError){
+       if(/paired/.test(startError.message)){throw new Error(E('本机程序已启动，需要授权。请再次点击自动连接，在本机窗口允许连接。','Helper started and needs approval. Click Auto connect again to approve in the local window.'));}
+       if(Date.now()>=deadline)throw startError;await new Promise(resolve=>setTimeout(resolve,600));
+      }}
+     }
+    }
     else if(!enhancementToken)await discoverHelperToken();
     try{helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}
    }catch(error){if(!options.repair || !/paired with another/.test(error.message))throw error;await repairHelperPairing();helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
    $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();renderEnhancementTasks().catch(()=>{});return helperHealth;
-  }catch(error){$('tasks-connection').dataset.reason=/paired/.test(error.message)?'pairing':/version|incompatible/.test(error.message)?'version':'unreachable';$('helper-status').textContent=/paired with another/.test(error.message) ? E('检测到另一扩展的配对。点击自动连接，在本机窗口允许一次；以后两个扩展都能自动连接，无需重置。','Another extension is paired. Click Auto connect and approve once in the local window; both extensions will reconnect without resetting.') : /授权尚未|approval did not/.test(error.message)?error.message:E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
+  }catch(error){$('tasks-connection').dataset.reason=/paired/.test(error.message)?'pairing':/version|incompatible/.test(error.message)?'version':'unreachable';$('helper-status').textContent=/paired with another/.test(error.message) ? E('检测到另一扩展的配对。点击自动连接，在本机窗口允许一次；以后两个扩展都能自动连接，无需重置。','Another extension is paired. Click Auto connect and approve once in the local window; both extensions will reconnect without resetting.') : /授权尚未|approval did not|本机程序已启动|Helper started/.test(error.message)?error.message:E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
  })();try{return await helperConnecting;}finally{helperConnecting=null;$('helper-check').disabled=false;$('helper-check').textContent=L('autoConnect');updateTaskConnection(!!helperHealth);}
 }
 function enhancementControls(busy) {

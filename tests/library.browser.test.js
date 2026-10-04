@@ -241,8 +241,8 @@ test('helper discovery owns status during task refresh and restores retry contro
 test('user pairing retry follows a failed background discovery instead of being swallowed',options,async()=>harness(async(cx,url)=>{
  const p=await pageReady(cx,url);
  await cx.route('http://127.0.0.1:8765/**',async route=>{const u=new URL(route.request().url());if(u.pathname==='/connect' && !u.searchParams.has('challenge')){await new Promise(resolve=>setTimeout(resolve,150));await route.fulfill({status:403,json:{error:'Helper is paired with another extension. Approve this extension in the local launcher.'}});}else await route.fulfill({json:u.pathname==='/connect'?{token:'new-approved-token-123456789'}:u.pathname==='/health'?{ready:true}: {jobs:[]}});});
- await p.evaluate(async()=>{chrome.runtime.id='a'.repeat(32);enhancementToken='';$('enhance-token').value='';window.pairingPrompts=0;openNativePairing=()=>window.pairingPrompts++;const background=connectHelper();const user=connectHelper({repair:true});await Promise.all([background,user]);});
- assert.equal(await p.evaluate(()=>window.pairingPrompts),1);assert.equal(await p.locator('#tasks-connection').getAttribute('data-state'),'connected');assert.equal(await p.evaluate(()=>helperConnecting),null);
+ await p.evaluate(async()=>{chrome.runtime.id='a'.repeat(32);enhancementToken='';$('enhance-token').value='';window.externalStarts=0;HTMLAnchorElement.prototype.click=function(){if(this.href==='wescreen-helper://start')window.externalStarts++;};window.pairingPrompts=0;openNativePairing=()=>window.pairingPrompts++;const background=connectHelper();const user=connectHelper({repair:true,launch:true});await Promise.all([background,user]);});
+ assert.equal(await p.evaluate(()=>window.externalStarts),0);assert.equal(await p.evaluate(()=>window.pairingPrompts),1);assert.equal(await p.locator('#tasks-connection').getAttribute('data-state'),'connected');assert.equal(await p.evaluate(()=>helperConnecting),null);
 }));
 
 

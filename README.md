@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.26.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.26.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 

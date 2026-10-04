@@ -7,9 +7,10 @@ import urllib.request
 import sys
 from pairing import parse_pair_url, trusted_origins, approve_pairing
 root=Path(__file__).resolve().parent
+config=json.loads((root/'launcher-config.json').read_text()) if (root/'launcher-config.json').exists() else None
 if len(sys.argv) > 1 and sys.argv[1] != 'wescreen-helper://start':
     origin, nonce = parse_pair_url(sys.argv[1])
-    pair_file=Path(os.environ.get('WESCREEN_WORK_DIR',str(root/'.runtime/jobs')))/'extension-origin.txt'
+    pair_file=Path(config['pairDirectory'] if config else os.environ.get('WESCREEN_WORK_DIR',str(root/'.runtime/jobs')))/'extension-origin.txt'
     if origin not in trusted_origins(pair_file):
         prompt='允许这个 WeScreen 扩展连接本机处理程序？\n扩展 ID：'+origin.split('://')[1]+'\n已有录像、模型和任务会保留。'
         approval=subprocess.run(['osascript','-e','display dialog '+json.dumps(prompt,ensure_ascii=False)+' buttons {"取消", "允许连接"} default button "允许连接" cancel button "取消" with title "WeScreen 本机连接"'],capture_output=True)
@@ -18,13 +19,13 @@ if len(sys.argv) > 1 and sys.argv[1] != 'wescreen-helper://start':
 domain=f'gui/{os.getuid()}'
 agent=Path.home()/'Library/LaunchAgents/com.wescreen.helper.plist'
 try:
-    token=(root/'.runtime/token.txt').read_text().strip()
+    token=Path(config['tokenFile'] if config else root/'.runtime/token.txt').read_text().strip()
     def get(path):
         return json.load(urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8765'+path,headers={'X-WeScreen-Token':token}),timeout=3))
     health=get('/health')
     # Compare against the installed code, never a stale hard-coded release.
     import re
-    version=re.search(r"'version'\s*:\s*'([^']+)'",(root/'server.py').read_text()).group(1)
+    version=config['version'] if config else re.search(r"'version'\s*:\s*'([^']+)'",(root/'server.py').read_text()).group(1)
     if health.get('merge') and health.get('version')==version: raise SystemExit(0)
     if any(j['state'] in ('queued','processing') for j in get('/jobs')['jobs']):
         raise SystemExit('An active processing job is running. Finish it before updating the helper.')
