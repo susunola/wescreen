@@ -1,3 +1,12 @@
+# 1.27.2
+
+- Opening WeScreen now defaults to the general recording screen instead of restoring the previous Telegram recording scene.
+- Telegram channel controls remain available from the dedicated Telegram workspace. Returning to general recording resets the generated Telegram filename.
+- Recording preferences such as resolution, bitrate, and frame rate are retained. Existing recordings and channel configurations are preserved.
+- Verified startup with persisted Telegram settings and the studio UI regression suite.
+
+To update, overwrite the existing extension folder and reload the extension. Do not uninstall it, so your recording library is retained.
+
 # 1.27.1
 
 - 后台修复显示当前片段范围、真实百分比和已用时间；处理数据足够后显示预计剩余时间，完成封装和失败状态明确提示。
