@@ -1,6 +1,6 @@
 // Background restoration overlays only synchronized, completed video chunks.
 // The original video is always the audio/transport clock. Completed repairs persist in the authenticated local helper cache.
-const smartBackground={enabled:false,generation:0,session:null,abort:null,busy:false,poll:null,callback:null,chunkSeconds:4,chunks:new Map(),available:new Map(),total:0,bytes:0,current:-1,source:null,pending:null,failed:new Set(),status:null,stage:'',started:0,pendingStarted:0};
+const smartBackground={enabled:false,generation:0,session:null,abort:null,busy:false,poll:null,callback:null,chunkSeconds:4,chunks:new Map(),available:new Map(),total:0,resume:false,bytes:0,current:-1,source:null,pending:null,failed:new Set(),status:null,stage:'',started:0,pendingStarted:0};
 let smartCleanup=Promise.resolve(true);
 let smartSubtitleTrack=null,smartSubtitleSource=null,smartSubtitleKey='';
 const smartVideo=document.createElement('video');smartVideo.id='smart-restored-video';smartVideo.muted=true;smartVideo.playsInline=true;smartVideo.preload='auto';smartVideo.hidden=true;$('playback-stage').prepend(smartVideo);
@@ -8,7 +8,8 @@ function smartProgressText(){
  const info=smartBackground.status,elapsed=Math.max(0,Math.floor((performance.now()-(smartBackground.pendingStarted||smartBackground.started))/1000));
  if(smartBackground.stage==='error')return E('修复暂不可用 · 当前原画','Repair unavailable · Original');
  if(!smartBackground.session)return E('准备修复','Preparing repair')+` · ${elapsed}s`;
- if(smartBackground.pending===null)return E('全片缓存','Full video cache')+` · ${smartBackground.available.size}/${smartBackground.total}`;
+ if(smartWholeReady())return E('全片修复完成','Full repair ready');
+ if(smartBackground.pending===null)return E('全片修复中','Repairing full video')+` · ${smartBackground.available.size}/${smartBackground.total}`;
  const progress=Math.max(0,Math.min(1,Number(info?.progress)||0)),percent=Math.floor(progress*100);
  const position=smartBackground.pending*smartBackground.chunkSeconds;
  const range=`${formatSmartTime(position)}–${formatSmartTime(position+smartBackground.chunkSeconds)}`;
@@ -18,11 +19,19 @@ function smartProgressText(){
  return E('修复片段','Repairing chunk')+` ${range} · ${percent}% · ${timing}`;
 }
 function formatSmartTime(seconds){return `${Math.floor(seconds/60).toString().padStart(2,'0')}:${Math.floor(seconds%60).toString().padStart(2,'0')}`;}
+const smartWaiting=document.createElement('div');smartWaiting.className='smart-waiting';smartWaiting.hidden=true;smartWaiting.setAttribute('role','status');
+const smartWaitingTitle=document.createElement('h3'),smartWaitingProgress=document.createElement('progress'),smartWaitingText=document.createElement('p');smartWaitingProgress.max=1;smartWaiting.append(smartWaitingTitle,smartWaitingProgress,smartWaitingText);$('playback-stage').append(smartWaiting);
+function smartCurrentReady(){const index=Math.floor($('preview').currentTime/smartBackground.chunkSeconds);return smartBackground.enabled&&smartBackground.chunks.has(index);}
+function smartWholeReady(){return smartBackground.enabled&&smartBackground.total>0&&smartBackground.available.size===smartBackground.total;}
 function updateSmartBadge(){
+ $('playback-stage').classList.toggle('smart-full-repair',smartBackground.enabled);
+ const waiting=smartBackground.enabled&&!smartCurrentReady();smartWaiting.hidden=!waiting;$('rotated-play').disabled=false;$('playback-pip').disabled=waiting;
+ if(waiting){smartWaitingTitle.textContent=E('正在准备下一段修复画面','Preparing the next restored segment');smartWaitingProgress.value=smartBackground.available.size/Math.max(1,smartBackground.total);smartWaitingText.textContent=smartProgressText()+E(' · 可切换原画或退出播放',' · Choose Original or close playback to cancel');}
+
  if(!smartBackground.enabled){enhancementBadge.hidden=!instantEnhancement;enhancementBadge.textContent=E('增强已开启','Enhancement on');enhancementBadge.removeAttribute('title');return;}
  enhancementBadge.hidden=false;
  const status=smartProgressText();
- enhancementBadge.textContent=smartVideo.hidden?status:E('智能最佳 · 修复缓存','Smart best · Restored cache');
+ enhancementBadge.textContent=smartVideo.hidden?status:E('智能最佳 · 修复版','Smart best · Restored version');
  const coverage=`${Math.floor(100*smartBackground.available.size/Math.max(1,smartBackground.total))}%`;
  enhancementBadge.textContent+=E(' · 全片 ',' · Whole video ')+coverage;
  enhancementBadge.title=status+E(' · 全片已缓存 ',' · Whole video cached ')+`${smartBackground.available.size}/${smartBackground.total}`;
@@ -39,7 +48,7 @@ function stopSmartBackground(){
  smartSubtitleKey='';smartSubtitleSource=null;if(smartSubtitleTrack){smartSubtitleTrack.mode='disabled';for(const cue of [...(smartSubtitleTrack.cues||[])])smartSubtitleTrack.removeCue(cue);}
  smartVideo.hidden=true;smartVideo.pause();smartVideo.removeAttribute('src');smartVideo.load();
  for(const chunk of smartBackground.chunks.values())URL.revokeObjectURL(chunk.url);
- smartBackground.chunks.clear();smartBackground.available.clear();smartBackground.total=0;smartBackground.failed.clear();smartBackground.bytes=0;smartBackground.current=-1;smartBackground.session=null;smartBackground.pending=null;smartBackground.busy=false;smartBackground.source=null;smartBackground.status=null;smartBackground.stage='';smartBackground.started=0;smartBackground.pendingStarted=0;
+ smartBackground.chunks.clear();smartBackground.available.clear();smartBackground.total=0;smartBackground.resume=false;smartBackground.failed.clear();smartBackground.bytes=0;smartBackground.current=-1;smartBackground.session=null;smartBackground.pending=null;smartBackground.busy=false;smartBackground.source=null;smartBackground.status=null;smartBackground.stage='';smartBackground.started=0;smartBackground.pendingStarted=0;
  updateSmartBadge();
  if(old){const request=enhancementRequest('/smart/'+old,{method:'DELETE',keepalive:true,signal:AbortSignal.timeout(15000)}).then(()=>true,()=>false);smartCleanup=Promise.all([smartCleanup,request]).then(results=>results.every(Boolean));}
  return smartCleanup;
@@ -54,7 +63,7 @@ function smartCachePut(index,blob,info){
 function smartStatus(info){
  smartBackground.status=info||null;smartBackground.stage=info?.state==='error'?'error':'';updateSmartBadge();
  const analysis=info?.analysis;
- realtimeHint.textContent=info?.state==='done'?(info.engine||E('保守修复','Conservative repair'))+E(' · 已缓存，可直接观看',' · Cached for playback')+(analysis?.soft?E(' · 低细节来源',' · Soft source'):''):E('正在后台修复 · 原视频正常播放','Restoring in background · Original playback continues');
+ realtimeHint.textContent=info?.state==='done'?(info.engine||E('保守修复','Conservative repair'))+E(' · 已缓存，可直接观看',' · Cached for playback')+(analysis?.soft?E(' · 低细节来源',' · Soft source'):''):E('修复下一段 · 完成后继续播放修复版','Repairing the next segment · Restored playback resumes when ready');
 }
 function scheduleSmartPresentation(){
  if(!smartBackground.enabled||smartBackground.callback!==null||$('preview').paused)return;
@@ -74,7 +83,8 @@ function syncSmartSubtitles(start){
  for(const cue of [...cues]){if(cue.endTime<=start||cue.startTime>=start+smartVideo.duration)continue;const item=new VTTCue(Math.max(0,cue.startTime-start),cue.endTime-start,cue.text);for(const prop of ['line','align','position','size','vertical'])item[prop]=cue[prop];smartSubtitleTrack.addCue(item);}
 }
 function presentSmartChunk(){
- const v=$('preview');if(!smartBackground.enabled||playbackSeeking||document.hidden||!$('player-view').getClientRects().length){smartVideo.hidden=true;return;}
+ const v=$('preview');if(smartBackground.enabled&&!smartCurrentReady()&&!v.paused){smartBackground.resume=true;v.pause();pumpSmartChunks();}
+ if(!smartCurrentReady()||playbackSeeking||document.hidden||!$('player-view').getClientRects().length){smartVideo.hidden=true;return;}
  const index=Math.floor(v.currentTime/smartBackground.chunkSeconds),chunk=smartBackground.chunks.get(index);
  if(!chunk){smartVideo.hidden=true;smartVideo.pause();return;}
  if(index!==smartBackground.current){smartBackground.current=index;smartVideo.hidden=true;smartVideo.pause();smartVideo.src=chunk.url;smartVideo.load();smartStatus(chunk.info);}
@@ -88,6 +98,7 @@ function presentSmartChunk(){
  if(v.paused)smartVideo.pause();else if(smartVideo.paused)smartVideo.play().catch(()=>{smartVideo.hidden=true;});
  syncSmartLayout();syncSmartSubtitles(chunk.info.start);realtimeCanvas.hidden=true;
  smartVideo.hidden=smartVideo.seeking||Math.abs(drift)>(smartVideo.hidden?.06:.12)||(!v.paused&&smartVideo.paused);
+ if(!smartVideo.hidden&&smartBackground.resume){smartBackground.resume=false;v.play().catch(()=>{});}
 }
 async function pumpSmartChunks(){
  if(!smartBackground.enabled||smartBackground.busy||!smartBackground.session)return;
@@ -124,13 +135,13 @@ async function pumpSmartChunks(){
    const index=candidates.find(i=>i<count&&!smartBackground.available.has(i)&&!smartBackground.failed.has(i));
    if(index!==undefined){await enhancementRequest(`/smart/${session}/chunks/${index}`,{method:'POST',signal:controller.signal});if(generation!==smartBackground.generation)return;smartBackground.pending=index;smartBackground.pendingStarted=performance.now();smartStatus({state:'queued',progress:0});}
   }
- }catch(error){if(generation===smartBackground.generation&&error.name!=='AbortError'){smartBackground.stage='error';updateSmartBadge();realtimeHint.textContent=E('后台修复暂不可用，原视频继续播放。','Background repair unavailable; original keeps playing.');}}
+ }catch(error){if(generation===smartBackground.generation&&error.name!=='AbortError'){smartBackground.stage='error';updateSmartBadge();realtimeHint.textContent=E('当前片段修复未完成，等待修复或切换原画播放。','This segment is not ready. Wait for repair or choose Original.');}}
  finally{if(generation===smartBackground.generation){smartBackground.busy=false;clearTimeout(smartBackground.poll);smartBackground.poll=setTimeout(pumpSmartChunks,smartBackground.pending===null&&smartBackground.available.size<smartBackground.total?100:1000);}}
 }
 async function startSmartBackground(health,entry){
  if(!health?.smartChunks || !(finalBlob instanceof Blob) || typeof playerColor!=='undefined'&&playerColor.mode==='hdr')return false;
  const expectedSource=$('preview').currentSrc;await stopSmartBackground();if(expectedSource!==$('preview').currentSrc)return false;stopRealtimeAI();
- smartBackground.enabled=true;smartBackground.started=performance.now();updateSmartBadge();smartBackground.source=$('preview').currentSrc;const generation=++smartBackground.generation;
+ const resumePlaying=!$('preview').paused;$('preview').pause();smartBackground.enabled=true;smartBackground.resume=resumePlaying;smartBackground.started=performance.now();updateSmartBadge();smartBackground.source=$('preview').currentSrc;const generation=++smartBackground.generation;
  realtimeHint.textContent=E('正在准备本机修复缓存 · 可继续播放','Preparing local repair cache · Playback continues');
  const controller=new AbortController();smartBackground.abort=controller;
  try{
@@ -138,9 +149,9 @@ async function startSmartBackground(health,entry){
   if(generation!==smartBackground.generation){enhancementRequest('/smart/'+result.id,{method:'DELETE'}).catch(()=>{});return false;}
   smartCleanup=Promise.resolve(true);smartBackground.session=result.id;smartBackground.chunkSeconds=result.chunkSeconds;smartBackground.available=new Map(Object.entries(result.completed||{}).map(([i,info])=>[Number(i),info]));smartBackground.total=result.totalChunks||Math.ceil($('preview').duration/result.chunkSeconds);realtimeButton.setAttribute('aria-pressed','true');
   pumpSmartChunks();scheduleSmartPresentation();return true;
- }catch(error){if(generation===smartBackground.generation){stopSmartBackground();realtimeHint.textContent=E('后台修复无法启动，使用实时轻量增强。','Background repair unavailable; using lightweight enhancement.');}return false;}
+ }catch(error){if(generation===smartBackground.generation){stopSmartBackground();realtimeHint.textContent=E('全片修复无法启动，请连接本机程序后重试。','Full repair unavailable. Connect the local helper and retry.');}return false;}
 }
-$('preview').addEventListener('play',()=>{presentSmartChunk();scheduleSmartPresentation();});
+$('preview').addEventListener('play',()=>{if(smartBackground.enabled&&!smartCurrentReady()){smartBackground.resume=true;$('preview').pause();updateSmartBadge();pumpSmartChunks();return;}presentSmartChunk();scheduleSmartPresentation();});
 $('preview').addEventListener('pause',()=>{smartVideo.pause();presentSmartChunk();});
 $('preview').addEventListener('seeking',()=>{smartVideo.hidden=true;smartVideo.pause();});
 $('preview').addEventListener('seeked',()=>{presentSmartChunk();pumpSmartChunks();});

@@ -261,3 +261,13 @@
 #smart-restored-video::cue{font-size:var(--subtitle-size,24px);text-shadow:0 1px 3px #000,1px 0 2px #000,-1px 0 2px #000;background:#0005;}
 /* Offline restoration is no longer a user workflow. Keep legacy nodes for stored jobs. */
 #playback-ai,#playback-enhance,#player-face-restore,#player-audio-repair,#batch-add,.batch-mode-field,#batch-queue-panel{display:none!important}
+
+/* Smart best never reveals original frames implicitly between repaired chunks. */
+.smart-full-repair #preview{opacity:0!important}
+.compare-original .smart-full-repair #preview{opacity:1!important}
+
+.smart-waiting{position:absolute;z-index:4;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;background:#0b0e12}
+.smart-waiting[hidden]{display:none}
+.smart-waiting h3{font-size:22px;margin:0 0 20px;color:#eef1f5}
+.smart-waiting progress{width:min(360px,80%);height:6px;accent-color:#d8c79c}
+.smart-waiting p{max-width:520px;color:#a0a8b4;font-size:13px;line-height:1.8;margin:18px 0 0}

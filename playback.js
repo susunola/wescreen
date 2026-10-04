@@ -29,7 +29,7 @@ $('playback-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)awa
 let playbackTransportIntent=0;
 async function requestPlayerPlayback(playing=true){
  const video=$('preview'),intent=++playbackTransportIntent,generation=playbackGeneration;
- if(!playing){video.pause();return;}
+ if(!playing){if(typeof smartBackground!=='undefined')smartBackground.resume=false;video.pause();return;}
  if(typeof privacy!=='undefined' && !await privacy.request())return;
  if(intent!==playbackTransportIntent || generation!==playbackGeneration)return;
  $('playback-status').textContent='';

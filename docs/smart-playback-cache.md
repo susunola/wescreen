@@ -1,7 +1,11 @@
 # Smart best playback cache
 
 Smart best prioritizes the current playback position, then repairs all remaining
-chunks of the current source file while its playback session stays open. Pausing
+chunks of the current source file while its playback session stays open. Smart best plays completed restored segments and buffers at an unfinished
+segment rather than falling back to original frames. Playback resumes when the
+required segment is ready. Failed
+startup retains Original rather than silently enabling lightweight enhancement.
+Original and hold-to-compare remain explicit choices. Pausing
 does not stop background coverage. Exiting, locking, or choosing Original stops
 the worker and clears displayed media; completed repairs remain reusable locally.
 A multipart recording has separate coverage for each physical source file.
