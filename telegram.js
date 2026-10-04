@@ -114,13 +114,18 @@ async function renderChannelWorkbench(){
   const controls=document.createElement('div');controls.className='controls';
   const button=(text,action)=>{const b=document.createElement('button');b.className='quiet';b.textContent=text;b.onclick=async()=>{try{await action();await renderChannelWorkbench();}catch(error){$('channel-status').textContent=error.message;}};controls.append(b);return b;};
   button(E('打开视频','Open video'),()=>window.open(telegramLink(item.url),'_blank','noopener,noreferrer'));
-  const menu=document.createElement('details');menu.className='row-menu';const summary=document.createElement('summary');summary.textContent='⋯';summary.setAttribute('aria-label',L('more'));menu.append(summary);const menuItems=document.createElement('div');menuItems.className='menu-items';
+  const menu=document.createElement('details');menu.className='row-menu plan-row-menu';const summary=document.createElement('summary');summary.textContent='⋯';summary.setAttribute('aria-label',L('more'));menu.append(summary);const menuItems=document.createElement('div');menuItems.className='menu-items';
   const openButton=controls.firstElementChild;
-  button(E('选择 / 重录','Select / rerecord'),()=>{$('channel-plan-item').value=item.id;$('channel-plan-item').dispatchEvent(new Event('change'));});
+  button(done?E('重新录制','Record again'):E('选择录制','Select recording'),()=>{$('channel-plan-item').value=item.id;$('channel-plan-item').dispatchEvent(new Event('change'));});
   const save=async plan=>{await runTx('meta','readwrite',tx=>tx.objectStore('meta').put({...profile,plan},'channel:'+profile.id));await refreshTelegramProfiles();const draft=$('channel-plan').value;await renderChannelPlan();$('channel-plan').value=draft;};
   button(item.status==='skipped' ? E('恢复待录','Restore'):E('跳过','Skip'),()=>save(profile.plan.map(value=>value.id===item.id ? {...value,status:item.status==='skipped' ? 'waiting':'skipped'}:value)));
-  const up=button('↑',()=>{const plan=[...profile.plan];[plan[index-1],plan[index]]=[plan[index],plan[index-1]];return save(plan);});up.disabled=index===0;up.setAttribute('aria-label',E('上移','Move up'));
-  const down=button('↓',()=>{const plan=[...profile.plan];[plan[index+1],plan[index]]=[plan[index],plan[index+1]];return save(plan);});down.disabled=index===profile.plan.length-1;down.setAttribute('aria-label',E('下移','Move down'));
+  const up=button(E('上移一位','Move up'),()=>{const plan=[...profile.plan];[plan[index-1],plan[index]]=[plan[index],plan[index-1]];return save(plan);});up.disabled=index===0;up.setAttribute('aria-label',E('上移','Move up'));
+  const down=button(E('下移一位','Move down'),()=>{const plan=[...profile.plan];[plan[index+1],plan[index]]=[plan[index],plan[index+1]];return save(plan);});down.disabled=index===profile.plan.length-1;down.setAttribute('aria-label',E('下移','Move down'));
+  const remove=button(E('从清单移除','Remove from list'),async()=>{
+   if(!confirm(E('从待录清单移除这条视频？已有录像会保留。','Remove this video from the recording list? Existing recordings will be kept.')))return;
+   await save(profile.plan.filter(value=>value.id!==item.id));
+   if($('channel-plan-item').value===item.id)$('channel-plan-item').value='';
+  });remove.classList.add('plan-remove');remove.disabled=!!active;
   while(controls.children.length>1)menuItems.append(controls.children[1]);menu.append(menuItems);controls.append(menu);row.append(controls);list.append(row);
  }
 }

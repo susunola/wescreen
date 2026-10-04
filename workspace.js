@@ -31,7 +31,7 @@ function startLivePreview(stream) {
   clearInterval(recordingMonitor);monitorLastFrames=0;monitorSilenceAt=Date.now();recordingMonitor=setInterval(updateRecordingMonitor,1000);
   $('live-preview').srcObject = stream; $('live-preview').play().catch(()=>{});
   const video = displayStream.getVideoTracks()[0], settings = video.getSettings();
-  $('source-info').textContent = `${video.label || L('navCapture')} · ${settings.width || '?'}×${settings.height || '?'} · ${Math.round(settings.frameRate || 30)} fps`;
+  $('source-info').textContent = `${/^web-contents-media-stream:|^screen:|^window:/i.test(video.label || '') ? E('共享视频源','Shared video source') : video.label || L('navCapture')} · ${settings.width || '?'}×${settings.height || '?'} · ${Math.round(settings.frameRate || 30)} fps`;
   if (mixedAudio && mixer) {
     const source = mixer.createMediaStreamSource(new MediaStream([mixedAudio])), analyser = mixer.createAnalyser(); analyser.fftSize = 256; source.connect(analyser);
     const samples = new Float32Array(256); liveMeter = { source, analyser, timer:setInterval(()=>{ analyser.getFloatTimeDomainData(samples); $('live-level').value = Math.min(1,Math.sqrt(samples.reduce((n,v)=>n+v*v,0)/samples.length)*4); },100) };

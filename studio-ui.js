@@ -63,3 +63,22 @@
   const refresh=()=>{title.textContent=E('录制设置','Recording settings');buttons[0].textContent=E('列表','List');buttons[1].textContent=E('网格','Grid');actions.setAttribute('aria-label',E('录像库布局','Library layout'));};
   window.addEventListener('wescreen-language',refresh);refresh();
 })();
+
+// Recording console: preserve control IDs and media nodes while grouping their roles.
+(() => {
+ const recording=$('recording'),stage=document.createElement('div');stage.className='recording-preview-stage';
+ const heading=document.createElement('div');heading.className='recording-console-title';const title=document.createElement('strong'),caption=document.createElement('span');heading.append(title,caption);recording.querySelector('.record-head').prepend(heading);
+ const labels=()=>{title.textContent=E('录制工作台','Recording studio');caption.textContent=E('本机录制 · 原视频保留','Local capture · Originals preserved');tools.textContent=E('更多录制工具','Recording tools');};
+ $('live-preview').before(stage);stage.append($('live-preview'));
+ const dock=document.createElement('div');dock.className='recording-control-dock';
+ const transport=document.createElement('div');transport.className='recording-transport';
+ const secondary=document.createElement('details');secondary.className='recording-secondary';const tools=document.createElement('summary');tools.textContent=E('更多录制工具','Recording tools');secondary.append(tools);
+ for(const id of ['pause','mark','stop'])transport.append($(id));
+ for(const id of ['next-channel-video','copy-next-message','floating-controls','capture-monitor-live'])if($(id))secondary.append($(id));
+ const old=recording.querySelector(':scope > .controls');old?.remove();
+ dock.append(transport,recording.querySelector('.source-status'),secondary);stage.after(dock);
+ const diagnostics=document.createElement('details');diagnostics.className='recording-diagnostics';
+ const summary=document.createElement('summary');summary.textContent=E('录制诊断','Recording diagnostics');diagnostics.append(summary);
+ for(const id of ['recording-health','capture-quality-stats'])if($(id))diagnostics.append($(id));
+ recording.append(diagnostics);labels();window.addEventListener('wescreen-language',labels);window.addEventListener('wescreen-language',()=>summary.textContent=E('录制诊断','Recording diagnostics'));
+})();
