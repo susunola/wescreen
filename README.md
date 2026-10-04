@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.17.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.18.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -75,3 +75,13 @@ Normal updates retain the `wescreen` IndexedDB database under the same extension
 - Helper updates should also replace files in the existing helper directory, preserving `.runtime` and `models`.
 
 Upgrade verification: `NODE_PATH=... node scripts/test-upgrade.cjs` uses an isolated Chromium profile, verifies legacy schema 3→4 migration, updates 1.13.0 to the current package in the same directory, and compares video bytes/SHA-256, metadata, recovery chunks, tasks, playback state and preferences. It does not access the user's browser data.
+
+### Capture and playback quality (1.18)
+
+Resolution limits follow source orientation: 1080p means up to 1920×1080 landscape or 1080×1920 portrait, without upscaling. Frame rate can follow the capture source or use 24/25/30/50/60 fps. Video bitrate follows pixel count, frame rate and desktop/motion content. The recorder separates target bitrate, the encoder-reported bitrate and measured file bitrate including audio; these are different measurements.
+
+Professional audio offers 192 kbps speech or 256 kbps music for both the main recording and optional independent tracks. Disable microphone voice processing for music. System audio is not noise reduced. Peak protection is optional. Playback loudness balancing is a bounded, smoothed RMS adjustment; offline audio repair retains two-pass loudness normalization.
+
+Visual processing copies compatible audio packets and preserves SDR color tags. Explicit HDR-to-SDR conversion requires FFmpeg's zscale/tonemap filters; on Mac use `brew install ffmpeg-full` and restart the helper. The original stays in the library. Realtime AI uses lossless PNG with the new helper and retains the chosen mode across parts of the same recording; slower machines fall back to original frames.
+
+Upgrade the existing extension in its original directory. Do not uninstall it first or change its extension ID: recordings and playback history stay in the existing database.

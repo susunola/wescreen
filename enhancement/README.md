@@ -81,3 +81,9 @@ OpenCV 说明：https://docs.opencv.org/5.0/extra_modules/dnn_superres.html
 实时模式根据端到端耗时降低输入尺寸（长边 960 至 320，短边不超过 540），输出为输入的 2×。低负载档可能低于原视频分辨率，这个模式不能承诺达到原生 4K 或恢复丢失细节。处理尺寸和有效帧率显示在画质菜单中。过期帧会丢弃；持续跟不上或后台任务占用本机程序时恢复原画。最高质量另存请使用后台 AI 高清修复或 SeedVR2。
 
 2026-10-03 本机 M4 Pro、48 GB，FSRCNN 2× 纯推理（三次平均，不含传输与显示）：320×180 约 10 ms，640×360 约 32 ms，960×540 约 70 ms。实际播放速度以菜单显示为准。
+
+## Quality preservation (1.18)
+
+Picture-only jobs copy compatible AAC, ALAC and MP3 audio instead of encoding it again. Other audio is converted to AAC at 256 kbps for MP4 compatibility. SDR color tags are propagated. Explicit HDR conversion is limited to Natural/Brightness/Edit modes and outputs BT.709 SDR; install `ffmpeg-full` on Mac for zscale support. The server prefers its keg binary when present, without replacing the system FFmpeg.
+
+`/health` reports `toneMap` and `realtimeLossless`. Realtime frame requests accept bounded PNG or JPEG; PNG requests receive PNG output. Original media and saved tasks are preserved during upgrades.
