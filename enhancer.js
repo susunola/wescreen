@@ -45,7 +45,7 @@ async function repairHelperPairing(){
  openNativePairing('chrome-extension://'+chrome.runtime.id,challenge);
  const message=E('请在弹出的本机 WeScreen 窗口允许连接。正在等待确认…','Allow connection in the local WeScreen window. Waiting for approval…');$('helper-status').textContent=message;$('tasks-status').textContent=message;
  const deadline=Date.now()+45000;
- while(Date.now()<deadline){try{await discoverHelperToken(challenge);return;}catch(error){if(!/paired|fetch|Failed|Network|HTTP 5/.test(error.message))throw error;}await new Promise(r=>setTimeout(r,750));}
+ while(Date.now()<deadline){try{await discoverHelperToken(challenge);return;}catch(error){if(!/paired|fetch|Failed|Network|HTTP 5|timed out|timeout|aborted/i.test(error.message))throw error;}await new Promise(r=>setTimeout(r,750));}
  throw new Error(E('本机授权尚未完成。请更新增强包并运行 install-launcher.command，再点击自动连接；已有文件保留。','Local approval did not finish. Update the helper and run install-launcher.command, then retry. Existing files are preserved.'));
 }
 async function connectHelper(options={}){

@@ -53,6 +53,12 @@ def grant_pairing(pair_file, origin, nonce):
         if time.time() - path.stat().st_mtime > 120: path.unlink(missing_ok=True)
     write_private(directory / (nonce + '.json'), {'origin': origin, 'expires': time.time() + 120})
 
+def approve_pairing(pair_file, origin, nonce):
+    """Native launcher only: persist human approval before any service restart."""
+    grant_pairing(pair_file,origin,nonce)
+    write_private(pair_file.with_name('trusted-origins.json'),sorted(trusted_origins(pair_file)|{origin}))
+
+
 def connect_origin(pair_file, origin, nonce=''):
     """Call under the server's pairing lock. Preserve every previously trusted ID."""
     if not ORIGIN.fullmatch(origin): return False

@@ -1,10 +1,44 @@
 """Bounded single-frame neural inference; no frame is persisted to disk."""
+import os
 import hashlib
 import threading
 import time
 
 _MODEL = None
+_TARGET = "CPU"
 _LOCK = threading.Lock()
+
+
+def inference_engine(model_path, model_hash):
+    global _MODEL, _TARGET
+    import cv2
+    if _MODEL is None:
+        if hashlib.sha256(model_path.read_bytes()).hexdigest() != model_hash:
+            raise RuntimeError('AI model checksum mismatch')
+        cv2.setNumThreads(max(1, min(os.cpu_count() or 1, 8)))
+        model=cv2.dnn_superres.DnnSuperResImpl_create()
+        model.readModel(str(model_path));model.setModel('fsrcnn',2)
+        try:
+            if cv2.ocl.haveOpenCL():
+                cv2.ocl.setUseOpenCL(True)
+                if cv2.ocl.useOpenCL():
+                    model.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+                    model.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL);_TARGET='OpenCL'
+        except (cv2.error, AttributeError):
+            _TARGET='CPU'
+        _MODEL=model
+    return _MODEL
+
+def upsample(frame, model_path, model_hash):
+    global _TARGET
+    import cv2
+    model=inference_engine(model_path,model_hash)
+    try:
+        return model.upsample(frame)
+    except cv2.error:
+        if _TARGET != 'OpenCL': raise
+        model.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU);_TARGET='CPU'
+        return model.upsample(frame)
 
 
 def jpeg_dimensions(data):
@@ -49,50 +83,42 @@ def enhance_frame(data, model_path, model_hash, lossless=False):
     import numpy as np
     started = time.perf_counter()
     with _LOCK:
-        if _MODEL is None:
-            if hashlib.sha256(model_path.read_bytes()).hexdigest() != model_hash:
-                raise RuntimeError('AI model checksum mismatch')
-            cv2.setNumThreads(4)
-            model = cv2.dnn_superres.DnnSuperResImpl_create()
-            model.readModel(str(model_path)); model.setModel('fsrcnn', 2)
-            _MODEL = model
         frame = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
         if frame is None or frame.shape[:2] != (height, width):
             raise ValueError('Invalid JPEG frame')
         # Mild spatial denoise before actual neural super-resolution.
         cleaned = cv2.bilateralFilter(frame, 3, 12, 12)
-        enhanced = _MODEL.upsample(cleaned)
+        enhanced = upsample(cleaned, model_path, model_hash)
         ok, encoded = cv2.imencode('.png' if lossless else '.jpg', enhanced, [cv2.IMWRITE_PNG_COMPRESSION, 1] if lossless else [cv2.IMWRITE_JPEG_QUALITY, 94])
         if not ok: raise RuntimeError('Could not encode enhanced frame')
     return encoded.tobytes(), (time.perf_counter()-started)*1000
 
 
-def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True):
-    """Same-size RGB fallback. Never claims to be a temporal/generative model."""
-    global _MODEL
-    if not (2 <= width <= 1080 and 2 <= height <= 1080) or len(data) != width*height*3:
-        raise ValueError('RGB frame dimensions or length are invalid (long edge up to 1080)')
+def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, output_scale=1):
+    """Full-resolution spatial fallback with optional genuine 2x output."""
+    if min(width,height)<2 or max(width,height)>1920 or min(width,height)>1080 or len(data)!=width*height*3:
+        raise ValueError('RGB frame dimensions or length are invalid (up to 1920x1080, portrait allowed)')
+    if output_scale not in (1,2): raise ValueError('Output scale must be 1 or 2')
     import cv2
     import numpy as np
     started=time.perf_counter()
     with _LOCK:
-        frame=np.frombuffer(data,np.uint8).reshape(height,width,3)
-        if _MODEL is None:
-            if hashlib.sha256(model_path.read_bytes()).hexdigest()!=model_hash:
-                raise RuntimeError('AI model checksum mismatch')
-            cv2.setNumThreads(4)
-            model=cv2.dnn_superres.DnnSuperResImpl_create()
-            model.readModel(str(model_path));model.setModel('fsrcnn',2);_MODEL=model
-        # Legacy engine is explicitly a fallback; resize only its 2x result, never its input.
-        bgr=cv2.cvtColor(frame,cv2.COLOR_RGB2BGR)
-        restored=cv2.resize(_MODEL.upsample(bgr),(width,height),interpolation=cv2.INTER_AREA)
+        bgr=cv2.cvtColor(np.frombuffer(data,np.uint8).reshape(height,width,3),cv2.COLOR_RGB2BGR)
+        size=(width*output_scale,height*output_scale)
+        restored=upsample(bgr,model_path,model_hash)
+        if output_scale==1: restored=cv2.resize(restored,size,interpolation=cv2.INTER_AREA)
+        # Small-radius, low-strength sharpening; no large halo around strokes.
+        blur=cv2.GaussianBlur(restored,(3,3),.6)
+        restored=cv2.addWeighted(restored,1.10,blur,-.10,0)
         if protect_text:
-            # Conservative edge protection is not OCR. Preserve high-frequency strokes,
-            # including UI edges, instead of hallucinating replacements.
-            gray=cv2.cvtColor(bgr,cv2.COLOR_BGR2GRAY)
-            edges=cv2.Canny(gray,60,140)
-            mask=cv2.dilate(edges,np.ones((3,3),np.uint8)).astype(bool)
+            edges=cv2.Canny(cv2.cvtColor(bgr,cv2.COLOR_BGR2GRAY),60,140)
+            mask=cv2.dilate(edges,np.ones((3,3),np.uint8)).astype(np.float32)/255
+            mask=cv2.GaussianBlur(mask,(5,5),1.0)
             weak=cv2.bilateralFilter(bgr,3,4,4)
-            restored[mask]=weak[mask]
+            if output_scale==2:
+                weak=cv2.resize(weak,size,interpolation=cv2.INTER_LANCZOS4)
+                mask=cv2.resize(mask,size,interpolation=cv2.INTER_LINEAR)
+            alpha=np.clip(mask,0,1)[...,None]
+            restored=np.clip(restored.astype(np.float32)*(1-alpha)+weak.astype(np.float32)*alpha,0,255).round().astype(np.uint8)
         output=cv2.cvtColor(restored,cv2.COLOR_BGR2RGB)
     return output.tobytes(),(time.perf_counter()-started)*1000

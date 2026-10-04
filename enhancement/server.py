@@ -385,8 +385,8 @@ class Handler(BaseHTTPRequestHandler):
         if origin.startswith('chrome-extension://') or origin.startswith('http://127.0.0.1:') or origin.startswith('http://localhost:'):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-WeScreen-Token, X-Frame-Width, X-Frame-Height, X-Protect-Text')
-        self.send_header('Access-Control-Expose-Headers', 'X-Inference-Ms')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-WeScreen-Token, X-Frame-Width, X-Frame-Height, X-Protect-Text, X-Output-Scale')
+        self.send_header('Access-Control-Expose-Headers', 'X-Inference-Ms, X-Frame-Width, X-Frame-Height')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Private-Network', 'true')
         self.send_header('Cache-Control', 'no-store')
@@ -426,8 +426,8 @@ class Handler(BaseHTTPRequestHandler):
             try: size = int(self.headers.get('Content-Length', '0'))
             except ValueError: size = 0
             raw=self.headers.get('Content-Type','').split(';')[0]=='application/x-wescreen-rgb'
-            if not 0 < size <= (1080*1080*3 if raw else 2*1024*1024):
-                return self.reply(413, {'error': 'Realtime frame must be under 2 MB'})
+            if not 0 < size <= (1920*1080*3 if raw else 2*1024*1024):
+                return self.reply(413, {'error': 'Realtime payload exceeds the allowed input size'})
             if self.headers.get('Content-Type', '').split(';')[0] not in ('image/jpeg','image/png','application/x-wescreen-rgb'):
                 return self.reply(415, {'error': 'Realtime input must be JPEG or PNG'})
             if not SLOT.acquire(blocking=False):
@@ -441,12 +441,16 @@ class Handler(BaseHTTPRequestHandler):
                     from realtime import enhance_rgb
                     try: width=int(self.headers.get('X-Frame-Width','0'));height=int(self.headers.get('X-Frame-Height','0'))
                     except ValueError: raise ValueError('Invalid RGB dimensions')
-                    result,elapsed=enhance_rgb(data,width,height,MODEL,MODEL_HASH,self.headers.get('X-Protect-Text','1')!='0')
+                    try: output_scale=int(self.headers.get('X-Output-Scale','1'))
+                    except ValueError: raise ValueError('Invalid output scale')
+                    result,elapsed=enhance_rgb(data,width,height,MODEL,MODEL_HASH,self.headers.get('X-Protect-Text','1')!='0',output_scale)
                 else: result, elapsed = enhance_frame(data, MODEL, MODEL_HASH, lossless=lossless)
                 self.send_response(200); self.cors_headers()
                 self.send_header('Content-Type', 'application/x-wescreen-rgb' if raw else 'image/png' if lossless else 'image/jpeg')
                 self.send_header('Content-Length', str(len(result)))
                 self.send_header('X-Inference-Ms', str(round(elapsed, 2)))
+                if raw:
+                    self.send_header('X-Frame-Width',str(width*output_scale));self.send_header('X-Frame-Height',str(height*output_scale))
                 self.end_headers(); self.wfile.write(result)
             except ValueError as error: self.reply(400, {'error': str(error)})
             except (BrokenPipeError, ConnectionResetError): pass
@@ -555,7 +559,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'version':'1.24.1','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeEngine':'FSRCNN fallback','realtimeTemporal':False,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.25.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'FSRCNN fallback','realtimeTemporal':False,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None

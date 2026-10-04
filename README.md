@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.24.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.25.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -97,3 +97,5 @@ Use **Open local video**, or drop a video onto the library/player, for direct Fi
 The dedicated **Player** tab opens local files without importing and plays recordings selected in the library. Recording completion keeps the review and offers **Play now**. Telegram setup lives in its dedicated tab.
 
 Privacy password is **off by default**. Set a custom password under About → Privacy password to protect library/player access. Unlock lasts for the current page; reload or Lock now requires the password again. Passwords are stored only as a salted PBKDF2 verifier. This is an interface lock, not encryption of video files. Changing or disabling protection requires the current password; forgotten passwords cannot be recovered from this UI. Existing recordings are unchanged.
+
+Realtime RGB supports 1920×1080 or 1080×1920 without input downsampling. When the displayed image is larger, the helper can return genuine 2× output with width/height headers; older helpers retain the previous protocol. Text edges use feathered protection and conservative sharpening. OpenCL is attempted when available with CPU fallback; performance depends on the driver and hardware, and slow frames leave the original video visible. Native launcher approval is persisted before restarting the helper, so approved extensions can reconnect without a timely challenge exchange.

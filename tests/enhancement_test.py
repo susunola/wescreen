@@ -313,6 +313,10 @@ class RealtimeTest(unittest.TestCase):
             with urllib.request.urlopen(urllib.request.Request(base,bytes(64*32*3),raw_headers)) as response:
                 self.assertEqual(response.headers['Content-Type'],'application/x-wescreen-rgb')
                 self.assertEqual(len(response.read()),64*32*3)
+                self.assertEqual(response.headers['X-Frame-Width'],'64')
+            with urllib.request.urlopen(urllib.request.Request(base,bytes(64*32*3),{**raw_headers,'X-Output-Scale':'2'})) as response:
+                self.assertEqual(response.headers['X-Frame-Width'],'128');self.assertEqual(response.headers['X-Frame-Height'],'64')
+                self.assertEqual(len(response.read()),128*64*3)
             server.SLOT.acquire()
             try:
                 with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(urllib.request.Request(base,jpeg,headers))
@@ -321,6 +325,17 @@ class RealtimeTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(urllib.request.Request(base,b'x',{**headers,'Content-Length':str(2*1024*1024+1)}))
             self.assertEqual(error.exception.code,413)
         finally: http.shutdown(); http.server_close(); thread.join()
+
+class NativeRGBTest(unittest.TestCase):
+    def test_native_1080p_input_and_portrait_acceptance(self):
+        import numpy as np
+        from realtime import enhance_rgb
+        for width,height in [(1920,1080),(1080,1920)]:
+            frame=np.full((height,width,3),80,np.uint8)
+            with patch('realtime.upsample',side_effect=lambda image,*args:np.repeat(np.repeat(image,2,axis=0),2,axis=1)):
+                output,_=enhance_rgb(frame.tobytes(),width,height,server.MODEL,server.MODEL_HASH,False,1)
+            self.assertEqual(output,frame.tobytes())
+        with self.assertRaises(ValueError):enhance_rgb(bytes(1920*1080*3),1920,1080,server.MODEL,server.MODEL_HASH,True,3)
 
 class QualityPreservationTest(unittest.TestCase):
     setUp=EnhancementTest.setUp
