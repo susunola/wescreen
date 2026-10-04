@@ -20,7 +20,7 @@ CACHE=Path(os.environ.get('WESCREEN_SMART_CACHE_DIR') or (Path(os.environ.get('W
 
 # Change policy when restoration math/model settings change: incompatible results
 # must never be silently reused. Source identity includes every uploaded byte.
-POLICY='smart-v4-multiscale-chroma-dni035-crf15'
+POLICY='smart-v5-adaptive-guide960-dni-crf15'
 CACHE_LIMIT=8*1024*1024*1024
 
 def save_chunk(session,index,chunk):
@@ -91,7 +91,7 @@ def work_chunk(session,index,api):
                 if chunk['path'].exists() and chunk['path'].stat().st_size>256*1024*1024:raise ValueError('Smart chunk exceeds helper cache limit')
                 try:
                     report=json.loads(line)
-                    for key in ['progress','engine','analysis','frames','duration','start','error']:
+                    for key in ['progress','engine','analysis','frames','settings','duration','start','error']:
                         if key in report:chunk[key]=report[key]
                 except ValueError:pass
             if process.wait()!=0 or session['cancel'].is_set() or not chunk['path'].is_file():raise RuntimeError(chunk.get('error','Smart repair interrupted'))

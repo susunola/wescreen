@@ -89,3 +89,21 @@ class SmartRestoreTest(unittest.TestCase):
         frame=(128+rng.integers(-2,3,(96,128,1))).astype(np.uint8).repeat(3,axis=2)
         out=recover_soft_detail(frame,{'soft':True,'noise':4})
         np.testing.assert_array_equal(out,frame)
+
+    def test_soft_large_source_uses_more_detailed_guide_with_bounded_residual(self):
+        from smart_model import NeuralRepair
+        from smart_runner import neural_settings
+        self.assertEqual(neural_settings({'soft':True,'noise':0})['guide_long_side'],960)
+        self.assertEqual(neural_settings({'noise':5})['denoise'],.5)
+        self.assertEqual(neural_settings({'soft':False,'noise':0})['guide_long_side'],640)
+        model=NeuralRepair.__new__(NeuralRepair);model.guide_long_side=960;sizes=[]
+        def prediction(frame,scale):
+            sizes.append(frame.shape)
+            return np.clip(frame.astype(int)+20,0,255).astype(np.uint8)
+        model.infer_tiles=prediction
+        frame=np.full((600,1200,3),100,np.uint8);frame[:,600:]=190
+        out=model(frame,1)
+        self.assertEqual(max(sizes[0][:2]),960)
+        self.assertEqual(out.shape,frame.shape)
+        self.assertLessEqual(np.abs(out.astype(int)-frame.astype(int)).max(),12)
+        np.testing.assert_array_equal(out[:,599:601],frame[:,599:601])

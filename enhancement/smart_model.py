@@ -26,7 +26,8 @@ def smart_ready():
 
 
 class NeuralRepair:
-    def __init__(self,denoise=.35):
+    def __init__(self,denoise=.35,guide_long_side=640):
+        self.guide_long_side=max(640,min(960,int(guide_long_side)))
         import torch
         from torch import nn
         if not model_files_valid():raise ValueError('Smart model checksum mismatch')
@@ -56,7 +57,7 @@ class NeuralRepair:
         # Large recordings often contain enlarged low-quality content. Infer a
         # bounded guide, then add its low-frequency residual to native pixels.
         # Never replace the full frame with a downscaled/upscaled image.
-        ratio=640/max(h,w);size=(max(2,round(w*ratio)),max(2,round(h*ratio)))
+        ratio=getattr(self,'guide_long_side',640)/max(h,w);size=(max(2,round(w*ratio)),max(2,round(h*ratio)))
         guide=cv2.resize(frame,size,interpolation=cv2.INTER_AREA)
         prediction=self.infer_tiles(guide,1)
         residual=prediction.astype(np.float32)-guide.astype(np.float32)

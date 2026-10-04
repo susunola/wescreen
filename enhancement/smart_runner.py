@@ -18,10 +18,18 @@ def sample_profile(args,options):
         if len(data)==args.width*args.height*3:reports.append(diagnose(np.frombuffer(data,np.uint8).reshape(args.height,args.width,3)))
     if not reports:return None
     profile=dict(reports[len(reports)//2])
-    for key in ['noise','blocks','detail']:profile[key]=round(float(np.median([r[key] for r in reports])),2)
+    for key in ['noise','blocks','detail','chromaNoise']:profile[key]=round(float(np.median([r[key] for r in reports])),2)
     profile['soft']=sum(r['soft'] for r in reports)>len(reports)/2
-    profile['degraded']=profile['noise']>1.5 or profile['blocks']>1.5 or profile['soft']
+    profile['degraded']=profile['noise']>1.5 or profile['blocks']>1.5 or profile.get('chromaNoise',0)>2 or profile['soft']
     return profile
+
+
+def neural_settings(profile):
+    """Choose cleanup and guide resolution from sampled source degradation."""
+    profile=profile or {}
+    denoise=.5 if profile.get('noise',0)>=4 or profile.get('blocks',0)>=4 else .35
+    guide=960 if profile.get('soft') or profile.get('blocks',0)>1.5 else 640
+    return {'denoise':denoise,'guide_long_side':guide}
 
 
 def run(args):
@@ -32,7 +40,7 @@ def run(args):
     decoder=subprocess.Popen(['ffmpeg','-nostdin','-v','error',*options,'-ss',str(begin),'-i',args.source,'-t',str(args.duration+context),'-an','-vf',f'fps={fps},pad=ceil(iw/2)*2:ceil(ih/2)*2','-f','rawvideo','-pix_fmt','bgr24','pipe:1'],stdout=subprocess.PIPE)
     encoder=None
     try:
-        neural=NeuralRepair() if args.neural and not args.text else None
+        neural=NeuralRepair(**neural_settings(profile)) if args.neural and not args.text else None
         temporal=TemporalRepair();count=0;delivered=0;first_time=None;scale=args.scale if not args.text else 1
         # H.264 4:2:0 is used only for browser playback cache; originals are retained.
         encoder=subprocess.Popen(['ffmpeg','-nostdin','-y','-v','error','-f','rawvideo','-pix_fmt','bgr24','-s',f'{w*scale}x{h*scale}','-r',str(fps),'-i','pipe:0','-an','-c:v','libx264','-crf','15','-preset','fast','-pix_fmt','yuv420p','-movflags','+faststart',args.output],stdin=subprocess.PIPE)
@@ -51,7 +59,7 @@ def run(args):
             if delivered%5==0:print(json.dumps({'progress':min(.99,delivered/fps/args.duration)}),flush=True)
         encoder.stdin.close()
         if encoder.wait()!=0 or decoder.wait()!=0 or not delivered:raise RuntimeError('Smart chunk encode/decode failed')
-        print(json.dumps({'progress':1,'engine':(f'Real-ESRGAN / {neural.device.upper()}'+(' · native residual guide' if max(w,h)>960 else '')) if neural else 'Motion-aligned spatial repair','analysis':profile,'frames':delivered,'duration':delivered/fps,'start':first_time}),flush=True)
+        print(json.dumps({'progress':1,'engine':(f'Real-ESRGAN / {neural.device.upper()}'+(' · native residual guide' if max(w,h)>960 else '')) if neural else 'Motion-aligned spatial repair','analysis':profile,'settings':neural_settings(profile) if neural else {},'frames':delivered,'duration':delivered/fps,'start':first_time}),flush=True)
     finally:
         for process in [decoder,encoder]:
             if process and process.poll() is None:process.terminate()
