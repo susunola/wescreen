@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'enhancement'))
-from realtime import balanced_sdr_tone, clean_compression, adaptive_detail
+from realtime import balanced_sdr_tone, clean_compression, adaptive_detail, clean_blocks, enhance_rgb
 
 class SDRToneTest(unittest.TestCase):
     def test_flat_colors_and_endpoints_preserved(self):
@@ -67,3 +67,18 @@ class SDRToneTest(unittest.TestCase):
         result=clean_compression(image)
         self.assertLess(np.mean((result.astype(float)-128)**2),np.mean((image.astype(float)-128)**2)*.8)
         self.assertEqual(result.shape,image.shape)
+
+    def test_block_seams_reduced_without_blurring_strong_edges(self):
+        image=np.full((32,32,3),120,np.uint8);image[:,8:16]=132
+        result=clean_blocks(image)
+        self.assertLess(abs(int(result[4,8,0])-int(result[4,7,0])),12)
+        image[:,16:]=220
+        result=clean_blocks(image)
+        np.testing.assert_array_equal(result[:,15:17],image[:,15:17])
+
+    def test_same_size_repair_does_not_invoke_super_resolution(self):
+        from unittest.mock import patch
+        image=np.full((32,64,3),128,np.uint8)
+        with patch('realtime.upsample',side_effect=AssertionError('Unexpected SR')):
+            output,_=enhance_rgb(image.tobytes(),64,32,None,None,False,1)
+        np.testing.assert_array_equal(np.frombuffer(output,np.uint8).reshape(image.shape),image)

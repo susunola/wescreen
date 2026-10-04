@@ -136,6 +136,31 @@ def clean_compression(frame):
     return np.clip(frame.astype(np.float32)+(filtered.astype(np.float32)-frame)*amount,0,255).round().astype(np.uint8)
 
 
+def clean_blocks(frame):
+    """Conservative deblocking of weak, isolated grid seams; preserve real edges.
+
+    Test both common codec grids. Only soften a boundary when its jump exceeds
+    neighboring gradients and remains below a real high-contrast edge.
+    """
+    import numpy as np
+    pixels=frame.astype(np.float32)
+    result=pixels.copy()
+    for axis in (0,1):
+        values=np.swapaxes(pixels,0,axis)
+        target=np.swapaxes(result,0,axis)
+        for boundary in range(8,len(values)-1,8):
+            left,right=values[boundary-1],values[boundary]
+            jump=np.mean(np.abs(right-left),axis=-1)
+            neighbor=(np.mean(np.abs(left-values[boundary-2]),axis=-1)+
+                      np.mean(np.abs(values[boundary+1]-right),axis=-1))*.5
+            weight=np.clip((jump-neighbor-2)/8,0,1)*.25
+            weight=np.where((jump<20)&(neighbor<6),weight,0)[...,None]
+            delta=(right-left)*weight
+            target[boundary-1]+=delta
+            target[boundary]-=delta
+    return np.clip(result,0,255).round().astype(np.uint8)
+
+
 def adaptive_detail(frame):
     """Sharpen visible luma texture, rejecting tiny noise and new edge extrema."""
     import cv2
@@ -162,8 +187,9 @@ def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, 
     with _LOCK:
         bgr=cv2.cvtColor(np.frombuffer(data,np.uint8).reshape(height,width,3),cv2.COLOR_RGB2BGR)
         size=(width*output_scale,height*output_scale)
-        restored=upsample(clean_compression(bgr),model_path,model_hash)
-        if output_scale==1: restored=cv2.resize(restored,size,interpolation=cv2.INTER_AREA)
+        cleaned=clean_blocks(clean_compression(bgr))
+        # Same-size restoration needs no expensive upscale/downscale round trip.
+        restored=upsample(cleaned,model_path,model_hash) if output_scale==2 else cleaned
         # Content-dependent luma sharpening replaces global channel sharpening.
         restored=adaptive_detail(restored)
         if protect_text:

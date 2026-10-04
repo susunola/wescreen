@@ -2,12 +2,21 @@
 const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1,project:null,lossless:false,rgb:false,maxLong:1080,maxShort:1080,outputScale:1,engine:null,nextAt:0,timelyStreak:0};
 const realtimeCanvas=document.createElement('canvas');realtimeCanvas.id='realtime-ai-canvas';realtimeCanvas.hidden=true;$('playback-stage').prepend(realtimeCanvas);
 const realtimeCapture=document.createElement('canvas');
+// Session-only exact-frame cache. Never persist private frames or reuse nearby times.
+const realtimeFrameCache=new Map();let realtimeCacheBytes=0;
+function clearRealtimeFrameCache(){realtimeFrameCache.clear();realtimeCacheBytes=0;}
+function cacheRealtimeFrame(key,data,width,height){
+ if(data.byteLength>24*1024*1024)return;
+ const previous=realtimeFrameCache.get(key);if(previous)realtimeCacheBytes-=previous.data.byteLength;
+ realtimeFrameCache.delete(key);realtimeFrameCache.set(key,{data,width,height});realtimeCacheBytes+=data.byteLength;
+ while(realtimeCacheBytes>24*1024*1024){const oldest=realtimeFrameCache.keys().next().value;realtimeCacheBytes-=realtimeFrameCache.get(oldest).data.byteLength;realtimeFrameCache.delete(oldest);}
+}
 const realtimeButton=document.createElement('button');realtimeButton.id='playback-realtime';realtimeButton.type='button';realtimeButton.dataset.i18n='smartRealtime';realtimeButton.textContent=L('smartRealtime');realtimeButton.setAttribute('aria-pressed','false');qualityPanel.insertBefore(realtimeButton,$('playback-instant'));
 const realtimeHint=document.createElement('p');realtimeHint.className='cinema-repair-caption';realtimeHint.id='realtime-ai-status';realtimeHint.setAttribute('role','status');realtimeButton.after(realtimeHint);
 function syncRealtimeLayout(){const v=$('preview');for(const key of ['width','height','transform','filter'])realtimeCanvas.style[key]=v.style[key];}
 new MutationObserver(syncRealtimeLayout).observe($('preview'),{attributes:true,attributeFilter:['style']});
 function stopRealtimeAI(message=''){
- realtimeAI.enabled=false;realtimeAI.generation++;realtimeAI.abort?.abort();realtimeAI.abort=null;realtimeAI.busy=false;
+ clearRealtimeFrameCache();realtimeAI.enabled=false;realtimeAI.generation++;realtimeAI.abort?.abort();realtimeAI.abort=null;realtimeAI.busy=false;
  if(realtimeAI.callback!==null){if($('preview').cancelVideoFrameCallback)$('preview').cancelVideoFrameCallback(realtimeAI.callback);else cancelAnimationFrame(realtimeAI.callback);}realtimeAI.callback=null;
  realtimeCanvas.hidden=true;realtimeAI.timelyStreak=0;realtimeButton.setAttribute('aria-pressed','false');realtimeHint.textContent=message;realtimeAI.frames=[];
 }
@@ -29,8 +38,11 @@ async function processRealtimeFrame(mediaTime){
   if(generation!==realtimeAI.generation)return;
   const controller=new AbortController();realtimeAI.abort=controller;const timeout=setTimeout(()=>controller.abort(),realtimeAI.rgb?5000:1800);
   if(typeof playerColor!=='undefined' && playerColor.mode==='hdr'){stopRealtimeAI();return;}
-  let response;try{response=await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':mime,...(realtimeAI.rgb?{'X-Frame-Width':String(realtimeCapture.width),'X-Frame-Height':String(realtimeCapture.height),'X-Protect-Text':'1',...(realtimeAI.outputScale>=2?{'X-Output-Scale':String(parseFloat(video.style.width)>video.videoWidth*1.05 || parseFloat(video.style.height)>video.videoHeight*1.05?2:1)}:{})}:{})},signal:controller.signal});}finally{clearTimeout(timeout);}
-  let bitmap;if(realtimeAI.rgb){const rgb=new Uint8Array(await response.arrayBuffer()),w=Number(response.headers.get('X-Frame-Width')||realtimeCapture.width),h=Number(response.headers.get('X-Frame-Height')||realtimeCapture.height);if(!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||w>3840||h>3840||w*h>1920*1080*4)throw new Error('Invalid RGB dimensions');if(rgb.length!==w*h*3)throw new Error('Invalid RGB result');const rgba=new Uint8ClampedArray(w*h*4);for(let i=0,j=0;i<rgb.length;i+=3){rgba[j++]=rgb[i];rgba[j++]=rgb[i+1];rgba[j++]=rgb[i+2];rgba[j++]=255;}bitmap=await createImageBitmap(new ImageData(rgba,w,h));}else bitmap=await createImageBitmap(await response.blob());
+  const outputScale=realtimeAI.outputScale>=2 && (parseFloat(video.style.width)>video.videoWidth*1.05 || parseFloat(video.style.height)>video.videoHeight*1.05)?2:1;
+  const cacheKey=JSON.stringify([video.currentSrc,mediaTime,realtimeCapture.width,realtimeCapture.height,outputScale]);
+  const cached=realtimeAI.rgb?realtimeFrameCache.get(cacheKey):null;
+  let response;try{response=cached?new Response(cached.data,{headers:{'X-Frame-Width':String(cached.width),'X-Frame-Height':String(cached.height)}}):await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':mime,...(realtimeAI.rgb?{'X-Frame-Width':String(realtimeCapture.width),'X-Frame-Height':String(realtimeCapture.height),'X-Protect-Text':'1',...(realtimeAI.outputScale>=2?{'X-Output-Scale':String(parseFloat(video.style.width)>video.videoWidth*1.05 || parseFloat(video.style.height)>video.videoHeight*1.05?2:1)}:{})}:{})},signal:controller.signal});}finally{clearTimeout(timeout);}
+  let bitmap;if(realtimeAI.rgb){const rgb=new Uint8Array(await response.arrayBuffer()),w=Number(response.headers.get('X-Frame-Width')||realtimeCapture.width),h=Number(response.headers.get('X-Frame-Height')||realtimeCapture.height);if(!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||w>3840||h>3840||w*h>1920*1080*4)throw new Error('Invalid RGB dimensions');if(rgb.length!==w*h*3)throw new Error('Invalid RGB result');if(generation===realtimeAI.generation && !cached)cacheRealtimeFrame(cacheKey,rgb,w,h);const rgba=new Uint8ClampedArray(w*h*4);for(let i=0,j=0;i<rgb.length;i+=3){rgba[j++]=rgb[i];rgba[j++]=rgb[i+1];rgba[j++]=rgb[i+2];rgba[j++]=255;}bitmap=await createImageBitmap(new ImageData(rgba,w,h));}else bitmap=await createImageBitmap(await response.blob());
   try{
    if(generation!==realtimeAI.generation || !realtimeAI.enabled)return;
    const elapsed=performance.now()-started;realtimeAI.average=realtimeAI.average ? realtimeAI.average*.75+elapsed*.25:elapsed;
@@ -66,10 +78,11 @@ $('preview').addEventListener('seeking',()=>{realtimeAI.generation++;realtimeAI.
 $('preview').addEventListener('seeked',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
 $('preview').addEventListener('pause',()=>{if(realtimeAI.enabled){realtimeAI.generation++;realtimeAI.request++;realtimeAI.abort?.abort();realtimeAI.busy=false;realtimeAI.nextAt=0;processRealtimeFrame($('preview').currentTime);}});
 $('preview').addEventListener('loadedmetadata',()=>{
+ clearRealtimeFrameCache();
  if(!realtimeAI.enabled)return;
  const v=$('preview');if(realtimeAI.project!==playbackProjectId() || Math.max(v.videoWidth,v.videoHeight)>1920 || Math.min(v.videoWidth,v.videoHeight)>1080){stopRealtimeAI();return;}
  realtimeAI.generation++;realtimeAI.request++;realtimeAI.abort?.abort();realtimeAI.busy=false;realtimeCanvas.hidden=true;realtimeAI.mediaTime=-1;
  processRealtimeFrame(v.currentTime);scheduleRealtimeAI();
 });
-window.addEventListener('pagehide',()=>stopRealtimeAI());
+window.addEventListener('pagehide',()=>{clearRealtimeFrameCache();stopRealtimeAI();});
 new MutationObserver(()=>{if($('player-view').classList.contains('hidden'))stopRealtimeAI();}).observe($('player-view'),{attributes:true,attributeFilter:['class']});
