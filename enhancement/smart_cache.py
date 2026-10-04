@@ -20,7 +20,7 @@ CACHE=Path(os.environ.get('WESCREEN_SMART_CACHE_DIR') or (Path(os.environ.get('W
 
 # Change policy when restoration math/model settings change: incompatible results
 # must never be silently reused. Source identity includes every uploaded byte.
-POLICY='smart-v3-chroma-adaptive-dni035-crf15'
+POLICY='smart-v4-multiscale-chroma-dni035-crf15'
 CACHE_LIMIT=8*1024*1024*1024
 
 def save_chunk(session,index,chunk):

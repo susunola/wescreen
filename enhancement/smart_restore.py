@@ -97,6 +97,25 @@ def clean_chroma(frame,profile):
     return cv2.cvtColor(colour,cv2.COLOR_YCrCb2BGR)
 
 
+def recover_soft_detail(frame,profile):
+    """Bounded two-scale luma recovery for soft sources, after denoising/SR."""
+    if not profile or not profile.get('soft'):return frame
+    pixels=frame.astype(np.float32)
+    luma=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY).astype(np.float32)
+    fine=luma-cv2.GaussianBlur(luma,(0,0),.8)
+    broad=luma-cv2.GaussianBlur(luma,(0,0),1.6)
+    # Soft-threshold small residuals: flat-region noise must not become detail.
+    threshold=2+min(4,float(profile.get('noise',0))*.6)
+    detail=np.sign(fine)*np.maximum(np.abs(fine)-threshold,0)*.22
+    detail+=np.sign(broad)*np.maximum(np.abs(broad)-threshold*1.5,0)*.32
+    weight=np.clip((luma-12)/28,0,1)*np.clip((245-luma)/28,0,1)
+    weight*=1-text_protection(frame)
+    delta=np.clip(detail,-5,5)*weight
+    kernel=np.ones((5,5),np.uint8)
+    target=np.clip(luma+delta,cv2.erode(luma,kernel),cv2.dilate(luma,kernel))
+    return np.clip(pixels+(target-luma)[...,None],0,255).round().astype(np.uint8)
+
+
 def restore(frame,temporal,timestamp,neural=None,profile=None,text=False,output_scale=1):
     if text:
         # No temporal or generative pixels in explicitly recorded desktop text.
@@ -116,5 +135,5 @@ def restore(frame,temporal,timestamp,neural=None,profile=None,text=False,output_
             repaired=np.clip(base.astype(float)+(prediction.astype(float)-base)*blend,0,255).round().astype(np.uint8)
         elif output_scale==2:
             repaired=cv2.resize(repaired,None,fx=2,fy=2,interpolation=cv2.INTER_LANCZOS4)
-        repaired=balanced_sdr_tone(adaptive_detail(repaired))
+        repaired=balanced_sdr_tone(recover_soft_detail(adaptive_detail(repaired),profile))
     return repaired

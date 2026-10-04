@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'enhancement'))
-from smart_restore import TemporalRepair,diagnose,restore,text_protection,clean_chroma
+from smart_restore import TemporalRepair,diagnose,restore,text_protection,clean_chroma,recover_soft_detail
 
 class SmartRestoreTest(unittest.TestCase):
     def test_noise_detection_and_diagnostics_ignore_borders(self):
@@ -74,3 +74,18 @@ class SmartRestoreTest(unittest.TestCase):
         self.assertLess(np.mean((out[...,1:].astype(float)-128)**2),np.mean((before[...,1:].astype(float)-128)**2)*.8)
         self.assertLessEqual(np.abs(out[...,0].astype(int)-before[...,0]).max(),1)
         np.testing.assert_array_equal(clean_chroma(frame,{'chromaNoise':0}),frame)
+
+    def test_soft_detail_increases_blurred_edge_without_new_extrema(self):
+        source=np.full((96,128,3),65,np.uint8);source[:,64:]=185
+        blurred=cv2.GaussianBlur(source,(0,0),2)
+        out=recover_soft_detail(blurred,{'soft':True,'noise':0})
+        self.assertGreater(float(out[:,66,0].mean()-out[:,61,0].mean()),float(blurred[:,66,0].mean()-blurred[:,61,0].mean()))
+        self.assertGreaterEqual(out.min(),blurred.min());self.assertLessEqual(out.max(),blurred.max())
+        self.assertLessEqual(np.abs(out.astype(int)-blurred.astype(int)).max(),5)
+        np.testing.assert_array_equal(recover_soft_detail(blurred,{'soft':False}),blurred)
+
+    def test_soft_detail_does_not_amplify_flat_noise(self):
+        rng=np.random.default_rng(25)
+        frame=(128+rng.integers(-2,3,(96,128,1))).astype(np.uint8).repeat(3,axis=2)
+        out=recover_soft_detail(frame,{'soft':True,'noise':4})
+        np.testing.assert_array_equal(out,frame)
