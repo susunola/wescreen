@@ -62,7 +62,7 @@ async function initWorkspace() {
   $('bulk-delete').onclick=()=>removeRecordings([...librarySelection],libraryTrash).catch(workspaceError);
   $('bulk-restore').onclick=async()=>{try{for(const id of librarySelection)await updateRecording(id,{deletedAt:null});librarySelection.clear();await renderRecordingLibrary();}catch(error){workspaceError(error);}};
   $('import-video').onchange=async()=>{ try{await importRecording($('import-video').files[0]);}catch(error){$('library-status').textContent=error.message;}finally{$('import-video').value='';} };
-  $('tasks-connect').onclick=()=>connectHelper({repair:true});
+  $('tasks-connect').onclick=()=>connectHelper({repair:true,launch:true});
   $('tasks-library').onclick=()=>navigateWorkspace('library');
   $('refresh-tasks').onclick=async()=>{if(!helperHealth)await connectHelper();await renderEnhancementTasks().catch(workspaceError);};navigateWorkspace('capture');
   if (chrome.downloads?.onChanged) chrome.downloads.onChanged.addListener(async delta=>{

@@ -226,3 +226,29 @@ test('face restoration requires a matching preview and confirmation; changed par
  await page.evaluate(()=>{helperHealth={ai:true,strong:true};updateEnhancementMode();});assert.equal(await page.locator('#enhance-preview').isDisabled(),true);assert.match(await page.locator('#enhance-mode-hint').textContent(),/install-face/);
  await page.evaluate(()=>{applyLang('en');});assert.match(await page.locator('#face-preview-confirm').locator('..').textContent(),/checked the preview/);assert.deepEqual(errors,[]);
 }));
+
+
+test('helper discovery owns status during task refresh and restores retry controls',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);let release;const gate=new Promise(resolve=>release=resolve);
+ await cx.route('http://127.0.0.1:8765/**',async route=>{const path=new URL(route.request().url()).pathname;if(path==='/health'){await gate;await route.fulfill({json:{ready:true,ai:true}});}else await route.fulfill({json:{jobs:[]}});});
+ await p.evaluate(()=>{window.pendingConnect=connectHelper();navigateWorkspace('tasks');});
+ await p.waitForFunction(()=>$('tasks-connection').dataset.state==='connecting');await p.evaluate(()=>renderEnhancementTasks());
+ assert.equal(await p.locator('#tasks-connect').isVisible(),true);assert.equal(await p.locator('#tasks-connect').isDisabled(),true);assert.match(await p.locator('#tasks-status').textContent(),/连接/);
+ release();await p.evaluate(()=>window.pendingConnect);assert.equal(await p.locator('#tasks-connection').getAttribute('data-state'),'connected');
+ await cx.unroute('http://127.0.0.1:8765/**');await cx.route('http://127.0.0.1:8765/**',route=>route.abort());await p.evaluate(()=>connectHelper());assert.equal(await p.locator('#tasks-connection').getAttribute('data-state'),'offline');assert.equal(await p.locator('#tasks-connect').isVisible(),true);assert.equal(await p.locator('#tasks-connect').isDisabled(),false);
+}));
+
+test('user pairing retry follows a failed background discovery instead of being swallowed',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);
+ await cx.route('http://127.0.0.1:8765/**',async route=>{const u=new URL(route.request().url());if(u.pathname==='/connect' && !u.searchParams.has('challenge')){await new Promise(resolve=>setTimeout(resolve,150));await route.fulfill({status:403,json:{error:'Helper is paired with another extension. Approve this extension in the local launcher.'}});}else await route.fulfill({json:u.pathname==='/connect'?{token:'new-approved-token-123456789'}:u.pathname==='/health'?{ready:true}: {jobs:[]}});});
+ await p.evaluate(async()=>{chrome.runtime.id='a'.repeat(32);enhancementToken='';$('enhance-token').value='';window.pairingPrompts=0;openNativePairing=()=>window.pairingPrompts++;const background=connectHelper();const user=connectHelper({repair:true});await Promise.all([background,user]);});
+ assert.equal(await p.evaluate(()=>window.pairingPrompts),1);assert.equal(await p.locator('#tasks-connection').getAttribute('data-state'),'connected');assert.equal(await p.evaluate(()=>helperConnecting),null);
+}));
+
+
+test('late failed task poll cannot clear a newer healthy connection',options,async()=>harness(async(cx,url)=>{
+ const p=await pageReady(cx,url);let release;const gate=new Promise(resolve=>release=resolve);let jobsStarted;const started=new Promise(resolve=>jobsStarted=resolve);
+ await cx.route('http://127.0.0.1:8765/**',async route=>{if(new URL(route.request().url()).pathname==='/jobs'){jobsStarted();await gate;await route.abort();}else await route.fulfill({json:{ready:true}});});
+ await p.waitForFunction(()=>!taskPolling);await p.evaluate(()=>{window.taskPoll=renderEnhancementTasks();});await started;await p.evaluate(()=>connectHelper());release();await p.evaluate(()=>window.taskPoll);
+ assert.equal(await p.evaluate(()=>helperHealth.ready),true);assert.equal(await p.locator('#tasks-connection').getAttribute('data-state'),'connected');assert.doesNotMatch(await p.locator('#tasks-status').textContent(),/未连接/);
+}));

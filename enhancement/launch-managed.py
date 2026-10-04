@@ -22,7 +22,10 @@ try:
     def get(path):
         return json.load(urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8765'+path,headers={'X-WeScreen-Token':token}),timeout=3))
     health=get('/health')
-    if health.get('merge') and health.get('version')=='1.19.0': raise SystemExit(0)
+    # Compare against the installed code, never a stale hard-coded release.
+    import re
+    version=re.search(r"'version'\s*:\s*'([^']+)'",(root/'server.py').read_text()).group(1)
+    if health.get('merge') and health.get('version')==version: raise SystemExit(0)
     if any(j['state'] in ('queued','processing') for j in get('/jobs')['jobs']):
         raise SystemExit('An active processing job is running. Finish it before updating the helper.')
 except (OSError,ValueError):

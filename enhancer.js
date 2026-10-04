@@ -25,9 +25,11 @@ function updateTaskConnection(connected, connecting=false) {
   $('tasks-connection').dataset.state=connecting ? 'connecting' : connected ? 'connected' : 'offline';
   const key=connecting ? 'helperConnecting' : connected ? 'helperConnected' : 'helperDisconnected';
   $('tasks-connection-label').dataset.i18n=key;$('tasks-connection-label').textContent=L(key);
-  $('tasks-connect').hidden=connected || connecting;
+  $('tasks-connect').hidden=connected;
+  $('tasks-connect').disabled=connecting;
+  $('tasks-connect').textContent=L(connecting ? 'helperConnecting':'autoConnect');
 }
-let helperConnecting=null;
+let helperConnecting=null, helperConnectionEpoch=0;
 async function discoverHelperToken(challenge=''){
  const response=await fetch(ENHANCER_URL+'/connect'+(challenge?'?challenge='+encodeURIComponent(challenge):''),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:AbortSignal.timeout(3000)});
  if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error || `HTTP ${response.status}`);}
@@ -47,14 +49,18 @@ async function repairHelperPairing(){
  throw new Error(E('本机授权尚未完成。请更新增强包并运行 install-launcher.command，再点击自动连接；已有文件保留。','Local approval did not finish. Update the helper and run install-launcher.command, then retry. Existing files are preserved.'));
 }
 async function connectHelper(options={}){
- if(helperConnecting)return helperConnecting;
+ // A user retry must not disappear into a background discovery already in flight.
+ if(helperConnecting){const result=await helperConnecting;if(result || !options.repair)return result;}
+ if(options.launch){const link=document.createElement('a');link.href='wescreen-helper://start';document.body.append(link);link.click();link.remove();}
+ helperConnectionEpoch++;
  helperConnecting=(async()=>{
   $('helper-check').disabled=true;$('helper-check').textContent=E('连接中…','Connecting…');enhancementToken=$('enhance-token').value.trim();helperHealth=null;updateTaskConnection(false,true);updateEnhancementMode();$('helper-status').textContent=E('正在自动连接本机程序…','Connecting to local helper…');$('tasks-status').textContent=$('helper-status').textContent;
   try{
    try{
-    if(!enhancementToken)await discoverHelperToken();
-    try{helperHealth=await(await enhancementRequest('/health')).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health')).json();}
-   }catch(error){if(!options.repair || !/paired with another/.test(error.message))throw error;await repairHelperPairing();helperHealth=await(await enhancementRequest('/health')).json();}
+    if(options.launch){const deadline=Date.now()+12000;while(true){try{await discoverHelperToken();break;}catch(error){if(/paired/.test(error.message) || Date.now()>=deadline)throw error;await new Promise(resolve=>setTimeout(resolve,600));}}}
+    else if(!enhancementToken)await discoverHelperToken();
+    try{helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}
+   }catch(error){if(!options.repair || !/paired with another/.test(error.message))throw error;await repairHelperPairing();helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
    $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();renderEnhancementTasks().catch(()=>{});return helperHealth;
   }catch(error){$('tasks-connection').dataset.reason=/paired/.test(error.message)?'pairing':/version|incompatible/.test(error.message)?'version':'unreachable';$('helper-status').textContent=/paired with another/.test(error.message) ? E('检测到另一扩展的配对。点击自动连接，在本机窗口允许一次；以后两个扩展都能自动连接，无需重置。','Another extension is paired. Click Auto connect and approve once in the local window; both extensions will reconnect without resetting.') : /授权尚未|approval did not/.test(error.message)?error.message:E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
@@ -189,10 +195,11 @@ async function enhanceVideo(preview) {
 async function renderEnhancementTasks() {
   if(taskPolling)return;taskPolling=true;
   try {
-    const local=await readStore('tasks');let jobs=[],remoteChecked=false;
-    if(enhancementToken){try{jobs=(await(await enhancementRequest('/jobs')).json()).jobs;remoteChecked=true;$('tasks-status').textContent='';}catch(error){helperHealth=null;$('tasks-status').textContent=L('helperOffline')+' '+error.message;}}
-    else $('tasks-status').textContent=L('helperOffline');
-    updateTaskConnection(remoteChecked,!!helperConnecting && !remoteChecked);
+    const local=await readStore('tasks');let jobs=[],remoteChecked=false;const connectionEpoch=helperConnectionEpoch;
+    // Discovery owns connection status while in flight; task refresh must not invalidate it.
+    if(!helperConnecting && enhancementToken){try{jobs=(await(await enhancementRequest('/jobs')).json()).jobs;remoteChecked=true;if(!helperConnecting && connectionEpoch===helperConnectionEpoch)$('tasks-status').textContent='';}catch(error){if(!helperConnecting && connectionEpoch===helperConnectionEpoch){helperHealth=null;$('tasks-status').textContent=L('helperOffline')+' '+error.message;}}}
+    else if(!helperConnecting) $('tasks-status').textContent=L('helperOffline');
+    if(!helperConnecting)updateTaskConnection(connectionEpoch===helperConnectionEpoch ? remoteChecked:!!helperHealth);
     const records=await readStore('recordings');
     const merged=new Map(local.map(task=>[task.id,task]));for(const job of jobs)merged.set(job.id,{...merged.get(job.id),...job});
     const list=$('task-items');list.replaceChildren();
@@ -237,7 +244,7 @@ $('enhance-cancel').onclick=()=>enhancementJob && enhancementRequest(`/jobs/${en
 $('enhance-close').onclick=()=>{$('enhance-panel').close();clearEnhancementPreview();};
 $('enhance-panel').addEventListener('cancel',()=>clearEnhancementPreview());
 $('enhance-go-tasks').onclick=()=>{$('enhance-panel').close();clearEnhancementPreview();navigateWorkspace('tasks');};
-$('helper-check').onclick=()=>connectHelper({repair:true});
+$('helper-check').onclick=()=>connectHelper({repair:true,launch:true});
 $('enhance-token').oninput=()=>{helperHealth=null;updateEnhancementMode();};
 window.addEventListener('wescreen-language',()=>{updateEnhancementMode();if(workspaceView==='tasks')renderEnhancementTasks().catch(()=>{});});
 if(chrome.storage.session)chrome.storage.session.get('enhancementToken').then(value=>{enhancementToken=value.enhancementToken || '';$('enhance-token').value=enhancementToken;if(chrome.runtime.id)connectHelper();}).catch(()=>{});
