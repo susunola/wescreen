@@ -16,6 +16,8 @@ from urllib.parse import parse_qs, urlparse
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from realtime import enhance_frame
+from smart_cache import handle_smart, start_cleanup, SESSIONS as SMART_SESSIONS, cleanup_session
+from smart_model import smart_ready
 from face import face_ready, run_face, file_sha256
 from pairing import connect_origin
 from tail import trim_static_tail
@@ -421,6 +423,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'token': TOKEN})
         if not self.authorized():
             return
+        if handle_smart(self,'POST',globals()): return
         if handle_media_post(self,urlparse(self.path).path,globals()): return
         if urlparse(self.path).path == '/realtime/frame':
             try: size = int(self.headers.get('Content-Length', '0'))
@@ -555,11 +558,12 @@ class Handler(BaseHTTPRequestHandler):
         ticket = parse_qs(parsed.query).get('ticket', [''])[0]
         valid_ticket = bool(exported and exported.get('exportTicket') and time.time() < exported.get('exportUntil', 0) and hmac.compare_digest(ticket, exported['exportTicket']) and self.headers.get('Host') in (f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'))
         if not valid_ticket and not self.authorized(): return
+        if handle_smart(self,'GET',globals()): return
         if path == '/jobs':
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'version':'1.26.8','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'Adaptive spatial repair / FSRCNN 2x','realtimeTemporal':False,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.27.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'Adaptive spatial repair / FSRCNN 2x','realtimeTemporal':False,'smartChunks':True,'smartNeural':smart_ready(),'smartTemporal':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None
@@ -577,6 +581,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self.authorized():
             return
+        if handle_smart(self,'DELETE',globals()): return
         parts = urlparse(self.path).path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) == 2 and parts[0] == 'jobs' else None
@@ -603,6 +608,7 @@ if __name__ == '__main__':
     if not os.environ.get('WESCREEN_ENHANCE_TOKEN'):
         runtime = ROOT / '.runtime'; runtime.mkdir(exist_ok=True)
         token_file = runtime / 'token.txt'; token_file.write_text(TOKEN); token_file.chmod(0o600)
+    start_cleanup(globals())
     print(f'Local enhancer: http://127.0.0.1:{http.server_port}', flush=True)
     try:
         http.serve_forever()
@@ -610,6 +616,7 @@ if __name__ == '__main__':
         pass
     finally:
         http.server_close()
+        for session in list(SMART_SESSIONS.values()):cleanup_session(session,globals())
         for job in list(JOBS.values()):
             job['cancel'].set()
             for process in list(job['processes']):

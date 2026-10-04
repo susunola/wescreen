@@ -254,3 +254,8 @@
 #rotated-playback-controls .view-inspector .playback-tuning input{width:100%}
 #rotated-playback-controls .view-inspector #playback-tuning-reset{font-size:11px;min-height:32px;height:auto;margin-top:12px;padding:7px 10px;border:1px solid #ffffff18;border-radius:6px}
 @media(max-width:650px){#playback-rotation-menu .view-inspector{right:-88px}}
+#smart-restored-video{position:absolute;left:50%;top:50%;object-fit:contain;pointer-events:none;z-index:2}
+#smart-restored-video[hidden],.compare-original #smart-restored-video{display:none!important}
+#playback-close{font-size:13px;white-space:nowrap}
+
+#smart-restored-video::cue{font-size:var(--subtitle-size,24px);text-shadow:0 1px 3px #000,1px 0 2px #000,-1px 0 2px #000;background:#0005;}
