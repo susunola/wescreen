@@ -86,9 +86,9 @@ def enhance_frame(data, model_path, model_hash, lossless=False):
         frame = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
         if frame is None or frame.shape[:2] != (height, width):
             raise ValueError('Invalid JPEG frame')
-        # Mild spatial denoise before actual neural super-resolution.
-        cleaned = cv2.bilateralFilter(frame, 3, 12, 12)
-        enhanced = upsample(cleaned, model_path, model_hash)
+        # The legacy image transport uses the same degradation-aware cleanup.
+        cleaned = clean_compression(frame)
+        enhanced = balanced_sdr_tone(adaptive_detail(upsample(cleaned, model_path, model_hash)))
         ok, encoded = cv2.imencode('.png' if lossless else '.jpg', enhanced, [cv2.IMWRITE_PNG_COMPRESSION, 1] if lossless else [cv2.IMWRITE_JPEG_QUALITY, 94])
         if not ok: raise RuntimeError('Could not encode enhanced frame')
     return encoded.tobytes(), (time.perf_counter()-started)*1000
@@ -114,15 +114,25 @@ def balanced_sdr_tone(frame):
 
 
 def clean_compression(frame):
-    """Reduce small flat-area codec noise without smoothing contrast edges."""
+    """Estimate small codec noise and clean flat regions before neural SR."""
     import cv2
     import numpy as np
     grey=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
     kernel=np.ones((3,3),np.uint8)
     span=cv2.dilate(grey,kernel).astype(np.float32)-cv2.erode(grey,kernel)
-    # Feather the threshold; constant colors and strong boundaries stay intact.
-    amount=np.clip((28-span)/20,0,1)[...,None]*.45
-    filtered=cv2.bilateralFilter(frame,3,10,10)
+    # Estimate noise on a bounded thumbnail, excluding strong edges and texture.
+    # No frame history: seeking, switching parts and cuts cannot leak old pixels.
+    scale=min(1,320/max(grey.shape))
+    small=cv2.resize(grey,None,fx=scale,fy=scale,interpolation=cv2.INTER_NEAREST) if scale<1 else grey
+    local=cv2.dilate(small,kernel).astype(np.float32)-cv2.erode(small,kernel)
+    residual=np.abs(small.astype(np.float32)-cv2.medianBlur(small,3))
+    flat=residual[local<24]
+    noise=float(np.percentile(flat,70)) if flat.size>=32 else 0
+    strength=float(np.clip((noise-1)/5,0,1))
+    # Clean sources bypass preprocessing; degraded sources get more cleanup.
+    if strength==0:return frame
+    amount=np.clip((32-span)/24,0,1)[...,None]*(.30+.40*strength)
+    filtered=cv2.bilateralFilter(frame,5 if strength>.65 else 3,8+12*strength,3)
     return np.clip(frame.astype(np.float32)+(filtered.astype(np.float32)-frame)*amount,0,255).round().astype(np.uint8)
 
 

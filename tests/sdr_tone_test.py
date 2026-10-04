@@ -55,3 +55,15 @@ class SDRToneTest(unittest.TestCase):
         result=adaptive_detail(image)
         self.assertGreater(result[...,0].astype(float).std(),image[...,0].astype(float).std())
         self.assertLessEqual(np.abs(result.astype(int)-image.astype(int)).max(),3)
+
+    def test_clean_sources_bypass_noise_cleanup(self):
+        rng=np.random.default_rng(42)
+        image=(128+rng.integers(-1,2,(64,64,3))).astype(np.uint8)
+        np.testing.assert_array_equal(clean_compression(image),image)
+
+    def test_native_resolution_noise_is_detected_without_downsample_averaging(self):
+        rng=np.random.default_rng(24)
+        image=(128+rng.integers(-5,6,(1080,1920,3))).astype(np.uint8)
+        result=clean_compression(image)
+        self.assertLess(np.mean((result.astype(float)-128)**2),np.mean((image.astype(float)-128)**2)*.8)
+        self.assertEqual(result.shape,image.shape)
