@@ -89,3 +89,16 @@
  new MutationObserver(sync).observe($('live-level'),{attributes:true,attributeFilter:['value']});
  window.addEventListener('wescreen-language',sync);sync();
 })();
+
+// Compact view inspector: retain the existing rotation and tuning handlers.
+(() => {
+ const panel=$('playback-rotation-menu').querySelector('.playback-toolbar');
+ const title=document.createElement('strong');title.className='view-inspector-title';
+ const rotate=document.createElement('div');rotate.className='view-rotation-actions';
+ for(const id of ['playback-left','playback-right','playback-reset'])rotate.append($(id));
+ const heading=document.createElement('span');heading.className='view-section-label';
+ const angle=document.querySelector('.playback-angle'),tuning=document.querySelector('.playback-tuning'),ambient=$('playback-ambient-toggle').closest('label');
+ panel.classList.add('view-inspector');panel.replaceChildren(title,$('playback-fit'),heading,rotate,angle,ambient,tuning);
+ const refresh=()=>{title.textContent=E('画面与方向','Frame & orientation');heading.textContent=E('旋转方向','Rotation');$('playback-left').textContent=E('↶ 左转','↶ Left');$('playback-right').textContent=E('↷ 右转','↷ Right');$('playback-reset').textContent=E('复位','Reset');};
+ window.addEventListener('wescreen-language',refresh);refresh();
+})();
