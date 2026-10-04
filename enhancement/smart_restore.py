@@ -4,6 +4,27 @@ import numpy as np
 from realtime import clean_compression, clean_blocks, adaptive_detail, balanced_sdr_tone
 
 
+def codec_grids(grey):
+    """Find repeated weak seams, including shifted/scaled codec grids."""
+    grids=[]
+    for axis in (0,1):
+        means=np.mean(np.abs(np.diff(grey.astype(np.float32),axis=axis)),axis=1-axis)
+        best=None
+        for step in (8,12,16,24,32):
+            for phase in range(step):
+                indices=np.arange(phase,len(means),step)
+                if len(indices)<4:continue
+                grid=means[indices];normal=np.delete(means,indices)
+                baseline=float(np.median(normal)) if len(normal) else 0
+                score=float(np.median(grid))-baseline
+                # Isolated real edges and irregular texture are not codec grids.
+                if score<=1.5 or np.mean(grid>baseline+1.5)<.7:continue
+                if best is None or score>best['score']+.1:
+                    best={'step':step,'offset':(phase+1)%step,'score':round(score,2)}
+        grids.append(best)
+    return grids
+
+
 def diagnose(frame):
     grey=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
     # Ignore constant bars for diagnostics only. Never crop the delivered video.
@@ -18,14 +39,8 @@ def diagnose(frame):
     flat=np.abs(noise_sample.astype(float)-cv2.medianBlur(noise_sample,3))[local<24]
     noise=float(np.percentile(flat,70)) if flat.size>=32 else 0
     lap=float(cv2.Laplacian(small,cv2.CV_32F).var())
-    scores=[]
-    for axis in (0,1):
-        diff=np.abs(np.diff(crop.astype(float),axis=axis))
-        if diff.shape[axis]<24:continue
-        means=np.mean(diff,axis=1-axis)
-        grid=means[7::8];normal=np.delete(means,np.arange(7,len(means),8))
-        scores.append(max(0,float(np.mean(grid)-np.mean(normal))))
-    block=max(scores,default=0)
+    grids=codec_grids(grey)
+    block=max((grid['score'] for grid in grids if grid),default=0)
     colour=cv2.cvtColor(frame,cv2.COLOR_BGR2YCrCb)
     chroma=[]
     for channel in (1,2):
@@ -37,7 +52,7 @@ def diagnose(frame):
     # This is a softness indicator, not a claimed reconstruction of source pixels.
     soft=lap<80 and float(np.percentile(span,90))>3
     return {'noise':round(noise,2),'blocks':round(block,2),'detail':round(lap,2),
-            'chromaNoise':round(chroma_noise,2),'soft':soft,'degraded':noise>1.5 or block>1.5 or chroma_noise>2 or soft,
+            'codecGrids':grids,'chromaNoise':round(chroma_noise,2),'soft':soft,'degraded':noise>1.5 or block>1.5 or chroma_noise>2 or soft,
             'contentWidth':int(crop.shape[1]),'contentHeight':int(crop.shape[0])}
 
 
@@ -121,7 +136,7 @@ def restore(frame,temporal,timestamp,neural=None,profile=None,text=False,output_
         # No temporal or generative pixels in explicitly recorded desktop text.
         repaired=adaptive_detail(frame)
     else:
-        repaired=clean_chroma(clean_blocks(clean_compression(temporal.apply(frame,timestamp))),profile or {})
+        repaired=clean_chroma(clean_blocks(clean_compression(temporal.apply(frame,timestamp)),(profile or {}).get('codecGrids')),profile or {})
         if neural and profile and profile['degraded']:
             prediction=neural(repaired,output_scale)
             base=cv2.resize(repaired,(prediction.shape[1],prediction.shape[0]),interpolation=cv2.INTER_LANCZOS4)

@@ -123,3 +123,17 @@ class SmartRestoreTest(unittest.TestCase):
         self.assertEqual(out[:,408:792].min(),105)
         np.testing.assert_array_equal(out[:,400],frame[:,400])
         white=np.full_like(frame,255);self.assertEqual(content_bounds(white),(0,0,1200,600))
+
+    def test_shifted_scaled_codec_grid_is_repaired_without_blurring_real_edges(self):
+        from smart_restore import codec_grids
+        from realtime import clean_blocks
+        x=np.arange(192)
+        stripe=(110+((x+9)//12%2)*12).astype(np.uint8)
+        frame=np.repeat(stripe[None,:,None],96,axis=0).repeat(3,axis=2)
+        grids=codec_grids(cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY))
+        self.assertEqual(grids[1]['step'],12);self.assertEqual(grids[1]['offset'],3)
+        out=clean_blocks(frame,grids)
+        self.assertLess(np.abs(out[:,3].astype(int)-out[:,2].astype(int)).mean(),12)
+        edge=np.full_like(frame,65);edge[:,83:]=190
+        self.assertEqual(codec_grids(cv2.cvtColor(edge,cv2.COLOR_BGR2GRAY)),[None,None])
+        np.testing.assert_array_equal(clean_blocks(edge,[None,None]),edge)

@@ -8,7 +8,7 @@ const {chromium}=require('playwright'),fs=require('fs'),os=require('os'),path=re
   let log='';helper.stderr.on('data',data=>log+=data);await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Helper timeout '+log)),15000);helper.stdout.once('data',()=>{clearTimeout(timer);resolve();});helper.once('exit',code=>{clearTimeout(timer);reject(new Error('Helper exit '+code+' '+log));});});
   const version=JSON.parse(fs.readFileSync(path.join(root,'manifest.json'))).version;assert.equal(cp.spawnSync('python3',['-c','import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])',path.join(root,'store',`wescreen-${version}.zip`),ext]).status,0);
   for(const name of ['smart-playback.js','enhancer.js','studio-ui.css','player-session.js','quality.js','playback.js'])fs.copyFileSync(path.join(root,name),path.join(ext,name));
-  const file=path.join(temp,'low-quality.mp4');assert.equal(cp.spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','testsrc2=size=320x180:rate=12','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','8','-vf','gblur=sigma=1.2','-c:v','libx264','-crf','35','-c:a','aac',file]).status,0);
+  const file=path.join(temp,'low-quality.mp4');assert.equal(cp.spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','testsrc2=size=320x180:rate=12','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','8','-vf','gblur=sigma=2.2','-c:v','libx264','-crf','35','-c:a','aac',file]).status,0);
   const original=fs.readFileSync(file);
   context=await chromium.launchPersistentContext(path.join(temp,'profile'),{channel:'chromium',headless:true,args:[`--disable-extensions-except=${ext}`,`--load-extension=${ext}`,'--autoplay-policy=no-user-gesture-required']});
   await context.route('http://127.0.0.1:8765/**',async route=>{const url=new URL(route.request().url());const response=await route.fetch({url:`http://127.0.0.1:${port}${url.pathname}${url.search}`,timeout:120000});await route.fulfill({response});});
@@ -16,7 +16,7 @@ const {chromium}=require('playwright'),fs=require('fs'),os=require('os'),path=re
   await page.evaluate(token=>{enhancementToken=token;$('enhance-token').value=token;},token);await page.locator('#local-video-file').setInputFiles(file);await page.waitForFunction(()=>playbackReady&&$('preview').readyState>=2);await page.evaluate(()=>$('preview').pause());
   const start=Date.now();await page.locator('#playback-quality-menu > summary').click();await page.locator('#playback-realtime').click();await page.waitForFunction(()=>smartBackground.enabled&&smartBackground.chunks.has(0));
   await page.waitForFunction(()=>!smartVideo.hidden);
-  const firstChunkElapsed=(Date.now()-start)/1000;const info=await page.evaluate(()=>smartBackground.chunks.get(0).info);assert.equal(info.width,640);assert.equal(info.height,360);assert.equal(info.analysis.degraded,true);assert.equal(await page.evaluate(()=>smartVideo.muted),true);
+  const firstChunkElapsed=(Date.now()-start)/1000;const info=await page.evaluate(()=>smartBackground.chunks.get(0).info);assert.equal(info.width,640);assert.equal(info.height,360);assert.equal(info.analysis.degraded,true);assert.match(info.engine,/Real-ESRGAN/);assert.equal(await page.evaluate(()=>smartVideo.muted),true);
   if(!await page.evaluate(()=>smartBackground.available.has(1))){
    await page.evaluate(()=>{$('preview').currentTime=6.2;return $('preview').play().catch(e=>{if(e.name!=='AbortError')throw e;});});
    await page.waitForFunction(()=>$('preview').paused&&smartBackground.resume);

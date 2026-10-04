@@ -136,7 +136,7 @@ def clean_compression(frame):
     return np.clip(frame.astype(np.float32)+(filtered.astype(np.float32)-frame)*amount,0,255).round().astype(np.uint8)
 
 
-def clean_blocks(frame):
+def clean_blocks(frame,grids=None):
     """Conservative deblocking of weak, isolated grid seams; preserve real edges.
 
     Test both common codec grids. Only soften a boundary when its jump exceeds
@@ -148,12 +148,16 @@ def clean_blocks(frame):
     for axis in (0,1):
         values=np.swapaxes(pixels,0,axis)
         target=np.swapaxes(result,0,axis)
-        for boundary in range(8,len(values)-1,8):
+        grid=grids[axis] if grids is not None else {'step':8,'offset':0}
+        if not grid:continue
+        step=int(grid['step']);offset=int(grid['offset'])
+        start=offset if offset>=2 else offset+step
+        for boundary in range(start,len(values)-1,step):
             left,right=values[boundary-1],values[boundary]
             jump=np.mean(np.abs(right-left),axis=-1)
             neighbor=(np.mean(np.abs(left-values[boundary-2]),axis=-1)+
                       np.mean(np.abs(values[boundary+1]-right),axis=-1))*.5
-            weight=np.clip((jump-neighbor-2)/8,0,1)*.25
+            weight=np.clip((jump-neighbor-2)/8,0,1)*(.35 if grids is not None else .25)
             weight=np.where((jump<20)&(neighbor<6),weight,0)[...,None]
             delta=(right-left)*weight
             target[boundary-1]+=delta
