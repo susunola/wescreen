@@ -97,8 +97,9 @@ async function renderRecordingLibrary() {
   entries.sort((a,b) => sort === 'name' ? a.name.localeCompare(b.name) : sort === 'size' ? b.size-a.size : b.createdAt-a.createdAt);
   if ($('library-group').checked) {
     const byId = new Map(entries.map(entry => [entry.id, entry])), ordered = [], seen = new Set();
-    const append = entry => { if (seen.has(entry.id)) return; seen.add(entry.id); ordered.push(entry); for (const child of entries) if (child.enhancedFrom === entry.id) append(child); };
-    for (const entry of entries) { let root = entry, ancestry = new Set([root.id]); while (byId.has(root.enhancedFrom) && !ancestry.has(root.enhancedFrom)) { root = byId.get(root.enhancedFrom); ancestry.add(root.id); } append(root); }
+    const messages=new Map();for(const entry of entries)if(!entry.enhancedFrom && entry.sourceMessageKey){const root=messages.get(entry.sourceMessageKey);if(root)entry._messageParent=root.id;else messages.set(entry.sourceMessageKey,entry);}
+    const append = entry => { if (seen.has(entry.id)) return; seen.add(entry.id); ordered.push(entry); for (const child of entries) if (child.enhancedFrom === entry.id || child._messageParent===entry.id) append(child); };
+    for (const entry of entries) { let root = byId.get(entry._messageParent) || entry, ancestry = new Set([root.id]); while(byId.has(root.enhancedFrom || root._messageParent) && !ancestry.has(root.enhancedFrom || root._messageParent)){root=byId.get(root.enhancedFrom || root._messageParent);ancestry.add(root.id);} append(root); }
     entries.splice(0, entries.length, ...ordered);
   }
   const pageCount = Math.max(1, Math.ceil(entries.length / LIBRARY_PAGE_SIZE)); libraryPage = Math.min(libraryPage, pageCount - 1);
@@ -112,13 +113,15 @@ async function renderRecordingLibrary() {
   $('library-trash').textContent = L(libraryTrash ? 'backLibrary' : 'trash');
   const list = $('recording-items'); list.replaceChildren();
   for (const entry of visibleEntries) {
-    const row = document.createElement('li'); row.className = 'media-row' + (entry.enhancedFrom && $('library-group').checked ? ' derived-row' : ''); row.dataset.recordingId = entry.id;
+    const row = document.createElement('li'); row.className = 'media-row' + ((entry.enhancedFrom || entry._messageParent) && $('library-group').checked ? ' derived-row' : ''); row.dataset.recordingId = entry.id;
     const check = document.createElement('input'); check.type = 'checkbox'; check.className = 'row-select'; check.checked = librarySelection.has(entry.id); check.setAttribute('aria-label', L('selectRecording', entry.name));
     check.onchange = () => { if (check.checked) librarySelection.add(entry.id); else librarySelection.delete(entry.id); updateLibrarySelection(); }; row.append(check);
     const image = document.createElement('img'); image.src = entry.thumbnail || 'assets/logo.png'; image.alt = ''; image.className = 'recording-thumbnail'; const thumbnail=document.createElement('button');thumbnail.type='button';thumbnail.className='thumbnail-play';thumbnail.setAttribute('aria-label',L('openRecording')+' '+entry.name);thumbnail.onclick=()=>playRecording(entry).catch(workspaceError);thumbnail.append(image);const overlay=document.createElement('span');overlay.className='thumbnail-overlay';overlay.textContent='▶';thumbnail.append(overlay);const duration=document.createElement('span');duration.className='thumbnail-duration';duration.textContent=entry.duration ? fmt(entry.duration) : '--:--';thumbnail.append(duration);row.append(thumbnail);
     const body = document.createElement('div'); body.className = 'media-body';
     const title = document.createElement('strong'); title.textContent = entry.sourceTitle || entry.name.replace(/\.(mp4|webm)$/i,''); body.append(title);
     const badge=document.createElement('span');badge.className='recording-badge'+(entry.enhancedFrom ? ' enhanced-badge':'');badge.textContent=L(entry.enhancedFrom ? 'enhancedBadge':'originalBadge');title.append(badge);if(entry._parts){const count=document.createElement('span');count.className='recording-badge';count.textContent=LANG==='zh'?`连续录像 · ${entry._parts.length} 段`:`Continuous · ${entry._parts.length} parts`;title.append(count);}
+    if(entry._messageParent){const take=document.createElement('span');take.className='recording-badge';take.textContent=E('同一消息 · 重录版','Same message · another take');title.append(take);}
+    if(entry.inspection){const note=document.createElement('p');note.className='hint';note.textContent=inspectionLabel(entry.inspection);body.append(note);}
     const filename=document.createElement('p');filename.className='recording-filename hint';filename.textContent=entry.name;body.append(filename);
     const detail = document.createElement('p'); detail.className = 'hint'; detail.textContent = `${entry.duration ? fmt(entry.duration) : '--:--'} · ${entry.width && entry.height ? `${entry.width}×${entry.height} · ` : ''}${fmtBytes(entry.size)} · ${entry.course || L('uncategorized')} · ${new Date(entry.createdAt).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : 'en')}`; body.append(detail);
     if (entry.enhancedFrom) { const parent = all.find(item => item.id === entry.enhancedFrom); if (parent && !parent.deletedAt) { const original=libraryButton('originalVideo',()=>playRecording(parent),'text');original.classList.add('original-link');detail.append(' · ',original); } else { const version=document.createElement('p');version.className='version-label';version.textContent=L('originalUnavailable');body.append(version); } }

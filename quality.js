@@ -3,6 +3,11 @@ const advancedQuality=document.createElement('details');advancedQuality.id='play
 const qualityKeep=new Set([originalPicture,realtimeButton,$('playback-ai')]);
 for(const node of [...qualityPanel.children])if(!qualityKeep.has(node))advancedQuality.append(node);
 morePanel.append(advancedQuality);
+advancedQuality.querySelector('.cinema-menu-heading')?.remove();advancedQuality.querySelector('[data-i18n=repairCaption]')?.remove();
+realtimePreference.hidden=true; // One honest balanced policy; no unused strategy selector.
+$('playback-enhance').removeAttribute('data-i18n');polishLabel($('playback-enhance'),'后台精修设置 ›','Background restoration settings ›');
+const protectionLabel=$('realtime-text-protect').closest('label');protectionLabel.classList.add('quality-setting-toggle');protectionLabel.prepend($('realtime-text-protect'));
+
 originalPicture.removeAttribute('data-i18n');realtimeButton.removeAttribute('data-i18n');$('playback-ai').removeAttribute('data-i18n');
 polishLabel(originalPicture,'原画','Original');polishLabel(realtimeButton,'智能最佳','Smart best');polishLabel($('playback-ai'),'AI 高清修复','AI HD repair');
 qualityPanel.classList.add('simple-quality');qualityPanel.replaceChildren(originalPicture,realtimeButton,$('playback-ai'));

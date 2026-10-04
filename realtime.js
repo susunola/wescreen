@@ -33,8 +33,9 @@ async function processRealtimeFrame(mediaTime){
    if(generation!==realtimeAI.generation || !realtimeAI.enabled)return;
    const elapsed=performance.now()-started;realtimeAI.average=realtimeAI.average ? realtimeAI.average*.75+elapsed*.25:elapsed;
    realtimeAI.failures=0;
-   // Seeks invalidate the generation; under load keep the last result and skip frames.
-   const timely=!playbackSeeking;
+   // Preserve the original clock: late AI frames must not cover newer video frames.
+   const timely=!playbackSeeking && Math.abs(video.currentTime-mediaTime)<=.15;
+   if(!timely)realtimeCanvas.hidden=true;
    if(timely){realtimeCanvas.width=bitmap.width;realtimeCanvas.height=bitmap.height;realtimeCanvas.getContext('2d').drawImage(bitmap,0,0);syncRealtimeLayout();realtimeAI.mediaTime=mediaTime;realtimeCanvas.hidden=false;realtimeAI.frames.push(performance.now());realtimeAI.frames=realtimeAI.frames.slice(-20);}
    realtimeAI.nextAt=performance.now()+Math.max(0,realtimeAI.average-33);
    const frames=realtimeAI.frames,fps=frames.length>1 ? Math.round((frames.length-1)*1000/(frames.at(-1)-frames[0])):0;
@@ -59,7 +60,7 @@ originalPicture.addEventListener('click',()=>stopRealtimeAI());
 $('preview').addEventListener('play',scheduleRealtimeAI);
 $('preview').addEventListener('seeking',()=>{realtimeAI.generation++;realtimeAI.request++;realtimeAI.busy=false;realtimeAI.nextAt=0;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;});
 $('preview').addEventListener('seeked',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
-$('preview').addEventListener('pause',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
+$('preview').addEventListener('pause',()=>{if(realtimeAI.enabled){realtimeAI.generation++;realtimeAI.request++;realtimeAI.abort?.abort();realtimeAI.busy=false;realtimeAI.nextAt=0;processRealtimeFrame($('preview').currentTime);}});
 $('preview').addEventListener('loadedmetadata',()=>{
  if(!realtimeAI.enabled)return;
  const v=$('preview');if(realtimeAI.project!==playbackProjectId() || Math.max(v.videoWidth,v.videoHeight)>1920 || Math.min(v.videoWidth,v.videoHeight)>1080){stopRealtimeAI();return;}

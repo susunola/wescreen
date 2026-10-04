@@ -47,7 +47,7 @@ function captureContext({ camera = false, clicks = true, state = 'live' } = {}) 
     stop: () => {},
     L: key => key
   };
-  vm.runInNewContext(extract('async function start()', 'function pause()'), context);
+  vm.runInNewContext(extract('async function start()', 'function pause(automatic=false)'), context);
   return { context, seen, stream };
 }
 

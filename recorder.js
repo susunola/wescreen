@@ -1,6 +1,5 @@
 const $ = (id) => document.querySelector(`#${id}`);
 
-const BITRATES = { compact: 2500000, standard: 6000000, high: 11000000 };
 const AUDIO_BITRATE = 192000;
 const TIMESLICE_MS = 1000;
 // The whole recording is assembled in the tab heap at stop time, so the recorded payload —
@@ -331,6 +330,7 @@ function applyCapturePreset() {
   $('telegram-guide').hidden = !telegram;$('preflight-enabled').checked=telegram;
   $('telegram-channel').hidden = !telegram; $('course-panel').hidden = true;
   if (!telegram) return;
+  $('capture-method').value='tab';
   const mp4 = MP4_TYPES.some(type => MediaRecorder.isTypeSupported(type));
   const values = { format: mp4 ? 'mp4' : 'webm', resolution: 'native', quality: 'high', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };
   for (const [id, value] of Object.entries(values)) $(id).value = value;
@@ -476,6 +476,7 @@ function armRecorder(stream, type, state) {
   });
   state = state || { session: crypto.randomUUID(), index: 1, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0, name: `${sanitized()}.${recordingExtension()}` };
   state.recorder = instance;
+  state.captureAudioTreatment=$('capture-clear-voice')?.checked?'clearVoice':'original';
   state.captureContent=$('capture-content')?.value || 'auto';
   if(state.captureContent==='auto')state.captureContent=$('capture-mode')?.value==='telegram'?'motion':'detail';
   state.targetVideoBitrate=videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]);
@@ -507,13 +508,13 @@ function armRecorder(stream, type, state) {
 }
 let recordingGroupId=null;
 function segmentDetails(state, end = elapsed()) {
-  return { frameRate:state.frameRate,targetVideoBitrate:state.targetVideoBitrate,encoderVideoBitrate:state.encoderVideoBitrate,encoderAudioBitrate:state.encoderAudioBitrate,averageMuxBitrate:state.bytes*8000/Math.max(1,end-state.start),captureContent:state.captureContent || 'auto', recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
+  return { captureAudioTreatment:state.captureAudioTreatment || 'original',frameRate:state.frameRate,targetVideoBitrate:state.targetVideoBitrate,encoderVideoBitrate:state.encoderVideoBitrate,encoderAudioBitrate:state.encoderAudioBitrate,averageMuxBitrate:state.bytes*8000/Math.max(1,end-state.start),captureContent:state.captureContent || 'auto', recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
 }
 function createSegment(index) {
   const settings = displayStream.getVideoTracks()[0].getSettings();
   return { session: crypto.randomUUID(), index, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0,
     course: $('course-enabled').checked ? $('course-name').value.trim() : '', episode: Number($('episode-number').value) || 1,
-    width: settings.width, height: settings.height, channelMetadata: activeSegment && recorder && recorder.state !== 'inactive' ? activeSegment.channelMetadata : captureChannelContext,
+    width: typeof telegramCaptureCropSize!=='undefined'&&telegramCaptureCropSize ? telegramCaptureCropSize.width:settings.width, height: typeof telegramCaptureCropSize!=='undefined'&&telegramCaptureCropSize ? telegramCaptureCropSize.height:settings.height, channelMetadata: activeSegment && recorder && recorder.state !== 'inactive' ? activeSegment.channelMetadata : captureChannelContext,
     name: `${sanitized()}${Number($('segment-minutes').value) || index > 1 ? `-part-${String(index).padStart(3, '0')}` : ''}.${recordingExtension()}` };
 }
 function selectSegment(state) {
@@ -541,7 +542,7 @@ async function beginRecording(stream) {
   scheduleSegment();
   const audioKey = audioHintKey();
   if (audioKey) setHint(audioKey, [], true); else if (captureNote) setHint(captureNote.key, captureNote.args); else setHint('recordingHint');
-  $('copy-next-message').hidden=true;$('next-channel-video').disabled=false;$('next-channel-video').hidden=!captureChannelContext?.channelId;show('recording'); startLivePreview(stream);if(typeof startCaptureStats==='function')startCaptureStats(); syncMemory();
+  $('copy-next-message').hidden=true;$('next-channel-video').disabled=false;$('next-channel-video').hidden=!captureChannelContext?.channelId;show('recording'); startLivePreview(stream);if(typeof startTelegramSourceMonitor==='function')startTelegramSourceMonitor();if(typeof startCaptureStats==='function')startCaptureStats(); syncMemory();
   chrome.runtime.sendMessage({ type: 'recording-state', active: true, highlightClicks: $('clicks').checked }).catch(() => {});
 }
 function snapshotSegment() {
@@ -633,7 +634,7 @@ async function start() {
     // Click rings are drawn inside the shared tab; only camera PiP needs a canvas.
     mixAudio();
     if (mixer && mixer.state === 'suspended') await mixer.resume();
-    await beginRecording(cameraStream ? await composeOutput() : displayStream);
+    await beginRecording(cameraStream ? await composeOutput() : typeof prepareTelegramCaptureStream==='function' ? await prepareTelegramCaptureStream(displayStream):displayStream);
     $('start').disabled = false;
   } catch (error) {
     releaseCapture();
@@ -641,7 +642,8 @@ async function start() {
     resetStart();
   }
 }
-function pause() {
+function pause(automatic=false) {
+  if(!automatic && typeof clearTelegramAutoPause==='function')clearTelegramAutoPause();
   if(typeof advancingChannel!=='undefined' && advancingChannel)return;
   if (!recorder) return;
   if (recorder.state === 'recording') {
@@ -664,9 +666,11 @@ function markImportant() {
 }
 const stop = () => { stopRequested = true; clearTimeout(segmentTimer); if (!rollingSegment && recorder && recorder.state !== 'inactive') recorder.stop(); };
 function releaseCapture() {
+  if(typeof telegramCaptureCropSize!=='undefined')telegramCaptureCropSize=null;
+  if(typeof stopTelegramSourceMonitor==='function')stopTelegramSourceMonitor();
   if(typeof stopIndependentAudio==='function')stopIndependentAudio();
   if(typeof captureStatsTimer!=='undefined')clearInterval(captureStatsTimer);
-  if(typeof captureAudioNodes!=='undefined'){captureAudioNodes={};captureAudioMeter=null;captureMonitor=null;}
+  if(typeof captureAudioNodes!=='undefined'){captureAudioNodes={};captureAudioMeter=null;captureSourceMeter=null;captureMonitor=null;}
   clearInterval(timer);
   clearTimeout(stopTimer);
   clearTimeout(segmentTimer);
@@ -726,6 +730,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   show('result');
   try{if(finalId){const completed=await readStore('recordings',finalId);if(completed)await playRecording(completed);else setPreview(finalBlob);}else setPreview(finalBlob);}catch(error){setPreview(finalBlob);setNotice(error.message);}finally{recorder=null;unlockRecording();}
   (finalId ? readStore('recordings',finalId) : Promise.resolve(null)).then(renderRecordingReview).catch(error=>$('review-summary').textContent=error.message);
+  if(finalId && activeSegment?.channelMetadata?.sourceMessageKey && typeof inspectTelegramRecording==='function')inspectTelegramRecording(finalId).catch(error=>setNotice(error.message));
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
   if (finalId && $('auto-static-tail')?.checked && typeof queueSmartTail==='function') queueSmartTail(finalId).catch(error=>setNotice(error.message));

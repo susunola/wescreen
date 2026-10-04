@@ -73,3 +73,32 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   await chrome.storage.session.set({quietCaptureOwner:{ownerId:sender.tab.id,targetId:pointerTargetTabId}});respond({ok:true});
  })().catch(error=>respond({error:error.message}));return true;
 });
+
+// Read only the user's selected recording source, with an exact message/video match.
+chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+ if(message.type!=='telegram-source-status')return;
+ if(sender.url!==chrome.runtime.getURL('recorder.html')||!sender.tab?.id){respond({error:'Unsupported source request'});return;}
+ (async()=>{
+  const state=await chrome.storage.session.get(['pointerTargetTabId','recordingOwner']);
+  const targetId=state.recordingOwner?.tabId===sender.tab.id?state.recordingOwner.targetId:state.pointerTargetTabId;
+  if(!targetId||targetId===sender.tab.id)return respond({available:false});
+  const tab=await chrome.tabs.get(targetId);if(new URL(tab.url).hostname!=='web.telegram.org')return respond({available:false,wrongSource:true});
+  if(!/^\d+$/.test(String(message.messageId)))return respond({available:true,verified:false});
+  const [result]=await chrome.scripting.executeScript({target:{tabId:targetId},world:'MAIN',args:[String(message.messageId),String(message.channelKey||'')],func:(id,key)=>{
+   const visible=[...document.querySelectorAll('video')].filter(v=>{const r=v.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(v).visibility!=='hidden';}).sort((a,b)=>{const x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return y.width*y.height-x.width*x.height;});
+   const player=visible[0];if(!player)return {available:true,verified:false};
+   const target=[...document.querySelectorAll('[data-mid],[data-message-id]')].filter(el=>el.getAttribute('data-mid')===id||el.getAttribute('data-message-id')===id).flatMap(el=>[...el.querySelectorAll('video')]);
+   const hashTokens=decodeURIComponent(location.hash).toLowerCase().split(/[^a-z0-9_@-]+/).filter(Boolean);
+   const channel=key.split(':')[1],privateChannel=key.startsWith('private:');
+   const channelMatches=channel&&(privateChannel?hashTokens.some(t=>t===channel||t==='-100'+channel):hashTokens.some(t=>t==='@'+channel.toLowerCase()));
+   const scoped=target.filter(v=>{const peer=v.closest('[data-peer-id]')?.getAttribute('data-peer-id');return channelMatches||(privateChannel&&(peer===channel||peer==='-100'+channel));});
+   const verified=scoped.some(v=>v===player||(v.currentSrc&&v.currentSrc===player.currentSrc));
+   const rect=player.getBoundingClientRect(),vw=innerWidth,vh=innerHeight;
+   let x=rect.left,y=rect.top,width=rect.width,height=rect.height;
+   const style=getComputedStyle(player);
+   if(style.objectFit==='contain'&&style.objectPosition==='50% 50%'&&player.videoWidth&&player.videoHeight){const scale=Math.min(width/player.videoWidth,height/player.videoHeight),w=player.videoWidth*scale,h=player.videoHeight*scale;x+=(width-w)/2;y+=(height-h)/2;width=w;height=h;}
+   const region=verified&&style.transform==='none'&&width>2&&height>2&&x>=0&&y>=0&&x+width<=vw+1&&y+height<=vh+1?{x:x/vw,y:y/vh,width:width/vw,height:height/vh}:null;
+   return {available:true,verified,region,paused:player.paused,readyState:player.readyState,ended:verified&&player.ended,time:verified?player.currentTime:0,duration:verified&&Number.isFinite(player.duration)?player.duration:0,videoWidth:player.videoWidth,videoHeight:player.videoHeight};
+  }});respond(result?.result || {available:false});
+ })().catch(()=>respond({available:false}));return true;
+});
