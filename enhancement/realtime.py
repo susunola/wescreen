@@ -102,7 +102,13 @@ def balanced_sdr_tone(frame):
     luminance=pixels[...,0]*.0722+pixels[...,1]*.7152+pixels[...,2]*.2126
     base=cv2.GaussianBlur(luminance,(0,0),3)
     weight=np.clip((luminance-16)/48,0,1)*np.clip((235-luminance)/48,0,1)
-    delta=np.clip((luminance-base)*.06,-2,2)*weight
+    # Separate texture from broad contrast. Threshold tiny differences so flat
+    # gradients and low-amplitude codec noise are not sharpened.
+    fine=luminance-cv2.GaussianBlur(luminance,(3,3),.65)
+    texture=np.sign(fine)*np.maximum(np.abs(fine)-2.0,0)
+    local=luminance-base
+    structure=np.sign(local)*np.maximum(np.abs(local)-1.5,0)
+    delta=np.clip(structure*.12+texture*.16,-4,4)*weight
     # Equal channel adjustment preserves hue; never stretch endpoints.
     return np.clip(pixels+delta[...,None],0,255).round().astype(np.uint8)
 
@@ -122,7 +128,7 @@ def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True, 
         if output_scale==1: restored=cv2.resize(restored,size,interpolation=cv2.INTER_AREA)
         # Small-radius, low-strength sharpening; no large halo around strokes.
         blur=cv2.GaussianBlur(restored,(3,3),.6)
-        restored=cv2.addWeighted(restored,1.10,blur,-.10,0)
+        restored=cv2.addWeighted(restored,1.14,blur,-.14,0)
         if protect_text:
             edges=cv2.Canny(cv2.cvtColor(bgr,cv2.COLOR_BGR2GRAY),60,140)
             mask=cv2.dilate(edges,np.ones((3,3),np.uint8)).astype(np.float32)/255
