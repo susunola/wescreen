@@ -11,3 +11,7 @@ Limitations: this is motion-aligned filtering plus a spatial restoration network
 Measured synthetic M4 Pro tests: warm 640x360 Real-ESRGAN 2x inference about 0.437 seconds/frame. Actual decode→MPS repair→H.264 encode of a one-second, 320x180 / 12 fps blurred and compressed clip produced a 640x360 clip in 2.59 seconds using the initially verified environment. These are synthetic speed measurements, not real-video quality or competitor benchmarks.
 
 Additional final-engine synthetic benchmark: warm 640x360 MPS 2x inference with larger tiles: 0.241 / 0.233 seconds/frame. Native 1920x1080 guide-residual output retains size and protected step edges; tested output delta was at most 7 levels, within the 12-level guide bound.
+
+## Unified playback workflow
+
+Smart best is the only restoration entry point. Library actions open Smart best playback; offline restoration and batch-enhancement controls are removed. Historical recordings and processed results remain available. Heavy repair uses temporary synchronized chunks on the local helper, without cloud uploads.

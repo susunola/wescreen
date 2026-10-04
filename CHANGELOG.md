@@ -1,3 +1,13 @@
+# 1.27.3
+
+- Unified local playback restoration under Smart best. The picture quality menu now offers Original and Smart best.
+- Library restoration actions now open the video with Smart best instead of an offline restoration dialog.
+- Removed separate offline full-video restoration, face-restoration, audio-restoration, and batch-enhancement entry points. Existing recordings, enhanced versions, and processing results are retained.
+- Heavy restoration continues through synchronized background chunks while the original video provides the audio and playback clock. No cloud upload is required.
+- Verified the Chinese and English studio UI, local playback, quality selection, and preservation of existing recordings.
+
+To update, overwrite the existing extension folder and reload the extension. Do not uninstall it, so your recording library is retained.
+
 # 1.27.2
 
 - Opening WeScreen now defaults to the general recording screen instead of restoring the previous Telegram recording scene.
