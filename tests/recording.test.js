@@ -215,8 +215,9 @@ test('a rejected resolution cap reports the actual uncapped output', async () =>
 test('video bitrate scales with actual pixels and frame rate', () => {
   const context = { BITRATES: { standard: 6000000 }, $: id => ({ quality: { value: 'standard' }, framerate: { value: '30' } })[id] };
   vm.runInNewContext(extract('function videoBitrate(', 'async function acquireRecordingLock()'), context);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 6000000);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), 48000000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 6900000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), 55200000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 7680, height: 4320, frameRate: 30 }) }), 110400000);
 });
 
 test('audio mixing is reused across segments and preserves headroom for two sources', () => {
@@ -290,4 +291,16 @@ test('a failed segment archive does not trigger an unsolicited download', async 
   vm.runInContext(extract('async function saveCompletedSegment(', 'async function saveSegmentAndContinue('), context);
   await assert.rejects(context.saveCompletedSegment({ chunks: [new Blob(['video'])], recorder: {}, writes: new Set() }), /disk failure/);
   assert.equal(downloads, 0);
+});
+
+
+test('portrait resolution caps preserve the long edge and never upscale', async () => {
+  const context = { $: id => ({ resolution: { value: '1080' }, framerate: { value: '30' } })[id] };
+  vm.runInNewContext(extract('async function applyOutputSize(', '// Missing audio'), context);
+  let settings={width:2160,height:3840};let seen;
+  const track={getSettings:()=>settings,applyConstraints:async c=>{seen=c;settings={width:1080,height:1920};}};
+  const note=await context.applyOutputSize({getVideoTracks:()=>[track]});
+  assert.equal(seen.width.max,1080);assert.equal(seen.height.max,1920);assert.equal(note.key,'scaledDown');
+  settings={width:720,height:1280};track.applyConstraints=async c=>{seen=c;};
+  const small=await context.applyOutputSize({getVideoTracks:()=>[track]});assert.equal(small.key,'keepsSource');
 });

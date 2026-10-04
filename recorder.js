@@ -1,7 +1,7 @@
 const $ = (id) => document.querySelector(`#${id}`);
 
 const BITRATES = { compact: 2500000, standard: 6000000, high: 11000000 };
-const AUDIO_BITRATE = 128000;
+const AUDIO_BITRATE = 192000;
 const TIMESLICE_MS = 1000;
 // The whole recording is assembled in the tab heap at stop time, so the recorded payload —
 // not the wall-clock length — is what decides whether the tab survives.
@@ -361,11 +361,12 @@ async function applyOutputSize(stream) {
   // way to tell the user whether the output was actually scaled.
   const before = track ? sizeOf(track.getSettings()) : '';
   if (track && track.applyConstraints) {
-    const constraints = { frameRate: { ideal: frameRate } };
+    const constraints = Number($('framerate').value) ? { frameRate: { ideal: frameRate, max: frameRate } } : {};
     if (resolution !== 'source') {
-      const height = Number(resolution);
-      constraints.height = { max: height };
-      constraints.width = { max: Math.round(height * 16 / 9) };
+      const short = Number(resolution), long = Math.round(short * 16 / 9);
+      const source = track.getSettings(), portrait = source.height > source.width;
+      constraints.height = { max: portrait ? long : short };
+      constraints.width = { max: portrait ? short : long };
     }
     try { await track.applyConstraints(constraints); } catch { /* keep the source track settings */ }
   }
@@ -374,7 +375,7 @@ async function applyOutputSize(stream) {
   if (resolution === 'source' || !after) return null;
   const beforeHeight = before ? Number(before.split('×')[1]) || 0 : 0;
   const afterHeight = Math.round(settings.height || 0);
-  if (settings.height > Number(resolution) + 2 || settings.width > Math.round(Number(resolution) * 16 / 9) + 2) return { key: 'capFailed', args: [after] };
+  if (Math.min(settings.height, settings.width) > Number(resolution) + 2 || Math.max(settings.height, settings.width) > Math.round(Number(resolution) * 16 / 9) + 2) return { key: 'capFailed', args: [after] };
   const scaled = (beforeHeight && afterHeight && afterHeight < beforeHeight) || (!beforeHeight && afterHeight <= Number(resolution) + 2);
   return { key: scaled ? 'scaledDown' : 'keepsSource', args: [after] };
 }
@@ -411,7 +412,8 @@ async function composeOutput() {
 function mixAudio() {
   if (mixedAudio) return mixedAudio;
   if (![displayStream, micStream].some(stream => stream && stream.getAudioTracks().length)) return null;
-  const context = new AudioContext();
+  const sampleRate = displayStream?.getAudioTracks()[0]?.getSettings?.().sampleRate || micStream?.getAudioTracks()[0]?.getSettings?.().sampleRate || 48000;
+  const context = new AudioContext({sampleRate});
   const destination = context.createMediaStreamDestination();
   if(typeof configureCaptureAudio==='function')configureCaptureAudio(context,destination,[displayStream,micStream]);
   else [displayStream,micStream].filter(Boolean).forEach(stream=>{if(stream.getAudioTracks().length){const gain=context.createGain();gain.gain.value=micStream && displayStream.getAudioTracks().length ? .5:1;context.createMediaStreamSource(stream).connect(gain).connect(destination);}});
@@ -432,8 +434,11 @@ function audioHintKey() {
 
 function videoBitrate(track) {
   const { width = 1920, height = 1080, frameRate = Number($('framerate').value) || 30 } = track.getSettings();
-  const factor = Math.max(0.5, Math.min(8, width * height / (1920 * 1080) * frameRate / 30));
-  const content=$('capture-content')?.value;return Math.round((BITRATES[$('quality').value] || BITRATES.standard) * factor * (content==='detail' ? 1.15:1));
+  const factor = Math.max(0.5, Math.min(32, width * height / (1920 * 1080) * frameRate / 30));
+  const content=$('capture-content')?.value;const scene=content==='auto' || !content ? ($('capture-mode')?.value==='telegram'?'motion':'detail'):content;
+  return Math.min(180000000,Math.round((BITRATES[$('quality').value] || BITRATES.standard) * factor * (scene==='motion' ? 1.25 : 1.15)));
+}
+function captureAudioBitrate(){return Number($('capture-audio-quality')?.value)||AUDIO_BITRATE;
 }
 async function acquireRecordingLock() {
   if (!navigator.locks) return true;
@@ -455,10 +460,15 @@ function armRecorder(stream, type, state) {
   if (!videoTracks.length || videoTracks[0].readyState !== 'live') throw new Error(L('errNoSource'));
   const audio = mixAudio();
   const instance = new MediaRecorder(new MediaStream([...videoTracks, ...(audio ? [audio] : [])]), {
-    mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: AUDIO_BITRATE
+    mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: captureAudioBitrate()
   });
   state = state || { session: crypto.randomUUID(), index: 1, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0, name: `${sanitized()}.${recordingExtension()}` };
   state.recorder = instance;
+  state.captureContent=$('capture-content')?.value || 'auto';
+  if(state.captureContent==='auto')state.captureContent=$('capture-mode')?.value==='telegram'?'motion':'detail';
+  state.targetVideoBitrate=videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]);
+  state.encoderVideoBitrate=instance.videoBitsPerSecond;state.encoderAudioBitrate=instance.audioBitsPerSecond;
+  state.frameRate=videoTracks[0].getSettings().frameRate;
   instance.ondataavailable = event => {
     if (!event.data?.size) return;
     if(typeof writeDiskChunk==='function')writeDiskChunk(state,event.data);
@@ -485,7 +495,7 @@ function armRecorder(stream, type, state) {
 }
 let recordingGroupId=null;
 function segmentDetails(state, end = elapsed()) {
-  return { captureContent:$('capture-content')?.value || 'auto', recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
+  return { frameRate:state.frameRate,targetVideoBitrate:state.targetVideoBitrate,encoderVideoBitrate:state.encoderVideoBitrate,encoderAudioBitrate:state.encoderAudioBitrate,averageMuxBitrate:state.bytes*8000/Math.max(1,end-state.start),captureContent:state.captureContent || 'auto', recordingGroupId, part:state.index, duration: Math.max(0, end - state.start), markers: markers.filter(marker => marker.at >= state.start && marker.at <= end).map(marker => ({ ...marker, at: marker.at - state.start })), course: state.course, episode: state.episode, width: state.width, height: state.height, ...(state.channelMetadata || {}) };
 }
 function createSegment(index) {
   const settings = displayStream.getVideoTracks()[0].getSettings();
@@ -497,6 +507,7 @@ function createSegment(index) {
 function selectSegment(state) {
   activeSegment = state; recorder = state.recorder; chunks = state.chunks; chunkBytes = state.bytes; chunkSeq = state.seq;
   segmentIndex = state.index; sessionStartedAt = state.session; segmentStartedElapsed = state.start;
+  if(typeof updateCaptureQualityLabels==='function')updateCaptureQualityLabels();
 }
 function scheduleSegment() {
   clearTimeout(segmentTimer);
