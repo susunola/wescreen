@@ -6,7 +6,7 @@
   const stage=make('div','studio-source'), settings=make('aside','studio-record-settings');
   const picker=document.querySelector('.scenario-picker'), ready=document.querySelector('.capture-ready');
   stage.append(picker);
-  document.querySelector('[data-view=capture]').addEventListener('click',()=>{if(!recorder && !displayStream && $('capture-mode').value!=='general'){$('capture-mode').value='general';applyCapturePreset();}});
+  document.querySelector('[data-view=capture]').addEventListener('click',()=>{if(!recorder && !displayStream && $('capture-mode').value!=='general'){$('capture-mode').value='general';$('filename').value='wescreen-recording';applyCapturePreset();}});
   const source=make('div','studio-source-empty');
   source.append(ready);stage.append(source);
   const footer=make('div','studio-source-footer');

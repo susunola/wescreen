@@ -295,6 +295,10 @@ async function loadSettings() {
     else if (kind === 'select' && ![...$(id).options].some((option) => option.value === String(value))) continue;
     else $(id).value = String(value);
   }
+  // Scene selection is session navigation, not a persisted startup destination.
+  if ($('capture-mode').value === 'telegram') $('filename').value='wescreen-recording';
+  $('capture-mode').value='general';
+  $('telegram-guide').hidden=true;$('telegram-channel').hidden=true;
   if (pendingLink && filenameSuggestion && (!settings.filename || settings.filename === 'wescreen-recording')) {
     $('filename').value = `${filenameSuggestion}-recording`;
     setNotice(LANG === 'zh' ? `已打开 ${new URL(pendingLink).hostname}。在 Edge 选择器中选择该标签页即可开始录制。` : `${new URL(pendingLink).hostname} is ready. Select that tab in the Edge picker to record it.`);
