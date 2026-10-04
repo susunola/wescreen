@@ -853,5 +853,5 @@ window.addEventListener('DOMContentLoaded', async () => {
     await db; await navigator.storage?.persist?.().catch(() => false);
     await refreshRecovery(); await refreshMicDevices().catch(() => {}); await renderRecordingLibrary();
     await privacy.ready;await initWorkspace(); document.documentElement.dataset.ready = "true";
-  } catch (error) { setNotice(error.message); $('library-status').textContent = error.message; }
+  } catch (error) { setNotice(error.message); $('library-status').textContent = error.message;$('workspace-loading-message').textContent=E('工作区初始化失败，请重新加载：','Workspace initialization failed. Reload: ')+error.message; }
 });
