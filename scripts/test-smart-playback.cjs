@@ -18,10 +18,15 @@ const {chromium}=require('playwright'),fs=require('fs'),os=require('os'),path=re
   const firstChunkElapsed=(Date.now()-start)/1000;const info=await page.evaluate(()=>smartBackground.chunks.get(0).info);assert.equal(info.width,640);assert.equal(info.height,360);assert.equal(info.analysis.degraded,true);assert.equal(await page.evaluate(()=>smartVideo.muted),true);
   await page.evaluate(()=>$('preview').currentTime=.6);await page.waitForFunction(()=>!smartVideo.hidden&&Math.abs(smartVideo.currentTime-$('preview').currentTime)<.08);await page.evaluate(()=>$('preview').play());await page.waitForFunction(()=>$('preview').currentTime>1&&!smartVideo.hidden);assert.ok(await page.evaluate(()=>Math.abs(smartVideo.currentTime-$('preview').currentTime)<.08));
   await page.evaluate(()=>{$('preview').pause();$('preview').currentTime=6.2;});await page.waitForFunction(()=>smartVideo.hidden);await page.waitForFunction(()=>smartBackground.chunks.has(1));await page.waitForFunction(()=>!smartVideo.hidden&&smartBackground.current===1);assert.ok(await page.evaluate(()=>Math.abs(smartVideo.currentTime-($('preview').currentTime-4))<.08));
+  await page.waitForFunction(()=>smartBackground.available.size===smartBackground.total&&smartBackground.pending===null);
+  await page.evaluate(async()=>{const health=await connectHelper();await startSmartBackground(health,null);});
+  assert.equal(await page.evaluate(()=>smartBackground.available.size),2);
+  await page.waitForFunction(()=>smartBackground.chunks.has(1)&&!smartVideo.hidden);
   const previousSession=await page.evaluate(()=>smartBackground.session);
   await page.evaluate(async bytes=>{const blob=new Blob([new Uint8Array(bytes)],{type:'video/mp4'}),entries=[1,2].map(part=>({id:'smart-part-'+part,name:'smart-part-'+part+'.mp4',part,recordingGroupId:'smart-test-group',size:blob.size,duration:8000,width:320,height:180,frameRate:12,createdAt:Date.now()}));await runTx(['videos','recordings'],'readwrite',tx=>{for(const entry of entries){tx.objectStore('recordings').put(entry);tx.objectStore('videos').put(blob,entry.id);}});playbackParts=entries;playbackPartIndex=0;activePlaybackId=entries[0].id;finalId=entries[0].id;await loadRecordingPart(1,1,false);},[...original]);
   await page.waitForFunction(previous=>smartBackground.enabled&&smartBackground.session&&smartBackground.session!==previous&&playbackPartIndex===1,previousSession);await page.waitForFunction(()=>smartBackground.chunks.has(0)&&!smartVideo.hidden);assert.equal(await page.evaluate(()=>selectedQuality),'smart');
   // A full enhancement must cancel an in-flight playback worker and release its slot first.
+  await page.evaluate(async()=>{await enhancementRequest(`/smart/${smartBackground.session}/chunks/1`,{method:'DELETE'});smartBackground.available.delete(1);pumpSmartChunks();});
   await page.waitForFunction(()=>smartBackground.pending!==null);
   const session=await page.evaluate(()=>smartBackground.session);
   const task=await page.evaluate(async()=>submitProcessing(await readStore('recordings',activePlaybackId),{mode:'light',preview:false}));
@@ -29,6 +34,6 @@ const {chromium}=require('playwright'),fs=require('fs'),os=require('os'),path=re
   await page.waitForFunction(async id=>(await(await enhancementRequest('/jobs/'+id)).json()).state==='done',task.id);
   await page.locator('#playback-close').click();await page.waitForFunction(()=>!$('preview').hasAttribute('src')&&!smartBackground.enabled);assert.equal(await page.locator('#player-empty').isVisible(),true);
   const cachePath=path.join(temp,'smart-cache',session);const deadline=Date.now()+15000;while(fs.existsSync(cachePath)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));assert.equal(fs.existsSync(cachePath),false);assert.deepEqual(fs.readFileSync(file),original);assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({version,engine:info.engine,analysis:info.analysis,firstChunkSeconds:firstChunkElapsed,actualGPUChunk:true,sourceAudioClock:true,seekSync:true,enhancementAcrossParts:true,exitDeletesPrivateCache:true,fullTaskPreemptsBackground:true,originalUnchanged:true,errors}));
+  console.log(JSON.stringify({version,engine:info.engine,analysis:info.analysis,firstChunkSeconds:firstChunkElapsed,actualGPUChunk:true,sourceAudioClock:true,seekSync:true,enhancementAcrossParts:true,exitClearsPlaybackSession:true,persistentRepairReuse:true,wholeFileCoverage:true,fullTaskPreemptsBackground:true,originalUnchanged:true,errors}));
  }finally{await context?.close();if(helper){helper.kill('SIGINT');await new Promise(r=>{if(helper.exitCode!==null)return r();helper.once('exit',r);setTimeout(()=>{helper.kill('SIGKILL');r();},5000);});}fs.rmSync(temp,{recursive:true,force:true});}
 })().catch(error=>{console.error(error);process.exit(1)});

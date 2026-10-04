@@ -1,4 +1,5 @@
-"""Authenticated ephemeral source/chunk cache. No library files are modified."""
+"""Authenticated playback sessions with reusable local repair cache. No library files are modified."""
+import hashlib
 import json
 import math
 import os
@@ -13,8 +14,32 @@ from pathlib import Path
 from urllib.parse import urlparse,parse_qs
 from smart_model import smart_ready,ROOT
 
-SESSIONS={};GUARD=threading.RLock();CHUNK_SECONDS=4;MAX_CHUNKS=6
+SESSIONS={};GUARD=threading.RLock();CHUNK_SECONDS=4
 CACHE=Path(os.environ.get('WESCREEN_SMART_CACHE_DIR') or (Path(os.environ.get('WESCREEN_WORK_DIR') or ROOT/'.runtime'/'jobs').parent/'smart-cache'))
+
+
+# Change policy when restoration math/model settings change: incompatible results
+# must never be silently reused. Source identity includes every uploaded byte.
+POLICY='smart-v2-motion-dni035-crf15'
+CACHE_LIMIT=8*1024*1024*1024
+
+def save_chunk(session,index,chunk):
+    asset=session['asset'];asset.mkdir(mode=0o700,exist_ok=True)
+    target=asset/f'{index}.mp4';temporary=asset/f'{index}.tmp'
+    os.replace(chunk['path'],temporary);os.replace(temporary,target);chunk['path']=target
+    metadata=public_chunk(chunk);metadata.pop('touch',None)
+    temporary=asset/f'{index}.json.tmp';temporary.write_text(json.dumps(metadata))
+    os.replace(temporary,asset/f'{index}.json');os.utime(asset,None)
+
+def prune_cache():
+    active={s.get('asset') for s in SESSIONS.values()}
+    assets=[p for p in CACHE.iterdir() if p.is_dir() and re.fullmatch('[a-f0-9]{64}',p.name)]
+    sizes={p:sum(f.stat().st_size for f in p.iterdir() if f.is_file()) for p in assets}
+    total=sum(sizes.values())
+    for asset in sorted(assets,key=lambda p:p.stat().st_mtime):
+        if asset in active:continue
+        if total<=CACHE_LIMIT and time.time()-asset.stat().st_mtime<30*86400:continue
+        shutil.rmtree(asset,ignore_errors=True);total-=sizes[asset]
 
 
 def cleanup_session(session,api):
@@ -73,11 +98,8 @@ def work_chunk(session,index,api):
         if chunk['path'].stat().st_size>256*1024*1024:raise ValueError('Smart chunk exceeds helper cache limit')
         chunk.update(state='done',progress=1,width=(width+width%2)*scale,height=(height+height%2)*scale,size=chunk['path'].stat().st_size)
         with GUARD:
-            # LRU eviction of completed chunks only; caller can regenerate a seek.
-            done=sorted([(i,c) for i,c in session['chunks'].items() if c['state']=='done' and i!=index],key=lambda pair:pair[1]['touch'])
-            total=sum(c.get('size',0) for c in session['chunks'].values())
-            while done and (len(session['chunks'])>MAX_CHUNKS or total>256*1024*1024):
-                i,c=done.pop(0);total-=c.get('size',0);c['path'].unlink(missing_ok=True);del session['chunks'][i]
+            save_chunk(session,index,chunk)
+            prune_cache()
     except Exception as error:
         chunk.update(state='error',error=str(error));chunk['path'].unlink(missing_ok=True)
     finally:
@@ -106,16 +128,27 @@ def handle_smart(handler,method,api):
                 handler.connection.settimeout(120)
                 with session['source'].open('xb') as target:
                     remaining=length
+                    digest=hashlib.sha256((POLICY+str(session['text'])+str(smart_ready())).encode())
                     while remaining:
                         data=handler.rfile.read(min(1024*1024,remaining))
                         if not data:raise ValueError('Incomplete smart source upload')
-                        target.write(data);remaining-=len(data)
+                        target.write(data);digest.update(data);remaining-=len(data)
                 session['media']=api['probe'](session['source'])
                 if session['media'][3]<=0:raise ValueError('Source duration is unavailable')
+                session['asset']=CACHE/digest.hexdigest()
+                if session['asset'].is_dir():
+                    for metadata in session['asset'].glob('*.json'):
+                        try:
+                            index=int(metadata.stem);info=json.loads(metadata.read_text());path=metadata.with_suffix('.mp4')
+                            if info.get('state')=='done' and path.is_file() and path.stat().st_size==info.get('size'):
+                                info.update(path=path,touch=time.monotonic());session['chunks'][index]=info
+                        except (ValueError,OSError):continue
+                    os.utime(session['asset'],None)
+                prune_cache()
             except Exception:
                 with GUARD:SESSIONS.pop(sid,None)
                 shutil.rmtree(directory,ignore_errors=True);raise
-            handler.reply(201,{'id':sid,'chunkSeconds':CHUNK_SECONDS,'neural':smart_ready()});return True
+            handler.reply(201,{'id':sid,'chunkSeconds':CHUNK_SECONDS,'neural':smart_ready(),'completed':{str(i):public_chunk(c) for i,c in session['chunks'].items()},'totalChunks':math.ceil(session['media'][3]/CHUNK_SECONDS)});return True
         if len(parts)<2 or not re.fullmatch('[a-f0-9]{32}',parts[1]):raise ValueError('Invalid smart session')
         with GUARD:session=SESSIONS.get(parts[1])
         if not session:handler.reply(404,{'error':'Smart session expired'});return True
@@ -136,11 +169,13 @@ def handle_smart(handler,method,api):
                 if worker and worker.is_alive():handler.reply(409,{'error':'Chunk cancellation pending'});return True
             with GUARD:
                 removed=session['chunks'].pop(index,None)
-                if removed:removed['path'].unlink(missing_ok=True)
+                if removed and removed['path'].parent==session['directory']:removed['path'].unlink(missing_ok=True)
             handler.reply(200,{'cancelled':True});return True
         if method=='POST':
             if chunk and chunk['state'] in ('queued','processing','done'):
                 chunk['touch']=time.monotonic();handler.reply(200,public_chunk(chunk));return True
+            if sum(f.stat().st_size for asset in CACHE.iterdir() if asset.is_dir() and re.fullmatch('[a-f0-9]{64}',asset.name) for f in asset.iterdir() if f.is_file())>=CACHE_LIMIT:
+                handler.reply(409,{'error':'Local repair cache is full (8 GB); original playback continues'});return True
             if session['busy'] or not api['SLOT'].acquire(blocking=False):handler.reply(409,{'error':'Helper busy; original playback continues'});return True
             try:
                 chunk={'state':'queued','progress':0,'start':index*CHUNK_SECONDS,'path':session['directory']/f'{index}.mp4','touch':time.monotonic()}
@@ -171,6 +206,9 @@ def start_cleanup(api):
     # Only our generated cache folders are removed; recordings/jobs are untouched.
     for item in CACHE.iterdir():
         if item.is_dir() and re.fullmatch('[a-f0-9]{32}',item.name):shutil.rmtree(item,ignore_errors=True)
+    prune_cache()
     def sweep():
-        while True:time.sleep(30);expire(api)
+        while True:
+            time.sleep(30);expire(api)
+            with GUARD:prune_cache()
     threading.Thread(target=sweep,daemon=True).start()

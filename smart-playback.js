@@ -1,6 +1,6 @@
 // Background restoration overlays only synchronized, completed video chunks.
-// The original video is always the audio/transport clock. Private cache is ephemeral.
-const smartBackground={enabled:false,generation:0,session:null,abort:null,busy:false,poll:null,callback:null,chunkSeconds:4,chunks:new Map(),bytes:0,current:-1,source:null,pending:null,failed:new Set(),status:null,stage:'',started:0,pendingStarted:0};
+// The original video is always the audio/transport clock. Completed repairs persist in the authenticated local helper cache.
+const smartBackground={enabled:false,generation:0,session:null,abort:null,busy:false,poll:null,callback:null,chunkSeconds:4,chunks:new Map(),available:new Map(),total:0,bytes:0,current:-1,source:null,pending:null,failed:new Set(),status:null,stage:'',started:0,pendingStarted:0};
 let smartCleanup=Promise.resolve(true);
 let smartSubtitleTrack=null,smartSubtitleSource=null,smartSubtitleKey='';
 const smartVideo=document.createElement('video');smartVideo.id='smart-restored-video';smartVideo.muted=true;smartVideo.playsInline=true;smartVideo.preload='auto';smartVideo.hidden=true;$('playback-stage').prepend(smartVideo);
@@ -8,7 +8,7 @@ function smartProgressText(){
  const info=smartBackground.status,elapsed=Math.max(0,Math.floor((performance.now()-(smartBackground.pendingStarted||smartBackground.started))/1000));
  if(smartBackground.stage==='error')return E('修复暂不可用 · 当前原画','Repair unavailable · Original');
  if(!smartBackground.session)return E('准备修复','Preparing repair')+` · ${elapsed}s`;
- if(smartBackground.pending===null)return E('等待当前片段缓存','Waiting for current chunk');
+ if(smartBackground.pending===null)return E('全片缓存','Full video cache')+` · ${smartBackground.available.size}/${smartBackground.total}`;
  const progress=Math.max(0,Math.min(1,Number(info?.progress)||0)),percent=Math.floor(progress*100);
  const position=smartBackground.pending*smartBackground.chunkSeconds;
  const range=`${formatSmartTime(position)}–${formatSmartTime(position+smartBackground.chunkSeconds)}`;
@@ -23,7 +23,9 @@ function updateSmartBadge(){
  enhancementBadge.hidden=false;
  const status=smartProgressText();
  enhancementBadge.textContent=smartVideo.hidden?status:E('智能最佳 · 修复缓存','Smart best · Restored cache');
- enhancementBadge.title=status+E(' · 当前片段进度，非整段视频；当前原画可正常播放',' · Current chunk, not whole video; original playback continues');
+ const coverage=`${Math.floor(100*smartBackground.available.size/Math.max(1,smartBackground.total))}%`;
+ enhancementBadge.textContent+=E(' · 全片 ',' · Whole video ')+coverage;
+ enhancementBadge.title=status+E(' · 全片已缓存 ',' · Whole video cached ')+`${smartBackground.available.size}/${smartBackground.total}`;
  if(smartVideo.hidden)realtimeHint.textContent=enhancementBadge.title;
 }
 setInterval(()=>{if(smartBackground.enabled)updateSmartBadge();},1000);
@@ -37,7 +39,7 @@ function stopSmartBackground(){
  smartSubtitleKey='';smartSubtitleSource=null;if(smartSubtitleTrack){smartSubtitleTrack.mode='disabled';for(const cue of [...(smartSubtitleTrack.cues||[])])smartSubtitleTrack.removeCue(cue);}
  smartVideo.hidden=true;smartVideo.pause();smartVideo.removeAttribute('src');smartVideo.load();
  for(const chunk of smartBackground.chunks.values())URL.revokeObjectURL(chunk.url);
- smartBackground.chunks.clear();smartBackground.failed.clear();smartBackground.bytes=0;smartBackground.current=-1;smartBackground.session=null;smartBackground.pending=null;smartBackground.busy=false;smartBackground.source=null;smartBackground.status=null;smartBackground.stage='';smartBackground.started=0;smartBackground.pendingStarted=0;
+ smartBackground.chunks.clear();smartBackground.available.clear();smartBackground.total=0;smartBackground.failed.clear();smartBackground.bytes=0;smartBackground.current=-1;smartBackground.session=null;smartBackground.pending=null;smartBackground.busy=false;smartBackground.source=null;smartBackground.status=null;smartBackground.stage='';smartBackground.started=0;smartBackground.pendingStarted=0;
  updateSmartBadge();
  if(old){const request=enhancementRequest('/smart/'+old,{method:'DELETE',keepalive:true,signal:AbortSignal.timeout(15000)}).then(()=>true,()=>false);smartCleanup=Promise.all([smartCleanup,request]).then(results=>results.every(Boolean));}
  return smartCleanup;
@@ -92,9 +94,16 @@ async function pumpSmartChunks(){
  const generation=smartBackground.generation,session=smartBackground.session,v=$('preview');smartBackground.busy=true;
  const controller=new AbortController();smartBackground.abort=controller;
  try{
+   // Fetch existing repairs on demand; browser RAM eviction never triggers repair.
+   const cached=[Math.floor(v.currentTime/smartBackground.chunkSeconds),Math.floor(v.currentTime/smartBackground.chunkSeconds)+1].find(i=>smartBackground.available.has(i)&&!smartBackground.chunks.has(i));
+   if(cached!==undefined){
+    const blob=await(await enhancementRequest(`/smart/${session}/chunks/${cached}?result=1`,{signal:controller.signal})).blob();
+    if(generation!==smartBackground.generation)return;
+    smartCachePut(cached,blob,smartBackground.available.get(cached));presentSmartChunk();
+   }
   if(smartBackground.pending!==null){
    const wanted=Math.floor(v.currentTime/smartBackground.chunkSeconds);
-   if(!smartBackground.chunks.has(wanted)&&Math.abs(smartBackground.pending-wanted)>1){
+   if(!smartBackground.available.has(wanted)&&!smartBackground.failed.has(wanted)&&Math.abs(smartBackground.pending-wanted)>1){
     await enhancementRequest(`/smart/${session}/chunks/${smartBackground.pending}`,{method:'DELETE',signal:controller.signal});
     if(generation!==smartBackground.generation)return;
     smartBackground.pending=null;smartBackground.status=null;smartBackground.stage='';
@@ -104,17 +113,19 @@ async function pumpSmartChunks(){
    if(generation!==smartBackground.generation)return;
    smartStatus(info);
    if(info.state==='done'){
-    const blob=await(await enhancementRequest(`/smart/${session}/chunks/${index}?result=1`,{signal:controller.signal})).blob();
+    const near=Math.abs(index-Math.floor(v.currentTime/smartBackground.chunkSeconds))<=1;
+    const blob=near?await(await enhancementRequest(`/smart/${session}/chunks/${index}?result=1`,{signal:controller.signal})).blob():null;
     if(generation!==smartBackground.generation)return;
-    smartBackground.pending=null;try{smartCachePut(index,blob,info);}catch(error){smartBackground.failed.add(index);throw error;}presentSmartChunk();
+    smartBackground.pending=null;smartBackground.available.set(index,info);try{if(blob)smartCachePut(index,blob,info);}catch(error){smartBackground.failed.add(index);throw error;}presentSmartChunk();
    }else if(info.state==='error'){smartBackground.pending=null;smartBackground.failed.add(index);throw new Error(info.error||'Smart repair failed');}
   }else{
    const current=Math.floor(v.currentTime/smartBackground.chunkSeconds),count=Math.ceil(v.duration/smartBackground.chunkSeconds);
-   const index=[current,current+1,current+2].find(i=>i<count&&!smartBackground.chunks.has(i)&&!smartBackground.failed.has(i));
+   const candidates=[current,current+1,current+2,...Array.from({length:count},(_,i)=>i)];
+   const index=candidates.find(i=>i<count&&!smartBackground.available.has(i)&&!smartBackground.failed.has(i));
    if(index!==undefined){await enhancementRequest(`/smart/${session}/chunks/${index}`,{method:'POST',signal:controller.signal});if(generation!==smartBackground.generation)return;smartBackground.pending=index;smartBackground.pendingStarted=performance.now();smartStatus({state:'queued',progress:0});}
   }
  }catch(error){if(generation===smartBackground.generation&&error.name!=='AbortError'){smartBackground.stage='error';updateSmartBadge();realtimeHint.textContent=E('后台修复暂不可用，原视频继续播放。','Background repair unavailable; original keeps playing.');}}
- finally{if(generation===smartBackground.generation){smartBackground.busy=false;clearTimeout(smartBackground.poll);smartBackground.poll=setTimeout(pumpSmartChunks,smartBackground.pending===null?100:1000);}}
+ finally{if(generation===smartBackground.generation){smartBackground.busy=false;clearTimeout(smartBackground.poll);smartBackground.poll=setTimeout(pumpSmartChunks,smartBackground.pending===null&&smartBackground.available.size<smartBackground.total?100:1000);}}
 }
 async function startSmartBackground(health,entry){
  if(!health?.smartChunks || !(finalBlob instanceof Blob) || typeof playerColor!=='undefined'&&playerColor.mode==='hdr')return false;
@@ -125,7 +136,7 @@ async function startSmartBackground(health,entry){
  try{
   const result=await(await enhancementRequest('/smart/sources?content='+encodeURIComponent(entry?.captureContent||'auto'),{method:'POST',body:finalBlob,headers:{'Content-Type':finalBlob.type||'application/octet-stream'},signal:controller.signal})).json();
   if(generation!==smartBackground.generation){enhancementRequest('/smart/'+result.id,{method:'DELETE'}).catch(()=>{});return false;}
-  smartCleanup=Promise.resolve(true);smartBackground.session=result.id;smartBackground.chunkSeconds=result.chunkSeconds;realtimeButton.setAttribute('aria-pressed','true');
+  smartCleanup=Promise.resolve(true);smartBackground.session=result.id;smartBackground.chunkSeconds=result.chunkSeconds;smartBackground.available=new Map(Object.entries(result.completed||{}).map(([i,info])=>[Number(i),info]));smartBackground.total=result.totalChunks||Math.ceil($('preview').duration/result.chunkSeconds);realtimeButton.setAttribute('aria-pressed','true');
   pumpSmartChunks();scheduleSmartPresentation();return true;
  }catch(error){if(generation===smartBackground.generation){stopSmartBackground();realtimeHint.textContent=E('后台修复无法启动，使用实时轻量增强。','Background repair unavailable; using lightweight enhancement.');}return false;}
 }
