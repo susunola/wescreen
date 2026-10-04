@@ -1,3 +1,15 @@
+# 1.28.0
+
+- Smart best now buffers at unfinished segments and resumes restored playback when the segment is ready, without silently switching back to original frames.
+- Completed repairs persist across playback sessions and helper restarts. Restoration prioritizes the current position and progressively covers the full source file.
+- Added whole-file coverage, segment progress, and a waiting screen. Removed the five-minute idle playback timeout; manual close remains available.
+- Improved low-quality restoration with chroma cleanup, adaptive neural denoising, bounded multiscale detail recovery, larger guides for soft sources, and targeted shifted/scaled codec-grid cleanup.
+- Model processing focuses on actual content inside near-black recording borders while preserving output dimensions and feathering boundary transitions.
+- Failed Smart best startup now keeps Original selected rather than silently substituting lightweight enhancement.
+- Verified real Mac MPS inference, buffered playback and resume, audio/seek synchronization, multipart playback, persistent cache reuse, and Chinese/English UI regression tests.
+
+Update both the extension and helper. Overwrite the existing extension folder and reload it; do not uninstall, so the recording library is retained. Updated restoration policies rebuild repair caches once. Recordings are unchanged. Repairs stay on this device; local repair caches are not encrypted, retain about 8 GiB, and expire after 30 idle days. Multipart recordings maintain separate coverage per source file.
+
 # 1.27.4
 
 - Smart best now cancels unrelated restoration chunks after a distant seek and prioritizes the current viewing position.
