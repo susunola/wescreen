@@ -23,6 +23,7 @@ function captureContext({ camera = false, clicks = true, state = 'live' } = {}) 
     recovery: { classList: { contains: () => true } }, countdown: { value: '0' }, start: { disabled: false, textContent: '' }
   };
   const context = {
+    screen:{width:1920,height:1080},window:{devicePixelRatio:2},
     $: id => fields[id],
     navigator: { mediaDevices: { getDisplayMedia: async () => stream } },
     chrome: { storage: { local: { remove: () => Promise.resolve() } } },
@@ -215,9 +216,9 @@ test('a rejected resolution cap reports the actual uncapped output', async () =>
 test('video bitrate scales with actual pixels and frame rate', () => {
   const context = { BITRATES: { standard: 6000000 }, $: id => ({ quality: { value: 'standard' }, framerate: { value: '30' } })[id] };
   vm.runInNewContext(extract('function videoBitrate(', 'async function acquireRecordingLock()'), context);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 6900000);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), 55200000);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 7680, height: 4320, frameRate: 30 }) }), 110400000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 18000000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), Math.round(18000000*Math.pow(4,.75)*Math.pow(2,.585)));
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 7680, height: 4320, frameRate: 30 }) }), 144000000);
 });
 
 test('audio mixing is reused across segments and preserves headroom for two sources', () => {
@@ -303,4 +304,25 @@ test('portrait resolution caps preserve the long edge and never upscale', async 
   assert.equal(seen.width.max,1080);assert.equal(seen.height.max,1920);assert.equal(note.key,'scaledDown');
   settings={width:720,height:1280};track.applyConstraints=async c=>{seen=c;};
   const small=await context.applyOutputSize({getVideoTracks:()=>[track]});assert.equal(small.key,'keepsSource');
+});
+
+
+test('text and motion bitrate budgets follow scene curves and cap extreme captures',()=>{
+ const fields={quality:{value:'high'},framerate:{value:'30'},'capture-content':{value:'detail'}};
+ const context={$:id=>fields[id]};vm.runInNewContext(extract('function videoBitrate(', 'async function acquireRecordingLock()'),context);
+ const rate=(width,height,frameRate)=>context.videoBitrate({getSettings:()=>({width,height,frameRate})});
+ assert.equal(rate(1920,1080,30),24000000);
+ assert.ok(rate(1920,1080,60)>=28000000&&rate(1920,1080,60)<=36010000);
+ assert.ok(rate(3840,2160,30)>=50000000&&rate(3840,2160,30)<=70000000);
+ fields.quality.value='compact';assert.equal(rate(1920,1080,30),18000000);
+ fields['capture-content'].value='motion';fields.quality.value='high';assert.equal(rate(1920,1080,30),14000000);
+ assert.ok(rate(3840,2160,30)>=35000000&&rate(3840,2160,30)<=45000000);
+ assert.equal(rate(15360,8640,120),180000000);
+});
+
+test('native resolution requests capability dimensions without a downscale cap',async()=>{
+ let applied;const track={getSettings:()=>({width:1920,height:1080}),getCapabilities:()=>({width:{max:3840},height:{max:2160}}),applyConstraints:async value=>{applied=value;}};
+ const context={$:id=>({resolution:{value:'native'},framerate:{value:'30'}})[id]};vm.runInNewContext(extract('async function applyOutputSize(', '// Missing audio'),context);
+ assert.equal(await context.applyOutputSize({getVideoTracks:()=>[track]}),null);
+ assert.equal(applied.width.ideal,3840);assert.equal(applied.height.ideal,2160);assert.equal(applied.width.max,undefined);assert.equal(applied.cursor,'always');assert.equal(applied.resizeMode,'none');
 });

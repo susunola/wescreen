@@ -11,9 +11,11 @@ self.onmessage = async ({ data }) => {
     busy=true;dirty=false;let output;
     try {
       if(!canvas || canvas.width!==screen.displayWidth || canvas.height!==screen.displayHeight){canvas=new OffscreenCanvas(screen.displayWidth,screen.displayHeight);ctx=canvas.getContext('2d',{alpha:false});}
-      ctx.drawImage(screen,0,0,canvas.width,canvas.height);
+      ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(screen,0,0,canvas.width,canvas.height);
       const w=Math.round(canvas.width*.23),h=Math.round(w*camera.displayHeight/camera.displayWidth),pad=Math.round(canvas.width*.025);
-      ctx.save();ctx.beginPath();ctx.roundRect(canvas.width-w-pad,canvas.height-h-pad,w,h,w*.08);ctx.clip();ctx.drawImage(camera,canvas.width-w-pad,canvas.height-h-pad,w,h);ctx.restore();
+      ctx.save();ctx.beginPath();ctx.roundRect(canvas.width-w-pad,canvas.height-h-pad,w,h,w*.08);ctx.clip();ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(camera,canvas.width-w-pad,canvas.height-h-pad,w,h);ctx.restore();
       const timestamp=Math.max(lastTimestamp+1,screen.timestamp+Math.round((performance.now()-screenReceivedAt)*1000));lastTimestamp=timestamp;lastDrawAt=performance.now();
       output=new VideoFrame(canvas,{timestamp});await writer.write(output);
       if(!ready){ready=true;self.postMessage({type:'ready'});}

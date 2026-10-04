@@ -1,5 +1,5 @@
 // Best-effort live neural SR. Audio and playback clock always stay on the original video.
-const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1,project:null,lossless:false};
+const realtimeAI={enabled:false,busy:false,generation:0,request:0,callback:null,abort:null,edge:960,average:0,failures:0,slow:0,frames:[],mediaTime:-1,project:null,lossless:false,rgb:false,engine:null,nextAt:0};
 const realtimeCanvas=document.createElement('canvas');realtimeCanvas.id='realtime-ai-canvas';realtimeCanvas.hidden=true;$('playback-stage').prepend(realtimeCanvas);
 const realtimeCapture=document.createElement('canvas');
 const realtimeButton=document.createElement('button');realtimeButton.id='playback-realtime';realtimeButton.type='button';realtimeButton.dataset.i18n='smartRealtime';realtimeButton.textContent=L('smartRealtime');realtimeButton.setAttribute('aria-pressed','false');qualityPanel.insertBefore(realtimeButton,$('playback-instant'));
@@ -13,34 +13,32 @@ function stopRealtimeAI(message=''){
 }
 function scheduleRealtimeAI(){
  if(!realtimeAI.enabled || realtimeAI.callback!==null || $('preview').paused)return;
- const video=$('preview');const callback=(_now,metadata)=>{realtimeAI.callback=null;if(!realtimeAI.enabled)return;if(Math.abs(video.currentTime-realtimeAI.mediaTime)>.1)realtimeCanvas.hidden=true;processRealtimeFrame(metadata?.mediaTime ?? video.currentTime);scheduleRealtimeAI();};
+ const video=$('preview');const callback=(_now,metadata)=>{realtimeAI.callback=null;if(!realtimeAI.enabled)return;processRealtimeFrame(metadata?.mediaTime ?? video.currentTime);scheduleRealtimeAI();};
  realtimeAI.callback=video.requestVideoFrameCallback ? video.requestVideoFrameCallback(callback):requestAnimationFrame(callback);
 }
 async function processRealtimeFrame(mediaTime){
- const video=$('preview');if(!realtimeAI.enabled || realtimeAI.busy || playbackSeeking || video.readyState<2 || document.hidden || !$('result').getClientRects().length)return;
+ const video=$('preview');if(!realtimeAI.enabled || realtimeAI.busy || performance.now()<realtimeAI.nextAt || playbackSeeking || video.readyState<2 || document.hidden || !$('result').getClientRects().length)return;
  const generation=realtimeAI.generation,request=++realtimeAI.request;realtimeAI.busy=true;const started=performance.now();
- const scale=Math.min(1,realtimeAI.edge/Math.max(video.videoWidth,video.videoHeight),540/Math.min(video.videoWidth,video.videoHeight));
+ const scale=Math.min(1,(realtimeAI.rgb?1080:960)/Math.max(video.videoWidth,video.videoHeight),realtimeAI.rgb?1:540/Math.min(video.videoWidth,video.videoHeight));
  realtimeCapture.width=Math.max(2,Math.round(video.videoWidth*scale));realtimeCapture.height=Math.max(2,Math.round(video.videoHeight*scale));
  try{
   realtimeCapture.getContext('2d').drawImage(video,0,0,realtimeCapture.width,realtimeCapture.height);
-  const mime=realtimeAI.lossless?'image/png':'image/jpeg';
-  const frame=await new Promise(resolve=>realtimeCapture.toBlob(resolve,mime,.94));if(!frame)throw new Error('Frame unavailable');
+  const mime=realtimeAI.rgb?'application/x-wescreen-rgb':realtimeAI.lossless?'image/png':'image/jpeg';
+  let frame;if(realtimeAI.rgb){const rgba=realtimeCapture.getContext('2d').getImageData(0,0,realtimeCapture.width,realtimeCapture.height).data;frame=new Uint8Array(realtimeCapture.width*realtimeCapture.height*3);for(let i=0,j=0;i<rgba.length;i+=4){frame[j++]=rgba[i];frame[j++]=rgba[i+1];frame[j++]=rgba[i+2];}}else frame=await new Promise(resolve=>realtimeCapture.toBlob(resolve,mime,.94));if(!frame)throw new Error('Frame unavailable');
   if(generation!==realtimeAI.generation)return;
   const controller=new AbortController();realtimeAI.abort=controller;const timeout=setTimeout(()=>controller.abort(),1800);
-  let response;try{response=await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':mime},signal:controller.signal});}finally{clearTimeout(timeout);}
-  const bitmap=await createImageBitmap(await response.blob());
+  let response;try{response=await enhancementRequest('/realtime/frame',{method:'POST',body:frame,headers:{'Content-Type':mime,...(realtimeAI.rgb?{'X-Frame-Width':String(realtimeCapture.width),'X-Frame-Height':String(realtimeCapture.height),'X-Protect-Text':'1'}:{})},signal:controller.signal});}finally{clearTimeout(timeout);}
+  let bitmap;if(realtimeAI.rgb){const rgb=new Uint8Array(await response.arrayBuffer()),w=realtimeCapture.width,h=realtimeCapture.height;if(rgb.length!==w*h*3)throw new Error('Invalid RGB result');const rgba=new Uint8ClampedArray(w*h*4);for(let i=0,j=0;i<rgb.length;i+=3){rgba[j++]=rgb[i];rgba[j++]=rgb[i+1];rgba[j++]=rgb[i+2];rgba[j++]=255;}bitmap=await createImageBitmap(new ImageData(rgba,w,h));}else bitmap=await createImageBitmap(await response.blob());
   try{
    if(generation!==realtimeAI.generation || !realtimeAI.enabled)return;
    const elapsed=performance.now()-started;realtimeAI.average=realtimeAI.average ? realtimeAI.average*.75+elapsed*.25:elapsed;
    realtimeAI.failures=0;
-   // Discard late results after seeks or when inference cannot keep up with audio.
-   const timely=Math.abs(video.currentTime-mediaTime)<=.1 && ($('realtime-strategy')?.value==='smooth' || (bitmap.width>=video.videoWidth && bitmap.height>=video.videoHeight));
-   if(timely){realtimeCanvas.width=bitmap.width;realtimeCanvas.height=bitmap.height;realtimeCanvas.getContext('2d').drawImage(bitmap,0,0);syncRealtimeLayout();realtimeAI.mediaTime=mediaTime;realtimeCanvas.hidden=false;realtimeAI.slow=0;realtimeAI.frames.push(performance.now());realtimeAI.frames=realtimeAI.frames.slice(-20);}
-   else{realtimeCanvas.hidden=true;realtimeAI.slow++;}
-   if(realtimeAI.average>65 && realtimeAI.edge>320)realtimeAI.edge=Math.max(320,Math.floor(realtimeAI.edge*.8/16)*16);
+   // Seeks invalidate the generation; under load keep the last result and skip frames.
+   const timely=!playbackSeeking;
+   if(timely){realtimeCanvas.width=bitmap.width;realtimeCanvas.height=bitmap.height;realtimeCanvas.getContext('2d').drawImage(bitmap,0,0);syncRealtimeLayout();realtimeAI.mediaTime=mediaTime;realtimeCanvas.hidden=false;realtimeAI.frames.push(performance.now());realtimeAI.frames=realtimeAI.frames.slice(-20);}
+   realtimeAI.nextAt=performance.now()+Math.max(0,realtimeAI.average-33);
    const frames=realtimeAI.frames,fps=frames.length>1 ? Math.round((frames.length-1)*1000/(frames.at(-1)-frames[0])):0;
-   realtimeHint.textContent=timely ? `FSRCNN 2× · ${bitmap.width}×${bitmap.height}${fps ? ` · ${fps} fps`:''}`:E('处理速度不足，当前显示原画；正在降低 AI 负载。','Showing original; reducing AI workload to keep playback smooth.');
-   if(realtimeAI.slow>=8 && realtimeAI.edge<=320)stopRealtimeAI(E('本机无法保持实时 AI，已恢复原画。请使用 AI 高清修复后台另存。','Realtime AI cannot keep up. Original restored; use background AI repair.'));
+   realtimeHint.textContent=(realtimeAI.engine || 'FSRCNN fallback')+` · ${bitmap.width}×${bitmap.height}${fps ? ` · ${fps} fps`:''}`+E(' · 速度不足时隔帧，分辨率固定',' · Frames skipped under load; resolution stays fixed');
   }finally{bitmap.close();}
  }catch(error){if(generation===realtimeAI.generation){realtimeCanvas.hidden=true;realtimeHint.textContent=E('本机程序忙或连接中断，当前显示原画。','Helper busy or unavailable; showing original.');if(++realtimeAI.failures>=6)stopRealtimeAI(E('实时 AI 已停止：请检查本机程序，原视频继续播放。','Realtime AI stopped: check the local helper. Original keeps playing.'));}}
  finally{if(request===realtimeAI.request)realtimeAI.busy=false;}
@@ -53,13 +51,13 @@ realtimeButton.onclick=async()=>{
   if($('realtime-text-protect')?.checked && entry?.captureContent==='detail'){realtimeHint.textContent=E('桌面文字保护已开启，保持原画。','Desktop text protection keeps the original.');return;}
   if(Math.max($('preview').videoWidth,$('preview').videoHeight)>1920 || Math.min($('preview').videoWidth,$('preview').videoHeight)>1080){realtimeHint.textContent=E('高清源保持原画，避免缩小后再放大。需要修复请使用后台自然修复。','Keeping the high-resolution original. Use background Natural restoration for repair.');return;}
   if(!health?.realtime){realtimeHint.textContent=E('请启动或更新本机增强包；需要支持实时 AI 的新版程序。','Start or update the local helper to support realtime AI.');return;}
-  realtimeAI.enabled=true;realtimeAI.project=playbackProjectId();realtimeAI.lossless=!!health.realtimeLossless;realtimeAI.generation++;realtimeAI.edge=960;realtimeAI.average=0;realtimeAI.failures=0;realtimeAI.slow=0;realtimeAI.frames=[];realtimeButton.setAttribute('aria-pressed','true');
+  realtimeAI.enabled=true;realtimeAI.project=playbackProjectId();realtimeAI.lossless=!!health.realtimeLossless;realtimeAI.rgb=!!health.realtimeRGB;realtimeAI.engine=health.realtimeEngine || 'FSRCNN fallback';realtimeAI.nextAt=0;realtimeAI.generation++;realtimeAI.edge=960;realtimeAI.average=0;realtimeAI.failures=0;realtimeAI.slow=0;realtimeAI.frames=[];realtimeButton.setAttribute('aria-pressed','true');
   processRealtimeFrame($('preview').currentTime);scheduleRealtimeAI();
  }finally{realtimeButton.disabled=false;}
 };
 originalPicture.addEventListener('click',()=>stopRealtimeAI());
 $('preview').addEventListener('play',scheduleRealtimeAI);
-$('preview').addEventListener('seeking',()=>{realtimeAI.generation++;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;});
+$('preview').addEventListener('seeking',()=>{realtimeAI.generation++;realtimeAI.request++;realtimeAI.busy=false;realtimeAI.nextAt=0;realtimeAI.abort?.abort();realtimeCanvas.hidden=true;});
 $('preview').addEventListener('seeked',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
 $('preview').addEventListener('pause',()=>{if(realtimeAI.enabled)processRealtimeFrame($('preview').currentTime);});
 $('preview').addEventListener('loadedmetadata',()=>{

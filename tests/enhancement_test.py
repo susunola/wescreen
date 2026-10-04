@@ -28,6 +28,19 @@ class EnhancementTest(unittest.TestCase):
     def job(self, mode):
         return dict(source=self.source, output=Path(self.temp.name)/'output.mp4', mode=mode, preview=True, state='queued', progress=0, cancel=threading.Event(), processes=[])
 
+    def test_master_is_444_and_compatible_is_420_without_changing_source(self):
+        before=self.source.read_bytes()
+        for preset,pixel_format in [('master','yuv444p'),('compatible','yuv420p')]:
+            upload=Path(self.temp.name)/('upload-'+preset+'.mp4');upload.write_bytes(before)
+            job=self.job('natural');job.update(source=upload,encoding=preset,captureContent='detail',preview=False)
+            server.SLOT.acquire();server.run_job(job)
+            self.assertEqual(job['state'],'done',job.get('error'))
+            info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(job['output'])]))
+            self.assertEqual(info['streams'][0]['pix_fmt'],pixel_format)
+            self.assertEqual(self.source.read_bytes(),before)
+        self.assertIn('unsharp=3:3:0.15',server.enhancement_filter('natural',1,'detail'))
+        self.assertNotIn('hqdn3d',server.enhancement_filter('natural',1,'detail'))
+
     def test_ffmpeg_unavailable_timestamp_does_not_abort_or_reset_progress(self):
         job = {'progress': .2}
         for line in ('out_time_us=N/A\n', 'out_time_us=\n', 'out_time_us=-1\n', 'progress=continue\n'):
@@ -272,6 +285,15 @@ class RealtimeTest(unittest.TestCase):
         with self.assertRaises(ValueError): jpeg_dimensions(jpeg)
         with self.assertRaises(ValueError): jpeg_dimensions(b'not an image')
 
+    def test_raw_rgb_same_size_lossless_transport_and_limits(self):
+        from realtime import enhance_rgb
+        import numpy as np
+        rgb=np.zeros((32,64,3),np.uint8);rgb[:,20:23]=[240,30,15]
+        result,elapsed=enhance_rgb(rgb.tobytes(),64,32,server.MODEL,server.MODEL_HASH)
+        self.assertEqual(len(result),rgb.size);self.assertGreater(elapsed,0)
+        with self.assertRaises(ValueError):enhance_rgb(rgb.tobytes()[:-1],64,32,server.MODEL,server.MODEL_HASH)
+        with self.assertRaises(ValueError):enhance_rgb(b'',1920,1080,server.MODEL,server.MODEL_HASH)
+
     def test_http_authentication_limits_and_busy_fallback(self):
         from http.server import ThreadingHTTPServer
         import cv2
@@ -287,6 +309,10 @@ class RealtimeTest(unittest.TestCase):
             with urllib.request.urlopen(urllib.request.Request(base,jpeg,headers)) as response:
                 self.assertEqual(response.headers['Content-Type'],'image/jpeg')
                 self.assertGreater(float(response.headers['X-Inference-Ms']),0)
+            raw_headers={'Content-Type':'application/x-wescreen-rgb','X-WeScreen-Token':server.TOKEN,'X-Frame-Width':'64','X-Frame-Height':'32'}
+            with urllib.request.urlopen(urllib.request.Request(base,bytes(64*32*3),raw_headers)) as response:
+                self.assertEqual(response.headers['Content-Type'],'application/x-wescreen-rgb')
+                self.assertEqual(len(response.read()),64*32*3)
             server.SLOT.acquire()
             try:
                 with self.assertRaises(urllib.error.HTTPError) as error: urllib.request.urlopen(urllib.request.Request(base,jpeg,headers))

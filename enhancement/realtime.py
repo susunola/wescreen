@@ -65,3 +65,34 @@ def enhance_frame(data, model_path, model_hash, lossless=False):
         ok, encoded = cv2.imencode('.png' if lossless else '.jpg', enhanced, [cv2.IMWRITE_PNG_COMPRESSION, 1] if lossless else [cv2.IMWRITE_JPEG_QUALITY, 94])
         if not ok: raise RuntimeError('Could not encode enhanced frame')
     return encoded.tobytes(), (time.perf_counter()-started)*1000
+
+
+def enhance_rgb(data, width, height, model_path, model_hash, protect_text=True):
+    """Same-size RGB fallback. Never claims to be a temporal/generative model."""
+    global _MODEL
+    if not (2 <= width <= 1080 and 2 <= height <= 1080) or len(data) != width*height*3:
+        raise ValueError('RGB frame dimensions or length are invalid (long edge up to 1080)')
+    import cv2
+    import numpy as np
+    started=time.perf_counter()
+    with _LOCK:
+        frame=np.frombuffer(data,np.uint8).reshape(height,width,3)
+        if _MODEL is None:
+            if hashlib.sha256(model_path.read_bytes()).hexdigest()!=model_hash:
+                raise RuntimeError('AI model checksum mismatch')
+            cv2.setNumThreads(4)
+            model=cv2.dnn_superres.DnnSuperResImpl_create()
+            model.readModel(str(model_path));model.setModel('fsrcnn',2);_MODEL=model
+        # Legacy engine is explicitly a fallback; resize only its 2x result, never its input.
+        bgr=cv2.cvtColor(frame,cv2.COLOR_RGB2BGR)
+        restored=cv2.resize(_MODEL.upsample(bgr),(width,height),interpolation=cv2.INTER_AREA)
+        if protect_text:
+            # Conservative edge protection is not OCR. Preserve high-frequency strokes,
+            # including UI edges, instead of hallucinating replacements.
+            gray=cv2.cvtColor(bgr,cv2.COLOR_BGR2GRAY)
+            edges=cv2.Canny(gray,60,140)
+            mask=cv2.dilate(edges,np.ones((3,3),np.uint8)).astype(bool)
+            weak=cv2.bilateralFilter(bgr,3,4,4)
+            restored[mask]=weak[mask]
+        output=cv2.cvtColor(restored,cv2.COLOR_BGR2RGB)
+    return output.tobytes(),(time.perf_counter()-started)*1000

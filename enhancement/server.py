@@ -43,8 +43,9 @@ def enhancement_filter(mode, strength=1, content='auto'):
         if mode == 'natural': filters.insert(0,'deblock=filter=weak:block=8')
     if mode == 'basic': filters.append(f'eq=contrast={1+.03*strength}:brightness={.01*strength}:saturation={1+.02*strength}')
     if mode == 'light': filters.append(f'eq=contrast={1+.06*strength}:brightness={.025*strength}:gamma={1+.08*strength}:saturation={1+.04*strength}')
-    sharpen=(.1 if content == 'detail' else {'natural':.2,'basic':.35,'light':.25}[mode])*strength
-    filters.append(f'unsharp=5:5:{sharpen}:5:5:0')
+    sharpen=(.15 if content == 'detail' else {'natural':.2,'basic':.35,'light':.25}[mode])*strength
+    radius=3 if content == 'detail' else 5
+    filters.append(f'unsharp={radius}:{radius}:{sharpen}:5:5:0')
     return ','.join(filters)
 
 TOKEN_FILE = ROOT / '.runtime' / 'token.txt'
@@ -65,7 +66,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -245,7 +246,8 @@ def run_job(job):
             if shutil.disk_usage(source.parent).free < budget:
                 raise ValueError('Not enough disk space for this job. Trim the video or free space first.')
             trim = ['-t', str(limit)] if limit else []
-            encode = ['-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', *audio_encode, *( ['-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv'] if hdr and tone_map else color_encode), '-movflags', '+faststart']
+            master=job.get('encoding') == 'master'
+            encode = ['-c:v', 'libx264', '-preset', 'slow' if master else 'fast', '-crf', '16' if master else '18', '-pix_fmt', 'yuv444p' if master else 'yuv420p', *(['-tune','animation'] if master else []), *audio_encode, *( ['-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv'] if hdr and tone_map else color_encode), '-movflags', '+faststart']
             if job['mode']=='trimstatic':
                 trim_static_tail(job,source,output,duration,globals())
             elif job['mode']=='audio':
@@ -379,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin.startswith('chrome-extension://') or origin.startswith('http://127.0.0.1:') or origin.startswith('http://localhost:'):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-WeScreen-Token')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-WeScreen-Token, X-Frame-Width, X-Frame-Height, X-Protect-Text')
         self.send_header('Access-Control-Expose-Headers', 'X-Inference-Ms')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Private-Network', 'true')
@@ -419,9 +421,10 @@ class Handler(BaseHTTPRequestHandler):
         if urlparse(self.path).path == '/realtime/frame':
             try: size = int(self.headers.get('Content-Length', '0'))
             except ValueError: size = 0
-            if not 0 < size <= 2 * 1024 * 1024:
+            raw=self.headers.get('Content-Type','').split(';')[0]=='application/x-wescreen-rgb'
+            if not 0 < size <= (1080*1080*3 if raw else 2*1024*1024):
                 return self.reply(413, {'error': 'Realtime frame must be under 2 MB'})
-            if self.headers.get('Content-Type', '').split(';')[0] not in ('image/jpeg','image/png'):
+            if self.headers.get('Content-Type', '').split(';')[0] not in ('image/jpeg','image/png','application/x-wescreen-rgb'):
                 return self.reply(415, {'error': 'Realtime input must be JPEG or PNG'})
             if not SLOT.acquire(blocking=False):
                 return self.reply(409, {'error': 'Helper is busy; showing original video'})
@@ -430,9 +433,14 @@ class Handler(BaseHTTPRequestHandler):
                 data = self.rfile.read(size)
                 if len(data) != size: raise ValueError('Incomplete realtime frame')
                 lossless=self.headers.get('Content-Type','').split(';')[0]=='image/png'
-                result, elapsed = enhance_frame(data, MODEL, MODEL_HASH, lossless=lossless)
+                if raw:
+                    from realtime import enhance_rgb
+                    try: width=int(self.headers.get('X-Frame-Width','0'));height=int(self.headers.get('X-Frame-Height','0'))
+                    except ValueError: raise ValueError('Invalid RGB dimensions')
+                    result,elapsed=enhance_rgb(data,width,height,MODEL,MODEL_HASH,self.headers.get('X-Protect-Text','1')!='0')
+                else: result, elapsed = enhance_frame(data, MODEL, MODEL_HASH, lossless=lossless)
                 self.send_response(200); self.cors_headers()
-                self.send_header('Content-Type', 'image/png' if lossless else 'image/jpeg')
+                self.send_header('Content-Type', 'application/x-wescreen-rgb' if raw else 'image/png' if lossless else 'image/jpeg')
                 self.send_header('Content-Length', str(len(result)))
                 self.send_header('X-Inference-Ms', str(round(elapsed, 2)))
                 self.end_headers(); self.wfile.write(result)
@@ -463,6 +471,8 @@ class Handler(BaseHTTPRequestHandler):
             size = 0
         if not 0 < size <= 1600 * 1024 * 1024:
             return self.reply(413, {'error': 'Input must be between 1 byte and 1.6 GB'})
+        encoding=query.get('encoding',['compatible'])[0]
+        if encoding not in ('compatible','master'): return self.reply(400,{'error':'Invalid encoding preset'})
         if not SLOT.acquire(blocking=False):
             return self.reply(409, {'error': 'Another enhancement is running'})
         try:
@@ -502,7 +512,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, {'error': str(error)})
         capture_content=query.get('captureContent',['auto'])[0]
         if capture_content not in ('auto','detail','motion'): capture_content='auto'
-        job = dict(id=identifier,captureContent=capture_content,toneMap=query.get('toneMap',['0'])==['1'],watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
+        job = dict(id=identifier,encoding=encoding,captureContent=capture_content,toneMap=query.get('toneMap',['0'])==['1'],watermark=watermark,requireSilence=query.get('requireSilence',['1'])==['1'], audioPreset=audio_preset,strength=strength, previewSeconds=preview_seconds, mode=mode, preview=query.get('preview') == ['1'], rotation=rotation, landscape=query.get('landscape')==['1'], batchRef=query.get('batchRef', [''])[0][:150], start=start, end=end, crop=crop, sourceId=query.get('sourceId', [''])[0][:150], name=query.get('name', ['enhanced.mp4'])[0][:150], createdAt=int(time.time()*1000), source=source, output=output, state='queued', progress=0, cancel=threading.Event(), processes=[])
         try:
             persist_job(job)
             with GUARD: JOBS[identifier] = job
@@ -525,7 +535,7 @@ class Handler(BaseHTTPRequestHandler):
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
         if path == '/health':
-            return self.reply(200, {'version':'1.18.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.19.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeEngine':'FSRCNN fallback','realtimeTemporal':False,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None

@@ -10,7 +10,7 @@ const HEAP_WARN_BYTES = 800 * 1024 * 1024;
 const AUTO_SEGMENT_BYTES = HEAP_WARN_BYTES;
 const HEAP_LIMIT_BYTES = 1600 * 1024 * 1024;
 const STORAGE_FLOOR_BYTES = 500 * 1024 * 1024;
-const OPEN_QUALITIES = new Set(['source', '2160', '1440', '1080', '720']);
+const OPEN_QUALITIES = new Set(['source', 'native', '2160', '1440', '1080', '720']);
 
 const I18N = {
   zh: {
@@ -284,7 +284,7 @@ async function loadSettings() {
   const { settings = {}, lang, pendingLink, filenameSuggestion } = await chrome.storage.local.get(['settings', 'lang', 'pendingLink', 'filenameSuggestion']);
   if (settings.quality === '1' || settings.quality === '0') settings.quality = 'standard';
   // 1.0 folded resolution into the quality preset; 1.1 gives it its own field.
-  if (!OPEN_QUALITIES.has(settings.resolution)) settings.resolution = settings.quality === 'compact' ? '720' : '1080';
+  if (!OPEN_QUALITIES.has(settings.resolution)) settings.resolution = settings.quality === 'compact' ? '720' : 'native';
   if (lang && I18N[lang]) LANG = lang;
   else if (!String(navigator.language || '').startsWith('zh')) LANG = 'en';
   await refreshMicDevices().catch(() => {});
@@ -332,7 +332,7 @@ function applyCapturePreset() {
   $('telegram-channel').hidden = !telegram; $('course-panel').hidden = true;
   if (!telegram) return;
   const mp4 = MP4_TYPES.some(type => MediaRecorder.isTypeSupported(type));
-  const values = { format: mp4 ? 'mp4' : 'webm', resolution: 'source', quality: 'high', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };
+  const values = { format: mp4 ? 'mp4' : 'webm', resolution: 'native', quality: 'high', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };
   for (const [id, value] of Object.entries(values)) $(id).value = value;
   for (const id of ['microphone', 'camera', 'clicks', 'course-enabled']) $(id).checked = false;
   $('screen-audio').checked = true;
@@ -342,7 +342,8 @@ function applyCapturePreset() {
 const MP4_TYPES = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.640033,mp4a.40.2'];
 function selectedExtension() { return $('format').value === 'mp4' ? 'mp4' : 'webm'; }
 function mediaType() {
-  const types = selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const format=$('format').value;
+  const types = format==='vp9' ? ['video/webm;codecs=vp9,opus'] : format==='av1' ? ['video/webm;codecs=av1,opus'] : selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
   return types.find(type => MediaRecorder.isTypeSupported(type));
 }
 function recordingExtension() { return recordingMime.startsWith('video/mp4') ? 'mp4' : 'webm'; }
@@ -362,17 +363,24 @@ async function applyOutputSize(stream) {
   const before = track ? sizeOf(track.getSettings()) : '';
   if (track && track.applyConstraints) {
     const constraints = Number($('framerate').value) ? { frameRate: { ideal: frameRate, max: frameRate } } : {};
-    if (resolution !== 'source') {
+    if (resolution === 'native') {
+      const caps=track.getCapabilities?.() || {};
+      if(caps.width?.max)constraints.width={ideal:caps.width.max};
+      if(caps.height?.max)constraints.height={ideal:caps.height.max};
+      constraints.resizeMode='none';constraints.cursor='always';
+    } else if (resolution !== 'source') {
       const short = Number(resolution), long = Math.round(short * 16 / 9);
       const source = track.getSettings(), portrait = source.height > source.width;
       constraints.height = { max: portrait ? long : short };
       constraints.width = { max: portrait ? short : long };
     }
-    try { await track.applyConstraints(constraints); } catch { /* keep the source track settings */ }
+    try { await track.applyConstraints(constraints); } catch {
+      if(resolution==='native'){delete constraints.resizeMode;delete constraints.cursor;try{await track.applyConstraints(constraints);}catch{/* Preserve the take even when native constraints are rejected. */}}
+    }
   }
   const settings = track ? track.getSettings() : {};
   const after = sizeOf(settings);
-  if (resolution === 'source' || !after) return null;
+  if (['source','native'].includes(resolution) || !after) return null;
   const beforeHeight = before ? Number(before.split('×')[1]) || 0 : 0;
   const afterHeight = Math.round(settings.height || 0);
   if (Math.min(settings.height, settings.width) > Number(resolution) + 2 || Math.max(settings.height, settings.width) > Math.round(Number(resolution) * 16 / 9) + 2) return { key: 'capFailed', args: [after] };
@@ -434,9 +442,13 @@ function audioHintKey() {
 
 function videoBitrate(track) {
   const { width = 1920, height = 1080, frameRate = Number($('framerate').value) || 30 } = track.getSettings();
-  const factor = Math.max(0.5, Math.min(32, width * height / (1920 * 1080) * frameRate / 30));
+  const pixels=width*height/(1920*1080),fps=Math.max(1,frameRate)/30;
   const content=$('capture-content')?.value;const scene=content==='auto' || !content ? ($('capture-mode')?.value==='telegram'?'motion':'detail'):content;
-  return Math.min(180000000,Math.round((BITRATES[$('quality').value] || BITRATES.standard) * factor * (scene==='motion' ? 1.25 : 1.15)));
+  const quality=$('quality').value;
+  const base=scene==='detail'?(quality==='high'?24000000:18000000):(quality==='high'?14000000:quality==='compact'?5000000:10000000);
+  // Sublinear scaling preserves text without making 4K30 four times as large.
+  return Math.min(180000000,Math.round(base * Math.max(.5,Math.pow(pixels,.75)) * Math.pow(fps,.585)));
+
 }
 function captureAudioBitrate(){return Number($('capture-audio-quality')?.value)||AUDIO_BITRATE;
 }
@@ -584,7 +596,7 @@ async function start() {
     if ($('capture-mode')?.value === 'telegram') await prepareTelegramChannel();
     else captureChannelContext = null;
     if (!mediaType()) throw new Error(L(selectedExtension() === 'mp4' ? 'errMP4' : 'errUnsupported'));
-    displayStream = $('capture-method').value==='tab' ? await captureOriginalTab() : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: $('screen-audio').checked });
+    displayStream = $('capture-method').value==='tab' ? await captureOriginalTab() : await navigator.mediaDevices.getDisplayMedia({ video: {cursor:'always',width:{ideal:Math.round(screen.width * (window.devicePixelRatio || 1))},height:{ideal:Math.round(screen.height * (window.devicePixelRatio || 1))}}, audio: $('screen-audio').checked });
   } catch (error) {
     setNotice(captureError(error));
     resetStart();
