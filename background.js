@@ -29,7 +29,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  (async()=>{
   if(!await chrome.permissions.contains({permissions:['tabCapture']}))throw new Error('Tab capture permission is required');
   const {pointerTargetTabId}=await chrome.storage.session.get('pointerTargetTabId');
-  if(!pointerTargetTabId || pointerTargetTabId===sender.tab.id)throw new Error('请在原视频标签页点击 WeScreen 再打开录制器 / Open WeScreen from the original video tab');
+  if(!pointerTargetTabId || pointerTargetTabId===sender.tab.id){respond({error:'Original source tab is not selected',code:'SOURCE_TAB_REQUIRED'});return;}
   const target=await chrome.tabs.get(pointerTargetTabId);
   if(!/^https?:\/\//i.test(target.url || ''))throw new Error('原视频标签页不可访问，请重新点击扩展 / Reopen WeScreen from the video tab');
   const streamId=await chrome.tabCapture.getMediaStreamId({targetTabId:pointerTargetTabId,consumerTabId:sender.tab.id});respond({streamId});

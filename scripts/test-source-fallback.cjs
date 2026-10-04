@@ -1,0 +1,5 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const controls={'quiet-tab-audio':{checked:true},'screen-audio':{checked:true},'capture-method':{value:'tab'}};
+let picked=0,notice='';const stream={};const ctx=vm.createContext({chrome:{runtime:{sendMessage:async()=>({code:'SOURCE_TAB_REQUIRED'})}},navigator:{mediaDevices:{getDisplayMedia:async options=>{picked++;assert.equal(options.audio,true);return stream;},getUserMedia:async()=>{throw Error('Must not invoke tab capture without source');}}},$:id=>controls[id],E:zh=>zh,setNotice:text=>notice=text});
+vm.runInContext(fs.readFileSync('tab-source.js','utf8'),ctx);
+(async()=>{assert.equal(await vm.runInContext('captureOriginalTab()',ctx),stream);assert.equal(picked,1);assert.equal(controls['capture-method'].value,'shared');assert.equal(controls['quiet-tab-audio'].checked,false);assert.match(notice,/共享声音/);console.log('Missing source selects browser sharing and disables unsupported quiet capture');})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -4,6 +4,13 @@ let tabPlayback=null,tabAudioTracks=[],quietTabCapture=false;
 async function captureOriginalTab(){
  quietTabCapture=$('quiet-tab-audio').checked;
  const response=await chrome.runtime.sendMessage({type:'original-tab-stream'});
+ if(response?.code==='SOURCE_TAB_REQUIRED'){
+  quietTabCapture=false;
+  setNotice(E('请在浏览器选择 Telegram 视频所在标签页，并勾选共享声音。此方式不会自动静音原标签页。','Choose the Telegram video tab in the browser and share its audio. This mode does not automatically mute the source tab.'));
+  const stream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:'always'},audio:$('screen-audio').checked});
+  $('capture-method').value='shared';$('quiet-tab-audio').checked=false;
+  return stream;
+ }
  if(response?.error || !response?.streamId)throw new Error(response?.error || E('请先在视频标签页点击 WeScreen，再打开录制器。','Open WeScreen from the video tab first.'));
  const source={mandatory:{chromeMediaSource:'tab',chromeMediaSourceId:response.streamId}};
  const stream=await navigator.mediaDevices.getUserMedia({video:source,audio:source});tabAudioTracks=stream.getAudioTracks();
