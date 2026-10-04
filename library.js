@@ -75,7 +75,7 @@ async function playRecording(entry) {
   playbackBlobCache.clear();playbackParts=group?._parts || [entry];playbackPartIndex=0;
   const resume=playbackParts.length>1 ? await readStore('meta','continuous:'+(playbackParts[0].recordingGroupId || playbackParts[0].id)):null;
   await loadRecordingPart(resume && playbackParts.some(e=>e.id===resume.partId) ? playbackParts.findIndex(e=>e.id===resume.partId):0,resume?.time ?? null);
-  renderRecordingReview(playbackParts[0]).catch(error=>$('review-summary').textContent=error.message);$('result-warning').hidden=true;show('result');
+  renderRecordingReview(playbackParts[0]).catch(error=>$('review-summary').textContent=error.message);$('result-warning').hidden=true;navigateWorkspace('player');
   if (typeof rememberPlaylistRecording === 'function') await rememberPlaylistRecording(group).catch(error => {
     $('playback-status').textContent=E('录像已打开，但播放列表保存失败，请检查存储空间。','Recording opened, but playlist could not be saved. Check available storage.');
   });

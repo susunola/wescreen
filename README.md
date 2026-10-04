@@ -4,7 +4,7 @@
 
 ## Install
 
-Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.22.1.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
+Load this directory as an unpacked extension from your browser's extension developer page, or extract `store/wescreen-1.23.0.zip` and load it. Click WeScreen to open the recorder. Update/reload the extension after changing files; close old recorder pages before the database upgrade.
 
 ## Workflow
 
@@ -93,3 +93,5 @@ Experimental face restoration is available under Player settings → Tools → F
 The five workspaces share a compact charcoal and champagne interface. Recording settings sit beside the source view; the library defaults to rows, with related versions expandable beneath the original and an optional grid view. Restoration uses a parameter sidebar and comparison workspace. Chinese uses bundled Source Han Sans (SIL OFL); English prefers system SF Pro on macOS and falls back to the platform font elsewhere. Update the existing extension in place to retain recordings.
 
 Use **Open local video**, or drop a video onto the library/player, for direct File-backed playback without importing. Supported codecs depend on the browser; use **Import video** to keep a persistent library copy.
+
+The dedicated **Player** tab opens local files without importing and plays recordings selected in the library. Recording completion keeps the review and offers **Play now**. Telegram setup lives in its dedicated tab.

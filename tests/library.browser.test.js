@@ -121,7 +121,7 @@ test('Telegram channel plans persist, recordings advance only their channel and 
   await capture(p);await p.waitForTimeout(1200);await stopCapture(p);
   await waitForStorage(p,async()=>(await readStore('meta')).some(e=>e?.channelProfile && e.nextEpisode===8));
   const entry=await p.evaluate(async()=>(await readStore('recordings'))[0]);assert.equal(entry.channelId,id);assert.equal(entry.episode,7);assert.equal(entry.sourceUrl,'https://t.me/channel_a/10');assert.equal(entry.sourceTitle,'Video One');
-  await p.locator('#download').click();await p.waitForFunction(()=>window.lastDownload?.filename?.startsWith('WeScreen/Telegram/Channel A/'));assert.equal(await p.locator('#channel-video-title').inputValue(),'Video Two');
+  await p.locator('#result-play').click();assert.equal(await p.locator('#player-view').isVisible(),true);await p.locator('#download').click();await p.waitForFunction(()=>window.lastDownload?.filename?.startsWith('WeScreen/Telegram/Channel A/'));assert.equal(await p.locator('#channel-video-title').inputValue(),'Video Two');
   await p.reload();await p.waitForFunction(()=>document.documentElement.dataset.ready==='true');await p.evaluate(id=>loadTelegramProfiles(id),id);assert.equal(await p.evaluate(()=>chosenChannel().plan.length),2);
   await p.evaluate(()=>{$('capture-mode').value='general';applyCapturePreset();});await capture(p);await p.waitForTimeout(1200);await stopCapture(p);const entries=await p.evaluate(()=>readStore('recordings'));assert.equal(entries.filter(e=>e.channelId===id).length,1);
 }));

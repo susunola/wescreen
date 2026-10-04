@@ -71,3 +71,12 @@
 .studio-ui #about-view .seed-resource h4{font-size:14px}
 .studio-ui #recording-library .library-toolbar .search-symbol{left:12px;top:50%;transform:translateY(-50%);margin:0;font-size:18px;color:var(--muted)}
 .studio-ui #recording-library #library-search{padding-left:36px}
+/* Workspace content needs an inset independent of the application gutters. */
+.studio-ui #recording-library,.studio-ui #channel-workbench,.studio-ui #tasks-view,.studio-ui #about-view{padding:26px;background:#141619;border:1px solid var(--line);border-radius:12px;margin-top:24px}
+.studio-ui #recording-library .library-heading,.studio-ui #channel-workbench .telegram-workbench-heading,.studio-ui #tasks-view .tasks-heading{padding:0;margin-bottom:22px}
+.studio-ui #about-view .about-intro{padding-top:0}
+@media(max-width:700px){.studio-ui #recording-library,.studio-ui #channel-workbench,.studio-ui #tasks-view,.studio-ui #about-view{padding:18px;margin-top:18px}.studio-ui .library-toolbar select{max-width:130px}}
+.studio-ui .scenario-picker{display:none}
+.studio-ui #setup:has(#telegram-guide[hidden]) .telegram-callout{display:none}
+
+.studio-ui #player-view{padding:26px;background:#141619;border:1px solid var(--line);border-radius:12px;margin-top:24px}.studio-ui #player-empty{min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}.studio-ui #player-empty[hidden]{display:none}.studio-ui #player-view>.controls{margin-top:16px}.studio-ui.cinema-mode #player-view{padding:0;margin:0;border:0;background:transparent}.studio-ui.cinema-mode #player-view>.section-head,.studio-ui.cinema-mode #player-view>.controls{display:none}.studio-ui #player-view .section-head{margin-bottom:20px}@media(max-width:700px){.studio-ui #player-view{padding:18px}.studio-ui #player-view #player-empty{padding:16px;min-height:280px}}

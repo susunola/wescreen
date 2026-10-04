@@ -728,7 +728,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   if (storageFailure) { $('result-warning').textContent = L('storageFailed'); $('result-warning').hidden = false; }
   chrome.runtime.sendMessage({ type: 'recording-state', active: false, highlightClicks: false }).catch(() => {});
   show('result');
-  try{if(finalId){const completed=await readStore('recordings',finalId);if(completed)await playRecording(completed);else setPreview(finalBlob);}else setPreview(finalBlob);}catch(error){setPreview(finalBlob);setNotice(error.message);}finally{recorder=null;unlockRecording();}
+  try{if(finalId){const completed=await readStore('recordings',finalId);if(completed){await playRecording(completed);show('result');}else setPreview(finalBlob);}else setPreview(finalBlob);}catch(error){setPreview(finalBlob);setNotice(error.message);}finally{recorder=null;unlockRecording();}
   (finalId ? readStore('recordings',finalId) : Promise.resolve(null)).then(renderRecordingReview).catch(error=>$('review-summary').textContent=error.message);
   if(finalId && activeSegment?.channelMetadata?.sourceMessageKey && typeof inspectTelegramRecording==='function')inspectTelegramRecording(finalId).catch(error=>setNotice(error.message));
   syncMemory();
