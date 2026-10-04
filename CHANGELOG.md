@@ -1,3 +1,13 @@
+# 1.27.4
+
+- Smart best now cancels unrelated restoration chunks after a distant seek and prioritizes the current viewing position.
+- Chunk cancellation retains the uploaded source and completed caches, avoiding unnecessary uploads and repeated processing.
+- Added separate show/hide synchronization thresholds to reduce flickering between original and restored video while retaining the original audio clock.
+- Reduced scheduling delays between completed restoration chunks and waited for prior session cleanup before starting a new session.
+- Verified actual Mac MPS playback, seeking, continuous parts, cache cleanup, chunk cancellation and regeneration, and Chinese/English UI regression tests.
+
+To update, overwrite the existing extension folder and reload the extension. Do not uninstall it, so your recording library is retained.
+
 # 1.27.3
 
 - Unified local playback restoration under Smart best. The picture quality menu now offers Original and Smart best.
