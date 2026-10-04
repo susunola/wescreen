@@ -259,3 +259,5 @@
 #playback-close{font-size:13px;white-space:nowrap}
 
 #smart-restored-video::cue{font-size:var(--subtitle-size,24px);text-shadow:0 1px 3px #000,1px 0 2px #000,-1px 0 2px #000;background:#0005;}
+/* Offline restoration is no longer a user workflow. Keep legacy nodes for stored jobs. */
+#playback-ai,#playback-enhance,#player-face-restore,#player-audio-repair,#batch-add,.batch-mode-field,#batch-queue-panel{display:none!important}
