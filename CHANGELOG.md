@@ -1,3 +1,15 @@
+# 1.29.0 — 2026-10-25
+
+- Add compressed multipart merging and resumable incremental library merging, including conservative audio/video overlap checks and validated output duration.
+- Reduce new recording defaults to 1080p with compact bitrate budgets; add recording presets, measured storage usage, and oversized-output warnings.
+- Support verified disk-backed recording archives with browser recovery fallback and file relinking.
+- Improve Smart best retries, session heartbeat, cache maintenance, and clean-source preservation.
+- Refine workspace alignment, control sizes, responsive library layouts, and Chinese/English readability.
+- Add helper protocol/build diagnostics, a macOS managed installer, transactional code backup/rollback, and maintenance lease cleanup.
+- Add recording soak and hardware encoder probes, plus reproducible same-input quality comparison with durable blind-review identities, score import, and integrity checks.
+
+Update the extension in its existing folder and reload it in Edge; do not uninstall it or clear extension data. Update the helper as well to use the new local processing features. Recordings and model runtimes are preserved. Native capture replacement, eight-hour real-source acceptance, and an actual Topaz comparison are not included in this release.
+
 # 1.28.0
 
 - Smart best now buffers at unfinished segments and resumes restored playback when the segment is ready, without silently switching back to original frames.
