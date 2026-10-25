@@ -137,3 +137,9 @@ class SmartRestoreTest(unittest.TestCase):
         edge=np.full_like(frame,65);edge[:,83:]=190
         self.assertEqual(codec_grids(cv2.cvtColor(edge,cv2.COLOR_BGR2GRAY)),[None,None])
         np.testing.assert_array_equal(clean_blocks(edge,[None,None]),edge)
+
+class CleanPreservationTest(unittest.TestCase):
+    def test_explicit_clean_profile_preserves_exact_pixels(self):
+        rng=np.random.default_rng(38)
+        image=rng.integers(0,256,(96,128,3),dtype=np.uint8)
+        np.testing.assert_array_equal(restore(image,TemporalRepair(),0,profile={'degraded':False}),image)

@@ -138,7 +138,7 @@ async function renderRecordingLibrary() {
     const detail = document.createElement('p'); detail.className = 'hint'; detail.textContent = `${entry.duration ? fmt(entry.duration) : '--:--'} · ${entry.width && entry.height ? `${entry.width}×${entry.height} · ` : ''}${fmtBytes(entry.size)} · ${entry.course || L('uncategorized')} · ${new Date(entry.createdAt).toLocaleDateString(LANG === 'zh' ? 'zh-CN' : 'en')}`; body.append(detail);
     if (entry.enhancedFrom) { const parent = all.find(item => item.id === entry.enhancedFrom); if (parent && !parent.deletedAt) { const original=libraryButton('originalVideo',()=>playRecording(parent),'text');original.classList.add('original-link');detail.append(' · ',original); } else { const version=document.createElement('p');version.className='version-label';version.textContent=L('originalUnavailable');body.append(version); } }
 
-    const location = document.createElement('p'); location.className = 'hint recording-location'; location.textContent = entry.diskName ? E('磁盘同步：','Disk copy: ')+entry.diskName+' · '+L('localLocation'):L('localLocation'); body.append(location);
+    const location = document.createElement('p'); location.className = 'hint recording-location'; location.textContent = entry.storageKind==='disk' ? E('存储：磁盘文件 · 录像库仅保存索引 · ','Storage: disk file · library index only · ')+(entry.diskName||entry.name) : entry.diskName ? E('磁盘同步：','Disk copy: ')+entry.diskName+' · '+L('localLocation'):L('localLocation'); body.append(location);
     if (entry.downloadPath) { const path = document.createElement('p'); path.className = 'hint recording-location'; path.textContent = L(entry.downloadExists === false ? 'missingDownload' : 'downloadedLocation', entry.downloadPath); body.append(path); }
     if (entry.sourceUrl) { const link = document.createElement('a'); link.href = telegramLink(entry.sourceUrl); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = L('sourceMessage'); body.append(link); }
     const actions = document.createElement('div'); actions.className = 'controls media-actions';
@@ -148,6 +148,7 @@ async function renderRecordingLibrary() {
     } else {
       actions.append(libraryButton('openRecording', () => playRecording(entry), 'primary'));
       if(!entry._parts)actions.append(libraryButton('enhanceRecording', () => openEnhancement(entry)));
+      if(entry._parts)actions.append(libraryButton('mergeDownload', () => mergeRecordingParts(entry,true,{compress:true,autoDownload:true})));
       if(entry._parts){const parts=document.createElement('details');parts.className='recording-parts';const summary=document.createElement('summary');summary.textContent=LANG==='zh'?'分段文件与单独处理':'Parts and individual processing';parts.append(summary);for(const part of entry._parts){const line=document.createElement('div');line.className='controls';const label=document.createElement('span');label.textContent=part.name;line.append(label,libraryButton('enhanceRecording',()=>openEnhancement(part)),libraryButton('btnDownload',async()=>download(await readStore('videos',part.id),part.name,part.id)));parts.append(line);}body.append(parts);}
       const menu = document.createElement('details'); menu.className = 'row-menu'; const summary = document.createElement('summary'); summary.textContent = '⋯';summary.setAttribute('aria-label',L('more')); menu.append(summary);
       const items = document.createElement('div'); items.className = 'menu-items';
@@ -196,3 +197,8 @@ async function importRecording(file) {
 }
 
 window.addEventListener('pagehide',()=>{playbackBlobCache.clear();playbackNextPart=null;});
+
+// Rebuild generated row labels and filter choices when switching interface language.
+window.addEventListener('wescreen-language',()=>{
+  renderRecordingLibrary().catch(error=>{ $('library-status').textContent=error.message; });
+});

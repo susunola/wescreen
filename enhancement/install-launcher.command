@@ -6,6 +6,7 @@ if [ ! -x .venv/bin/python ]; then
   exit 1
 fi
 .venv/bin/python - <<'PY'
+from installation import build_id
 import pathlib,plistlib,subprocess,shlex,json,os,sys,shutil,re
 root=pathlib.Path.cwd();runtime=root/'.runtime';runtime.mkdir(exist_ok=True)
 support=pathlib.Path.home()/'Library/Application Support/WeScreen/launcher';support.mkdir(parents=True,exist_ok=True);support.chmod(0o700)
@@ -13,10 +14,10 @@ pair=support/'pairing';pair.mkdir(exist_ok=True);pair.chmod(0o700)
 for name in ['extension-origin.txt','trusted-origins.json']:
     old=runtime/'jobs'/name
     if old.exists() and not (pair/name).exists(): shutil.copy2(old,pair/name)
-for name in ['launch-managed.py','pairing.py']: shutil.copy2(root/name,support/name)
+for name in ['launch-managed.py','pairing.py','installation.py']: shutil.copy2(root/name,support/name)
 token=support/'token.txt'
 if (runtime/'token.txt').exists(): shutil.copy2(runtime/'token.txt',token);token.chmod(0o600)
-config=support/'launcher-config.json';config.write_text(json.dumps({'pairDirectory':str(pair),'tokenFile':str(token),'version':re.search(r"'version'\s*:\s*'([^']+)'",(root/'server.py').read_text()).group(1)}));config.chmod(0o600)
+config=support/'launcher-config.json';config.write_text(json.dumps({'buildId':build_id(root),'pairDirectory':str(pair),'tokenFile':str(token),'version':re.search(r"'version'\s*:\s*'([^']+)'",(root/'server.py').read_text()).group(1)}));config.chmod(0o600)
 launcher=support/'launch-managed.sh'
 launcher.write_text('#!/bin/bash\nset -euo pipefail\n'+shlex.quote(sys._base_executable)+' '+shlex.quote(str(support/'launch-managed.py'))+' "$@"\n')
 launcher.chmod(0o700)

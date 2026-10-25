@@ -41,7 +41,7 @@ def run(args):
     encoder=None
     try:
         neural=NeuralRepair(**neural_settings(profile)) if args.neural and not args.text else None
-        temporal=TemporalRepair();count=0;delivered=0;first_time=None;scale=args.scale if not args.text else 1
+        temporal=TemporalRepair();count=0;delivered=0;neural_calls=0;first_time=None;scale=args.scale if not args.text else 1
         # H.264 4:2:0 is used only for browser playback cache; originals are retained.
         encoder=subprocess.Popen(['ffmpeg','-nostdin','-y','-v','error','-f','rawvideo','-pix_fmt','bgr24','-s',f'{w*scale}x{h*scale}','-r',str(fps),'-i','pipe:0','-an','-c:v','libx264','-crf','15','-preset','fast','-pix_fmt','yuv420p','-movflags','+faststart',args.output],stdin=subprocess.PIPE)
         size=w*h*3
@@ -52,6 +52,7 @@ def run(args):
             frame=np.frombuffer(data,np.uint8).reshape(h,w,3)
             if profile is None:profile=diagnose(frame)
             timestamp=begin+count/fps;count+=1
+            if neural and profile and profile.get('degraded') and not args.text:neural_calls+=1
             repaired=restore(frame,temporal,timestamp,neural,profile,args.text,scale)
             if timestamp+1e-6<args.start:continue
             if first_time is None:first_time=timestamp
@@ -59,7 +60,7 @@ def run(args):
             if delivered%5==0:print(json.dumps({'progress':min(.99,delivered/fps/args.duration)}),flush=True)
         encoder.stdin.close()
         if encoder.wait()!=0 or decoder.wait()!=0 or not delivered:raise RuntimeError('Smart chunk encode/decode failed')
-        print(json.dumps({'progress':1,'engine':(f'Real-ESRGAN / {neural.device.upper()}'+(' · native residual guide' if max(w,h)>960 else '')) if neural else 'Motion-aligned spatial repair','analysis':profile,'settings':neural_settings(profile) if neural else {},'frames':delivered,'duration':delivered/fps,'start':first_time}),flush=True)
+        print(json.dumps({'progress':1,'engine':(f'Real-ESRGAN / {neural.device.upper()}'+(' · native residual guide' if max(w,h)>960 else '')) if neural_calls else ('Clean source passthrough' if profile and not profile.get('degraded') and scale==1 else 'Motion-aligned spatial repair'),'analysis':profile,'settings':neural_settings(profile) if neural else {},'frames':delivered,'neuralInvocations':neural_calls,'duration':delivered/fps,'start':first_time}),flush=True)
     finally:
         for process in [decoder,encoder]:
             if process and process.poll() is None:process.terminate()

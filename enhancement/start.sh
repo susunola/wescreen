@@ -35,4 +35,5 @@ fi
 if ! .venv/bin/python -c "import cv2, numpy; assert hasattr(cv2, 'dnn_superres')" 2>/dev/null; then
   .venv/bin/python -m pip install -r requirements.txt
 fi
+if [ "${1:-}" = "--setup-only" ]; then exit 0; fi
 exec .venv/bin/python server.py

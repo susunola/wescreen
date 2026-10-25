@@ -132,6 +132,9 @@ def recover_soft_detail(frame,profile):
 
 
 def restore(frame,temporal,timestamp,neural=None,profile=None,text=False,output_scale=1):
+    # Preserve diagnosed clean sources; avoid unnecessary sharpening and tone changes.
+    if profile is not None and not profile.get('degraded',True) and output_scale==1:
+        return frame.copy()
     if text:
         # No temporal or generative pixels in explicitly recorded desktop text.
         repaired=adaptive_detail(frame)

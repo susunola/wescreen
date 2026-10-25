@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import urllib.request
 import sys
+from installation import build_id
 from pairing import parse_pair_url, trusted_origins, approve_pairing
 root=Path(__file__).resolve().parent
 config=json.loads((root/'launcher-config.json').read_text()) if (root/'launcher-config.json').exists() else None
@@ -26,8 +27,9 @@ try:
     # Compare against the installed code, never a stale hard-coded release.
     import re
     version=config['version'] if config else re.search(r"'version'\s*:\s*'([^']+)'",(root/'server.py').read_text()).group(1)
-    if health.get('merge') and health.get('version')==version: raise SystemExit(0)
-    if any(j['state'] in ('queued','processing') for j in get('/jobs')['jobs']):
+    expected_build=config.get('buildId') if config else build_id(root)
+    if health.get('mergeCompression') and health.get('version')==version and health.get('buildId')==expected_build: raise SystemExit(0)
+    if health.get('activeSmartSessions',1)>0 or any(j['state'] in ('queued','processing') for j in get('/jobs')['jobs']):
         raise SystemExit('An active processing job is running. Finish it before updating the helper.')
 except (OSError,ValueError):
     pass

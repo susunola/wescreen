@@ -34,6 +34,7 @@ class SmartCacheTest(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as error:self.request('/smart/sources','POST',self.original,False)
         self.assertEqual(error.exception.code,401)
         source=json.loads(self.request('/smart/sources','POST',self.original));sid=source['id']
+        self.assertTrue(json.loads(self.request('/smart/'+sid))['alive'])
         with self.assertRaises(urllib.error.HTTPError):self.request(f'/smart/{sid}/chunks/1','POST',b'')
         self.request(f'/smart/{sid}/chunks/0','POST',b'')
         deadline=time.monotonic()+20
@@ -115,3 +116,41 @@ class SmartCacheTest(unittest.TestCase):
         reopened=json.loads(self.request('/smart/sources','POST',data))
         self.assertEqual(len(reopened['completed']),7)
         self.assertGreater(len(self.request(f"/smart/{reopened['id']}/chunks/0?result=1")),100)
+
+class StorageApiTest(unittest.TestCase):
+    setUp=SmartCacheTest.setUp
+    tearDown=SmartCacheTest.tearDown
+    request=SmartCacheTest.request
+    def test_storage_and_cache_require_authentication_and_return_aggregate_counts(self):
+        for endpoint in ['/storage','/smart/cache']:
+            with self.assertRaises(urllib.error.HTTPError) as error:self.request(endpoint,token=False)
+            self.assertEqual(error.exception.code,401)
+            report=json.loads(self.request(endpoint))
+            self.assertNotIn(str(self.root),json.dumps(report))
+            self.assertTrue(all(isinstance(value,(int,float)) for value in report.values()))
+
+class CacheMaintenanceTest(unittest.TestCase):
+    def test_cleanup_preserves_active_assets_and_unknown_directories(self):
+        from unittest.mock import patch
+        class Handler:
+            path='/smart/cache'
+            def reply(self,status,payload):self.status=status;self.payload=payload
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);active=root/('a'*64);inactive=root/('b'*64);unknown=root/'original-recordings'
+            for folder in [active,inactive,unknown]:folder.mkdir();(folder/'data').write_bytes(b'12345')
+            sessions={'active':{'asset':active,'touch':time.monotonic()}}
+            with patch.object(smart_cache,'CACHE',root),patch.object(smart_cache,'SESSIONS',sessions):
+                h=Handler();self.assertTrue(smart_cache.handle_smart(h,'DELETE',{}));self.assertEqual(h.status,200)
+                self.assertTrue(active.exists());self.assertTrue(unknown.exists());self.assertFalse(inactive.exists());self.assertEqual(h.payload['removedBytes'],5)
+
+class UpdateLeaseTest(unittest.TestCase):
+    setUp=SmartCacheTest.setUp
+    tearDown=SmartCacheTest.tearDown
+    request=SmartCacheTest.request
+    def test_update_lease_blocks_new_work_until_released(self):
+        try:
+            self.assertTrue(json.loads(self.request('/maintenance','POST',b'{}'))['readyForUpdate'])
+            with self.assertRaises(urllib.error.HTTPError) as error:self.request('/smart/sources','POST',self.original)
+            self.assertEqual(error.exception.code,503)
+        finally:self.request('/maintenance','DELETE')
+        self.assertFalse(server.MAINTENANCE_UNTIL)

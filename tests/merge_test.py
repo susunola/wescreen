@@ -10,8 +10,8 @@ class MergeTest(unittest.TestCase):
  def request(self,path,data=None,token=True):
   headers={'X-WeScreen-Token':server.TOKEN} if token else {};req=urllib.request.Request(self.url+path,data=data,headers=headers);return urllib.request.urlopen(req,timeout=30)
  def upload(self,path=None):return json.load(self.request('/uploads',(path or self.clip).read_bytes()))['id']
- def job(self,ids,compatible=False,smart=False):
-  result=json.load(self.request('/jobs/merge',json.dumps({'parts':ids,'compatible':compatible,'name':'test.mp4','smartTail':smart,'requireSilence':True}).encode()));identifier=result['id'];deadline=time.time()+30
+ def job(self,ids,compatible=False,smart=False,compress=False):
+  result=json.load(self.request('/jobs/merge',json.dumps({'parts':ids,'compatible':compatible,'compress':compress,'name':'test.mp4','smartTail':smart,'requireSilence':True}).encode()));identifier=result['id'];deadline=time.time()+30
   while time.time()<deadline:
    job=json.load(self.request('/jobs/'+identifier))
    if job['state'] in ('done','error','cancelled'):return identifier,job
@@ -30,6 +30,43 @@ class MergeTest(unittest.TestCase):
  def test_invalid_media_not_retained(self):
   with self.assertRaises(urllib.error.HTTPError):self.request('/uploads',b'not video')
   self.assertEqual(list((server.WORK/'uploads').iterdir()),[])
+ def test_compressed_merge_caps_resolution_reduces_size_and_preserves_original(self):
+  large=server.WORK/'large.mp4'
+  subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=2560x1440:rate=12','-f','lavfi','-i','sine=frequency=440:sample_rate=48000','-t','2','-c:v','libx264','-preset','ultrafast','-crf','0','-c:a','aac',str(large)],check=True)
+  before=large.read_bytes()
+  identifier,job=self.job([self.upload(large),self.upload(large)],compress=True)
+  self.assertEqual(job['state'],'done',job);self.assertEqual((job['width'],job['height']),(1920,1080));self.assertAlmostEqual(job['duration'],4,delta=.2)
+  self.assertTrue(job['compress']);self.assertEqual(job['stage'],'compressed-merge');self.assertLess(job['size'],large.stat().st_size);self.assertEqual(large.read_bytes(),before)
+  self.assertTrue(json.loads((server.JOBS[identifier]['output'].parent/'job.json').read_text())['compress'])
+  self.assertEqual(list(server.JOBS[identifier]['output'].parent.glob('normalized-*.mp4')),[])
+ def test_compressed_merge_handles_reversed_tracks_and_missing_audio(self):
+  reversed_clip=server.WORK/'reversed.mp4';silent=server.WORK/'silent.mp4'
+  subprocess.run(['ffmpeg','-v','error','-i',str(self.clip),'-map','0:a:0','-map','0:v:0','-c','copy',str(reversed_clip)],check=True)
+  subprocess.run(['ffmpeg','-v','error','-i',str(self.clip),'-map','0:v:0','-c','copy',str(silent)],check=True)
+  identifier,job=self.job([self.upload(),self.upload(reversed_clip),self.upload(silent)],compress=True)
+  self.assertEqual(job['state'],'done',job);self.assertAlmostEqual(job['duration'],3,delta=.2);self.assertEqual((job['width'],job['height']),(160,90))
+  output=server.JOBS[identifier]['output'];streams=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(output)]))['streams']
+  self.assertEqual([s['codec_name'] for s in streams],['h264','aac'])
+  subprocess.run(['ffmpeg','-v','error','-i',str(output),'-f','null','-'],check=True)
+ def test_compression_dimensions_preserve_portrait_and_ultrawide(self):
+  from merge import compressed_dimensions
+  self.assertEqual(compressed_dimensions(3824,1770),(1920,888));self.assertEqual(compressed_dimensions(2160,3840),(1080,1920));self.assertEqual(compressed_dimensions(320,180),(320,180))
+ def test_compressed_merge_normalizes_different_video_time_bases(self):
+  other=server.WORK/'different-clock.mp4'
+  subprocess.run(['ffmpeg','-v','error','-i',str(self.clip),'-c','copy','-video_track_timescale','19264',str(other)],check=True)
+  identifier,job=self.job([self.upload(),self.upload(other)],compress=True)
+  self.assertEqual(job['state'],'done',job);self.assertAlmostEqual(job['duration'],2,delta=.15)
+  streams=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(server.JOBS[identifier]['output'])]))['streams']
+  self.assertEqual(streams[0]['time_base'],'1/90000')
+ def test_duration_mismatch_is_not_exported(self):
+  from unittest.mock import patch
+  probe=server.probe
+  def wrong_duration(path):
+   w,h,f,d=probe(path)
+   return (w,h,f,d*100 if Path(path).name=='enhanced.mp4' else d)
+  with patch.object(server,'probe',side_effect=wrong_duration):
+   identifier,job=self.job([self.upload(),self.upload()],compress=True)
+  self.assertEqual(job['state'],'error');self.assertIn('duration',job['error']);self.assertFalse(server.JOBS[identifier]['output'].exists())
  def test_static_tail_crosses_parts_and_originals_remain(self):
   first=server.WORK/'first.mp4';second=server.WORK/'second.mp4'
   subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=160x90:rate=5:duration=3','-f','lavfi','-i','anullsrc=r=48000:cl=mono','-vf','tpad=stop_mode=clone:stop_duration=75','-t','78','-c:v','libx264','-g','5','-c:a','aac',str(first)],check=True)

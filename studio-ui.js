@@ -36,6 +36,9 @@
   let layout='rows';try{layout=localStorage.getItem('wescreen-library-layout')==='cards'?'cards':'rows';}catch{}
   function setLayout(value){layout=value;$('recording-items').dataset.layout=value;buttons.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.libraryLayout===value)));try{localStorage.setItem('wescreen-library-layout',value);}catch{}}
   setLayout(layout);
+  // Keep view controls with the filters; explanatory copy gets its own final row.
+  const toolbar=document.querySelector('.library-toolbar');
+  if(toolbar?.querySelector('.library-warning'))toolbar.append(toolbar.querySelector('.library-warning'));
   // Collapse related versions into their original row without replacing action handlers.
   const list=$('recording-items');let grouping=false;
   const expanded=new Set();

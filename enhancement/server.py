@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from installation import build_id, PROTOCOL_VERSION
 from realtime import enhance_frame
 from smart_cache import handle_smart, start_cleanup, SESSIONS as SMART_SESSIONS, cleanup_session
 from smart_model import smart_ready
@@ -22,12 +23,14 @@ from face import face_ready, run_face, file_sha256
 from pairing import connect_origin
 from tail import trim_static_tail
 from merge import handle_media_post
+from sequence_merge import handle_sequence
 
 for ffmpeg_bin in ('/opt/homebrew/opt/ffmpeg-full/bin','/usr/local/opt/ffmpeg-full/bin'):
     if Path(ffmpeg_bin,'ffmpeg').is_file():
         os.environ['PATH']=ffmpeg_bin+os.pathsep+os.environ.get('PATH','');break
 
 ROOT = Path(__file__).resolve().parent
+BUILD_ID = build_id(ROOT)
 MODEL = ROOT / 'models' / 'FSRCNN_x2.pb'
 MODEL_HASH = '366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c'
 FILTERS = {
@@ -56,6 +59,8 @@ TOKEN = os.environ.get('WESCREEN_ENHANCE_TOKEN') or (TOKEN_FILE.read_text().stri
 JOBS = {}
 GUARD = threading.Lock()
 SLOT = threading.Lock()
+MAINTENANCE_GATE=threading.RLock()
+MAINTENANCE_UNTIL=0
 WORK = Path(os.environ.get('WESCREEN_WORK_DIR') or ROOT / '.runtime' / 'jobs')
 WORK.mkdir(parents=True, exist_ok=True, mode=0o700)
 WORK.chmod(0o700)
@@ -69,7 +74,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding','faceFidelity','facePreviewId','faceRestoredFrames','faceSourceHash')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding','faceFidelity','facePreviewId','faceRestoredFrames','faceSourceHash','compress','sequence','receivedParts','totalParts','overlapRemoved')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -410,6 +415,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204); self.cors_headers(); self.end_headers()
 
     def do_POST(self):
+        with MAINTENANCE_GATE:
+            self._do_POST()
+
+    def _do_POST(self):
+        global MAINTENANCE_UNTIL
         if urlparse(self.path).path == '/connect':
             origin = self.headers.get('Origin', '')
             if self.headers.get('Host') not in (f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}') or not re.fullmatch(r'chrome-extension://[a-p]{32}', origin):
@@ -423,7 +433,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'token': TOKEN})
         if not self.authorized():
             return
+        if urlparse(self.path).path=='/maintenance':
+            with GUARD:
+                if SLOT.locked() or SMART_SESSIONS or any(job['state'] in ('queued','processing') for job in JOBS.values()):return self.reply(409,{'error':'Finish active tasks and close Smart playback before updating'})
+                MAINTENANCE_UNTIL=time.monotonic()+900
+            return self.reply(200,{'readyForUpdate':True})
+        if time.monotonic()<MAINTENANCE_UNTIL:return self.reply(503,{'error':'Local helper update in progress; retry after it completes'})
         if handle_smart(self,'POST',globals()): return
+        if handle_sequence(self,urlparse(self.path).path,globals()): return
         if handle_media_post(self,urlparse(self.path).path,globals()): return
         if urlparse(self.path).path == '/realtime/frame':
             try: size = int(self.headers.get('Content-Length', '0'))
@@ -562,8 +579,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/jobs':
             with GUARD: jobs = [{key: job[key] for key in PUBLIC_KEYS if key in job} for job in JOBS.values()]
             return self.reply(200, {'jobs': jobs})
+        if path == '/storage':
+            def folder_bytes(folder):
+                return sum(p.stat().st_size for p in folder.rglob('*') if p.is_file()) if folder.exists() else 0
+            with GUARD:
+                active=sum(job['state'] in ('queued','processing') for job in JOBS.values())
+            return self.reply(200,{'diskFree':shutil.disk_usage(WORK).free,'uploadsBytes':folder_bytes(WORK/'uploads'),'jobsBytes':sum(folder_bytes(p) for p in WORK.iterdir() if p.is_dir() and p.name!='uploads'),'activeJobs':active})
         if path == '/health':
-            return self.reply(200, {'version':'1.28.0','nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'Adaptive spatial repair / FSRCNN 2x','realtimeTemporal':False,'smartChunks':True,'smartNeural':smart_ready(),'smartTemporal':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.29.0','protocolVersion':PROTOCOL_VERSION,'buildId':BUILD_ID,'managedUpdates':True,'activeSmartSessions':len(SMART_SESSIONS),'nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'mergeCompression':True,'sequenceMerge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'Adaptive spatial repair / FSRCNN 2x','realtimeTemporal':False,'smartChunks':True,'smartHeartbeat':True,'smartNeural':smart_ready(),'smartTemporal':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None
@@ -579,8 +602,12 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, {key: job[key] for key in PUBLIC_KEYS if key in job})
 
     def do_DELETE(self):
+        global MAINTENANCE_UNTIL
         if not self.authorized():
             return
+        if urlparse(self.path).path=='/maintenance':
+            with MAINTENANCE_GATE:MAINTENANCE_UNTIL=0
+            return self.reply(200,{'readyForUpdate':False})
         if handle_smart(self,'DELETE',globals()): return
         parts = urlparse(self.path).path.strip('/').split('/')
         with GUARD:

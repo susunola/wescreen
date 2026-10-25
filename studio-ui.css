@@ -1,4 +1,4 @@
-:root{--bg:#101113;--panel:#191b1e;--inset:#141619;--line:#ffffff16;--text:#f0f0f1;--muted:#9297a0;--accent:#decca4;--danger:#d58a90}
+:root{--bg:#101113;--panel:#191b1e;--inset:#141619;--line:#ffffff16;--text:#f0f0f1;--muted:#a8afb9;--accent:#decca4;--danger:#d58a90}
 .studio-ui{background:var(--bg);font-size:13px;line-height:1.6}
 .studio-ui .app{max-width:1440px;margin:0 auto;padding:0 48px 36px}
 .studio-ui .app>header{padding:22px 0;height:90px;border-bottom:1px solid var(--line);margin:0}
@@ -271,3 +271,227 @@
 .smart-waiting h3{font-size:22px;margin:0 0 20px;color:#eef1f5}
 .smart-waiting progress{width:min(360px,80%);height:6px;accent-color:#d8c79c}
 .smart-waiting p{max-width:520px;color:#a0a8b4;font-size:13px;line-height:1.8;margin:18px 0 0}
+
+/* Shared workspace geometry: one inset, one field height, one spacing rhythm. */
+.studio-ui {
+  --ui-field-height:40px;
+  --ui-inset:24px;
+  --ui-gap:16px;
+  --ui-radius:10px;
+}
+.studio-ui .app { width:100%;max-width:1440px;padding-inline:32px; }
+.studio-ui :is(#setup,#recording-library,#channel-workbench,#tasks-view,#about-view,#player-view) {
+  padding:var(--ui-inset);margin-top:24px;border:1px solid var(--line);
+  border-radius:12px;background:#141619;min-width:0;
+}
+.studio-ui :is(.setup-heading,.library-heading,.telegram-workbench-heading,.tasks-heading,#player-view>.section-head) {
+  min-height:64px;margin:0 0 24px;padding:0;gap:16px;align-items:center;
+}
+.studio-ui h2 { font-size:26px;line-height:1.3;letter-spacing:-.5px; }
+.studio-ui :is(.setup-heading,.library-heading,.telegram-workbench-heading,.tasks-heading) .hint { margin:8px 0 0; }
+.studio-ui :is(.studio-source,.studio-record-settings,.telegram-form,.telegram-plan) {
+  padding:var(--ui-inset);border-radius:var(--ui-radius);min-width:0;
+}
+.studio-ui :is(.setup-columns,.telegram-columns) { gap:24px; }
+.studio-ui .setup-columns { grid-template-columns:minmax(0,1fr) 464px; }
+.studio-ui .studio-record-settings .record-quality-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px; }
+.studio-ui .studio-record-settings .record-quality-grid>label:has(#format),
+.studio-ui .studio-record-settings .record-quality-grid>label:has(#framerate) { grid-column:1/-1; }
+.studio-ui .studio-settings-title { margin:0 0 20px;padding-bottom:16px;line-height:24px; }
+.studio-ui :is(.studio-record-settings,.telegram-form,dialog) label:not(.toggle):not(.option-switch):not(.check):not(.import-button) {
+  display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;
+}
+.studio-ui :is(.studio-record-settings,.telegram-form,dialog) label>span { margin:0;font-size:13px;line-height:20px; }
+.studio-ui :is(.studio-record-settings,.telegram-form,dialog,.library-toolbar) :is(input:not([type=checkbox]):not([type=range]):not([type=hidden]):not([type=file]),select) {
+  height:var(--ui-field-height);min-height:var(--ui-field-height);padding:0 12px;
+  font-size:13px;line-height:normal;border-radius:7px;min-width:0;
+}
+.studio-ui :is(.studio-record-settings,.telegram-form,dialog) textarea {
+  padding:12px;font-size:13px;line-height:1.6;border-radius:7px;resize:vertical;
+}
+.studio-ui .studio-record-settings>label { margin:0 0 16px; }
+.studio-ui :is(#setup,#recording-library,#channel-workbench,#tasks-view,#about-view,#player-empty,dialog,.header-actions) :is(button,.quiet,.primary,.import-button):not(.thumbnail-play) {
+  min-height:var(--ui-field-height);padding:9px 14px;font-size:13px;line-height:20px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;vertical-align:middle;
+}
+.studio-ui :is(#setup,#recording-library,#channel-workbench,#tasks-view,#about-view) button.text { padding-inline:8px; }
+.studio-ui :is(.studio-record-settings,.telegram-form) .hint { font-size:12px;line-height:1.7; }
+.studio-ui .studio-record-settings #record-summary { margin:12px 0 0; }
+.studio-ui .studio-record-settings #capture-resolution-help { font-size:12px;line-height:1.7;margin:8px 0 16px; }
+.studio-ui .studio-record-settings .record-options { padding-top:16px;margin:16px 0;gap:12px; }
+.studio-ui .studio-record-settings .option-switch { min-height:36px; }
+.studio-ui .studio-record-settings #record-advanced { margin-top:16px;padding:0 12px;border-color:var(--line); }
+.studio-ui #record-advanced>summary { padding:0;justify-content:flex-start;display:flex;align-items:center;gap:10px;min-height:40px;line-height:20px; }
+.studio-ui #record-advanced>summary>span[data-i18n] { flex:1;text-align:left; }
+.studio-ui #advanced-summary { margin-left:auto;text-align:right; }
+.studio-ui .studio-source-empty { min-height:320px; }
+.studio-ui .capture-start-row { align-items:center;gap:16px;margin-top:16px;padding-top:16px; }
+.studio-ui .capture-start-row .hint { margin:0; }
+.studio-ui .studio-source-footer { margin-top:16px; }
+.studio-ui .studio-source-footer .capture-compatibility { margin:0;min-height:32px;align-items:center; }
+.studio-ui #recording-library .library-toolbar { align-items:center;gap:10px;padding:16px 0;margin:0 0 16px; }
+.studio-ui #recording-library .library-search { flex:1 1 240px;min-width:180px; }
+.studio-ui #recording-library .library-toolbar select { min-width:112px;max-width:220px; }
+.studio-ui #recording-library .library-warning { margin:0;padding-top:2px;line-height:18px; }
+.studio-ui #recording-library .studio-view-switch { margin-left:auto;align-self:center;gap:4px; }
+.studio-ui #recording-library .studio-view-switch button { min-width:48px;padding-inline:10px; }
+.studio-ui #recording-library .library-heading .import-button { margin:0; }
+.studio-ui .bulk-controls { min-height:56px;align-items:center;gap:16px; }
+.studio-ui .bulk-controls label { margin:0;display:flex;align-items:center;gap:10px; }
+.studio-ui .bulk-controls label>span { margin:0;line-height:20px; }
+.studio-ui .media-row { gap:16px;padding:20px 0; }
+.studio-ui .media-actions { align-items:center;gap:8px; }
+.studio-ui .row-menu>summary { display:grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid var(--line);border-radius:7px; }
+.studio-ui .menu-items { padding:6px;min-width:180px; }
+.studio-ui .menu-items button { justify-content:flex-start!important;min-height:36px!important;padding:8px 12px!important; }
+.studio-ui #recording-library .library-footer { padding:16px 0;gap:16px;align-items:center; }
+.studio-ui .library-footer .group-toggle { display:flex;align-items:center;gap:8px;margin:0; }
+.studio-ui .library-footer .group-toggle span { margin:0;line-height:20px; }
+.studio-ui .pagination { display:flex;align-items:center;gap:8px; }
+.studio-ui .telegram-form .channel-settings { padding:0; }
+.studio-ui .telegram-form .telegram-saved-choice { margin:16px 0; }
+.studio-ui .telegram-form .channel-actions { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+.studio-ui .telegram-plan .section-head { min-height:40px;align-items:center;gap:12px; }
+.studio-ui .telegram-plan .section-head h3 { margin:0; }
+.studio-ui .channel-plan-row { padding:16px;gap:12px;align-items:center; }
+.studio-ui .about-facts { gap:24px; }
+.studio-ui .about-resource { padding:20px 24px;gap:20px;align-items:center; }
+.studio-ui dialog { padding:24px;border-radius:12px;max-width:calc(100vw - 32px); }
+.studio-ui dialog>.section-head { align-items:center;min-height:40px;margin-bottom:20px; }
+.studio-ui .player-topbar { padding:16px 20px;gap:16px; }
+.studio-ui .player-topbar .controls { align-items:center;gap:12px;margin:0; }
+@media(max-width:1150px) {
+  .studio-ui .studio-record-settings .record-quality-grid { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:1000px) {
+  .studio-ui .app { padding-inline:24px; }
+  .studio-ui .setup-columns { grid-template-columns:minmax(0,1fr) 320px;gap:20px; }
+  .studio-ui .telegram-columns { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:760px) {
+  .studio-ui { --ui-inset:20px; }
+  .studio-ui .app { padding-inline:16px; }
+  .studio-ui .setup-columns { grid-template-columns:minmax(0,1fr);gap:16px; }
+  .studio-ui .studio-record-settings .record-quality-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .studio-ui .studio-record-settings .record-quality-grid>label:has(#resolution),
+  .studio-ui .studio-record-settings .record-quality-grid>label:has(#format) { grid-column:1/-1; }
+  .studio-ui :is(.library-heading,.tasks-heading,.telegram-workbench-heading) { flex-wrap:wrap; }
+  .studio-ui #recording-library .library-toolbar .library-search { flex-basis:100%; }
+  .studio-ui #recording-library .library-toolbar select { max-width:100%;width:100%; }
+  .studio-ui #recording-library .library-toolbar label:not(.library-search) { flex:1 1 120px;min-width:0; }
+  .studio-ui #recording-library .studio-view-switch { margin-left:auto; }
+  .studio-ui .setup-heading { align-items:flex-start; }
+  .studio-ui .setup-heading .local-recording { white-space:nowrap; }
+  .studio-ui .media-row { gap:12px; }
+  .studio-ui .about-resource { padding:16px;gap:12px; }
+  .studio-ui .player-topbar { padding:12px;gap:8px; }
+}
+@media(max-width:420px) {
+  .studio-ui { --ui-inset:16px; }
+  .studio-ui :is(#setup,#recording-library,#channel-workbench,#tasks-view,#about-view,#player-view) { margin-top:16px; }
+  .studio-ui .studio-record-settings .record-quality-grid { grid-template-columns:minmax(0,1fr); }
+  .studio-ui .studio-record-settings .record-quality-grid>label { grid-column:auto!important; }
+  .studio-ui .telegram-form .channel-actions { grid-template-columns:1fr; }
+}
+
+.studio-ui #recording-library .import-button,.studio-ui #recording-library .import-button span { color:#202124; }
+@media(max-width:700px) {
+  .studio-ui .header-actions .github-link,.studio-ui .header-actions #open-local-video { display:none!important; }
+  .studio-ui .brand { min-width:0; }
+  .studio-ui .brand .eyebrow { white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px; }
+}
+
+.studio-ui :is(.channel-links,.capture-compatibility) button.text { color:var(--accent); }
+
+/* Reading hierarchy: descriptions remain readable without competing with actions. */
+.studio-ui { font-size:14px;line-height:1.6; }
+.studio-ui .hint { font-size:12px;line-height:1.7; }
+.studio-ui h3 { font-size:16px;line-height:1.5; }
+.studio-ui h4 { font-size:15px;line-height:1.5; }
+.studio-ui .workspace-nav { gap:28px; }
+.studio-ui .workspace-nav [data-view] { font-size:14px;font-weight:500; }
+.studio-ui .workspace-nav [data-view][aria-pressed=true] { font-weight:600; }
+.studio-ui .workspace-nav button:focus-visible { outline-offset:-4px; }
+.studio-ui :is(.setup-heading,.library-heading,.telegram-workbench-heading,.tasks-heading) .hint { font-size:13px; }
+.studio-ui :is(.studio-source,.studio-record-settings,.telegram-form,.telegram-plan,.task-row,.about-resource) {
+  border-color:#ffffff20;
+}
+.studio-ui :is(input,textarea)::placeholder { color:#a1a8b3;opacity:1; }
+.studio-ui input:not([type=checkbox]):not([type=range]),.studio-ui select,.studio-ui textarea { border-color:#ffffff30; }
+.studio-ui :is(input,select,textarea):focus-visible { outline:2px solid var(--accent);outline-offset:2px; }
+.studio-ui button:disabled { opacity:.55; }
+.studio-ui .studio-record-settings .option-copy strong { font-size:13px;line-height:20px; }
+.studio-ui .studio-record-settings .option-switch { gap:16px; }
+.studio-ui .studio-record-settings .option-switch input { flex-shrink:0; }
+.studio-ui .studio-record-settings :is(#record-summary,#capture-resolution-help) { color:var(--muted); }
+.studio-ui #record-summary { font-variant-numeric:tabular-nums; }
+.studio-ui #record-advanced>summary { font-size:13px;font-weight:500; }
+.studio-ui #advanced-summary { font-size:12px;font-weight:400; }
+.studio-ui .capture-ready h3 { font-size:22px;line-height:1.4;margin-bottom:12px; }
+.studio-ui .capture-ready>p { font-size:14px; }
+.studio-ui .capture-ready .capture-steps { gap:20px;margin-top:28px; }
+.studio-ui .capture-ready .capture-steps li { font-size:13px;line-height:1.6; }
+.studio-ui .capture-ready .capture-steps li p { font-size:12px;line-height:1.65;margin-top:8px; }
+.studio-ui .capture-steps li::before { width:28px;height:28px;font-size:12px;line-height:26px; }
+.studio-ui .capture-compatibility,.studio-ui .capture-compatibility button { font-size:12px; }
+.studio-ui .setup-footer { gap:20px;align-items:flex-start; }
+.studio-ui .setup-footer .hint { font-size:12px; }
+.studio-ui .local-recording { font-size:12px; }
+.studio-ui #start { font-weight:600; }
+.studio-ui #recording-library .library-warning { font-size:12px;line-height:1.7; }
+.studio-ui #recording-library #bulk-hint { font-size:12px; }
+.studio-ui .media-body>strong { font-size:15px;line-height:1.5;font-weight:600; }
+.studio-ui .media-body .hint { font-size:12px;line-height:1.65; }
+.studio-ui .recording-badge { font-size:11px;line-height:1.5;padding:3px 7px; }
+.studio-ui .thumbnail-duration { font-size:12px;font-variant-numeric:tabular-nums; }
+.studio-ui .group-toggle span,.studio-ui .library-footer { font-size:12px; }
+.studio-ui .studio-versions summary { font-size:12px; }
+.studio-ui #library-empty { font-size:14px;min-height:180px;display:grid;place-items:center;padding:40px 24px; }
+.studio-ui #recording-library:has(#library-empty:not([hidden])) :is(.studio-selection:not(.has-selection),#bulk-hint,#library-merge-all,.library-footer) { display:none; }
+.studio-ui .channel-plan-row .hint,.studio-ui .telegram-workflow { font-size:12px; }
+.studio-ui .channel-plan-row strong { font-size:14px;line-height:1.5; }
+.studio-ui .connection-state { font-size:12px;line-height:20px; }
+.studio-ui .task-row strong { font-size:15px; }
+.studio-ui #tasks-view .tasks-empty { padding:56px 24px; }
+.studio-ui .about-facts dt { font-size:12px; }
+.studio-ui .about-facts dd { font-size:14px;line-height:1.6; }
+.studio-ui .resource-url { font-size:12px;line-height:1.6; }
+.studio-ui .resource-tag { font-size:11px; }
+.studio-ui #player-empty>.hint { font-size:14px;max-width:480px; }
+.studio-ui .player-topbar .player-label { font-size:11px;letter-spacing:.08em; }
+.studio-ui .player-topbar strong { font-size:15px;line-height:1.5; }
+.studio-ui .menu-items button { font-size:13px; }
+@media(max-width:1000px) {
+  .studio-ui .setup-columns { grid-template-columns:minmax(0,1fr); }
+  .studio-ui .studio-record-settings .record-quality-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .studio-ui .studio-record-settings .record-quality-grid>label:has(#resolution) { grid-column:1/-1; }
+  .studio-ui .studio-source-empty { min-height:360px; }
+}
+@media(max-width:700px) {
+  .studio-ui .workspace-nav { gap:22px; }
+  .studio-ui .workspace-nav [data-view] { font-size:13px; }
+  .studio-ui .studio-record-settings .record-options { display:flex;flex-direction:column;gap:12px; }
+  .studio-ui .setup-heading { gap:12px; }
+  .studio-ui .setup-heading>div { min-width:0; }
+  .studio-ui .capture-ready .capture-steps li { font-size:13px; }
+  .studio-ui .capture-ready .capture-steps li p { font-size:12px; }
+  .studio-ui .media-body>strong { font-size:14px; }
+  .studio-ui .media-body .hint { font-size:12px; }
+  .studio-ui .about-facts { grid-template-columns:minmax(0,1fr);gap:20px; }
+  .studio-ui .about-facts>div:last-child { grid-column:auto; }
+  .studio-ui #recording-library .library-warning { font-size:12px; }
+}
+@media(max-width:420px) {
+  .studio-ui .studio-record-settings .record-quality-grid { grid-template-columns:minmax(0,1fr); }
+  .studio-ui .capture-ready { padding:20px 12px; }
+}
+@media(max-width:700px) {
+  .studio-ui #recording-items .media-row:not(.derived-row)>.row-select { grid-column:1;grid-row:1; }
+  .studio-ui #recording-items .media-row:not(.derived-row)>.thumbnail-play { grid-column:2;grid-row:1;align-self:start; }
+  .studio-ui #recording-items .media-row:not(.derived-row)>.media-body { grid-column:3;grid-row:1; }
+  .studio-ui #recording-items .media-row>.media-actions { grid-column:2/-1;grid-row:2;justify-content:flex-end;flex-wrap:wrap; }
+  .studio-ui #recording-items .media-row>.studio-versions { grid-column:2/-1;grid-row:3; }
+  .studio-ui #recording-items .derived-row>.media-body { grid-column:2/-1; }
+  .studio-ui #recording-items .media-actions>button { flex:0 1 auto;max-width:100%; }
+  .studio-ui #recording-library .media-body .recording-badge { margin-left:0; }
+}

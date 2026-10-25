@@ -31,7 +31,15 @@ const track = promise => { pendingWrites.add(promise); promise.catch(() => {}).f
 const chunkRange = session => IDBKeyRange.bound(`${session}-`, `${session}-\uffff`);
 const readStore = (store, key) => db.then(database => new Promise((resolve, reject) => {
   const request = key === undefined ? database.transaction(store).objectStore(store).getAll() : database.transaction(store).objectStore(store).get(key);
-  request.onsuccess = () => resolve(request.result);
+  request.onsuccess = () => {
+    const value = request.result;
+    if (store === 'videos' && value?.diskBacked) {
+      value.diskHandle.getFile().then(file => {
+        if (file.size !== value.size) throw new Error('Recording file changed. / 录像文件已变化，请重新关联原文件。');
+        resolve(file);
+      }).catch(error => reject(new Error('Cannot read recording file; keep the selected folder available. / 无法读取录像，请保留所选目录并重新授权。 ' + error.message)));
+    } else resolve(value);
+  };
   request.onerror = () => reject(request.error);
 }));
 const saveChunk = (blob, session, seq) => track(runTx('chunks', 'readwrite', tx => tx.objectStore('chunks').put(blob, `${session}-${String(seq).padStart(6, '0')}`)));
@@ -70,14 +78,31 @@ async function discardSession(session) {
   });
 }
 function storageError() { storageFailure = true; setHint('storageFailed', [], true); }
+async function recordingDecodes(blob) {
+  if (!blob.type.startsWith('video/')) return true;
+  const video=document.createElement('video'),url=URL.createObjectURL(blob);video.preload='auto';video.muted=true;
+  try { return await new Promise(resolve=>{const done=value=>{clearTimeout(timer);video.onloadeddata=video.onerror=null;resolve(value);};const timer=setTimeout(()=>done(false),10000);video.onloadeddata=()=>done(video.videoWidth>0&&video.videoHeight>0);video.onerror=()=>done(false);video.src=url;video.load();}); }
+  finally { video.removeAttribute('src');video.load();URL.revokeObjectURL(url); }
+}
 async function archiveRecording(blob, name, session = sessionStartedAt, part = segmentIndex, recovered = false, details = {}) {
   if (!blob.size) return;
   const id = `${session}-${part}`;
   const course = recovered ? details.course || '' : ($('course-enabled').checked ? $('course-name').value.trim() : '');
   const entry = { id, name, course, size: blob.size, createdAt: Date.now(), duration: recovered ? details.duration || 0 : finalDuration, markers: recovered ? details.markers || [] : finalMarkers.map(marker => ({ ...marker })), ...details };
+  // Only replace the recovery copy after the external file is closed and verified.
+  let storedVideo = blob;
+  if (details.diskStorage === 'file' && details.diskHandle) {
+    try {
+      const file = await details.diskHandle.getFile();
+      if (file.size !== blob.size) throw new Error('Incomplete disk recording');
+      if (!await recordingDecodes(file)) throw new Error('Disk recording cannot be decoded');
+      storedVideo = { diskBacked: true, diskHandle: details.diskHandle, size: file.size };
+      entry.storageKind = 'disk';
+    } catch { entry.storageKind = 'browser';entry.diskVerificationFailed=true;if(typeof recordDiagnostic==='function')recordDiagnostic('disk-verification-failed');if(typeof setNotice==='function')setNotice(E('磁盘校验或解码未通过，已保留录像库副本。','Disk verification or decoding failed; a full library copy was retained.')); }
+  }
   await runTx(['recordings', 'videos', 'chunks', 'meta'], 'readwrite', tx => {
     tx.objectStore('recordings').add(entry); // ConstraintError is safer than overwriting a completed recording.
-    tx.objectStore('videos').add(blob, id);
+    tx.objectStore('videos').add(storedVideo, id);
     tx.objectStore('chunks').delete(chunkRange(session));
     const meta = tx.objectStore('meta'); meta.delete(`session:${session}`);
     const current = meta.get('inProgress');

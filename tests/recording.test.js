@@ -216,9 +216,9 @@ test('a rejected resolution cap reports the actual uncapped output', async () =>
 test('video bitrate scales with actual pixels and frame rate', () => {
   const context = { BITRATES: { standard: 6000000 }, $: id => ({ quality: { value: 'standard' }, framerate: { value: '30' } })[id] };
   vm.runInNewContext(extract('function videoBitrate(', 'async function acquireRecordingLock()'), context);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 18000000);
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), Math.round(18000000*Math.pow(4,.75)*Math.pow(2,.585)));
-  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 7680, height: 4320, frameRate: 30 }) }), 144000000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 1920, height: 1080, frameRate: 30 }) }), 6000000);
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 3840, height: 2160, frameRate: 60 }) }), Math.round(6000000*Math.pow(4,.75)*Math.pow(2,.585)));
+  assert.equal(context.videoBitrate({ getSettings: () => ({ width: 7680, height: 4320, frameRate: 30 }) }), 48000000);
 });
 
 test('audio mixing is reused across segments and preserves headroom for two sources', () => {
@@ -314,7 +314,7 @@ test('text and motion bitrate budgets follow scene curves and cap extreme captur
  assert.equal(rate(1920,1080,30),24000000);
  assert.ok(rate(1920,1080,60)>=28000000&&rate(1920,1080,60)<=36010000);
  assert.ok(rate(3840,2160,30)>=50000000&&rate(3840,2160,30)<=70000000);
- fields.quality.value='compact';assert.equal(rate(1920,1080,30),18000000);
+ fields.quality.value='compact';assert.equal(rate(1920,1080,30),3000000);
  fields['capture-content'].value='motion';fields.quality.value='high';assert.equal(rate(1920,1080,30),14000000);
  assert.ok(rate(3840,2160,30)>=35000000&&rate(3840,2160,30)<=45000000);
  assert.equal(rate(15360,8640,120),180000000);
@@ -325,4 +325,20 @@ test('native resolution requests capability dimensions without a downscale cap',
  const context={$:id=>({resolution:{value:'native'},framerate:{value:'30'}})[id]};vm.runInNewContext(extract('async function applyOutputSize(', '// Missing audio'),context);
  assert.equal(await context.applyOutputSize({getVideoTracks:()=>[track]}),null);
  assert.equal(applied.width.ideal,3840);assert.equal(applied.height.ideal,2160);assert.equal(applied.width.max,undefined);assert.equal(applied.cursor,'always');assert.equal(applied.resizeMode,'none');
+});
+
+test('storage-efficient defaults migrate once and preserve later user choices',async()=>{
+ const fields=new Map();const field=id=>{if(!fields.has(id))fields.set(id,{value:'',checked:false,options:['1080','native','compact','high','30','60','general','telegram'].map(value=>({value}))});return fields.get(id);};
+ let saved={settings:{resolution:'native',quality:'high',framerate:'60'}};
+ const context={$:field,chrome:{storage:{local:{get:async()=>structuredClone(saved),set:async value=>Object.assign(saved,value)}}},OPEN_QUALITIES:new Set(['1080','native']),navigator:{language:'zh-CN'},refreshMicDevices:async()=>{},updateCourseFilename:()=>{},I18N:{zh:{}},LANG:'zh',SETTING_FIELDS:[['resolution','select'],['quality','select'],['framerate','select']],Number};
+ vm.runInNewContext(extract('async function loadSettings()', 'function updateCourseFilename()'),context);
+ await context.loadSettings();assert.equal(field('resolution').value,'1080');assert.equal(field('quality').value,'compact');assert.equal(field('framerate').value,'30');assert.equal(saved.storageEfficientRecording,true);
+ saved.settings={resolution:'native',quality:'high',framerate:'60'};await context.loadSettings();assert.equal(field('resolution').value,'native');assert.equal(field('quality').value,'high');assert.equal(field('framerate').value,'60');
+});
+
+test('recording cancels before encoding when requested resolution cap is not applied',async()=>{
+ const {context,seen}=captureContext();context.applyOutputSize=async()=>({key:'capFailed',args:['3840×2160']});context.E=(zh)=>zh;
+ await vm.runInNewContext('start()',context);
+ assert.equal(seen.recordings.length,0);assert.ok(seen.releases>0);
+ assert.match(seen.notices.join(' '),/超大文件/);
 });

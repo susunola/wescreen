@@ -72,9 +72,10 @@ async function connectHelper(options={}){
     else if(!enhancementToken)await discoverHelperToken();
     try{helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}catch(error){if(!/401|Invalid local access token/.test(error.message))throw error;await discoverHelperToken();helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}
    }catch(error){if(!options.repair || !/paired with another/.test(error.message))throw error;await repairHelperPairing();helperHealth=await(await enhancementRequest('/health',{signal:AbortSignal.timeout(4000)})).json();}
+   if(Number(helperHealth.protocolVersion||1)>2){helperHealth=null;throw new Error('Incompatible helper protocol version. Update the extension and helper together.');}
    if(chrome.storage.session)await chrome.storage.session.set({enhancementToken});
    $('helper-status').textContent=E('已连接 · ','Connected · ')+[E('自然修复','Natural restoration'),helperHealth.ai ? 'AI 2×':'',helperHealth.strong ? 'SeedVR2':''].filter(Boolean).join(' / ');$('helper-connection').open=false;$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();renderEnhancementTasks().catch(()=>{});return helperHealth;
-  }catch(error){$('tasks-connection').dataset.reason=/paired/.test(error.message)?'pairing':/version|incompatible/.test(error.message)?'version':'unreachable';$('helper-status').textContent=/paired with another/.test(error.message) ? E('检测到另一扩展的配对。点击自动连接，在本机窗口允许一次；以后两个扩展都能自动连接，无需重置。','Another extension is paired. Click Auto connect and approve once in the local window; both extensions will reconnect without resetting.') : /授权尚未|approval did not|本机程序已启动|Helper started/.test(error.message)?error.message:E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
+  }catch(error){$('tasks-connection').dataset.reason=/paired/.test(error.message)?'pairing':/version|incompatible/.test(error.message)?'version':'unreachable';$('helper-status').textContent=/paired with another/.test(error.message) ? E('检测到另一扩展的配对。点击自动连接，在本机窗口允许一次；以后两个扩展都能自动连接，无需重置。','Another extension is paired. Click Auto connect and approve once in the local window; both extensions will reconnect without resetting.') : /version|incompatible|Incompatible/.test(error.message)?E('扩展与本机程序协议不匹配，请使用配套安装包更新后重试。','Extension/helper protocol mismatch. Update both using matching packages.') : /授权尚未|approval did not|本机程序已启动|Helper started/.test(error.message)?error.message:E('未连接本机程序。请先启动它，窗口打开时会自动重试。','Local helper unavailable. Start it; this dialog retries automatically.');$('tasks-status').textContent=$('helper-status').textContent;updateEnhancementMode();return null;}
  })();try{return await helperConnecting;}finally{helperConnecting=null;$('helper-check').disabled=false;$('helper-check').textContent=L('autoConnect');updateTaskConnection(!!helperHealth);}
 }
 function enhancementControls(busy) {
@@ -108,7 +109,7 @@ async function openEnhancement(entry=null) {
   await connectHelper();
 }
 function resultName(task) {
-  const label=task.mode==='face' ? 'face-generated' : task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? 'merged' : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
+  const label=task.mode==='face' ? 'face-generated' : task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? (task.compress ? 'merged-compressed-1080p':'merged') : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
   return `${(task.name || 'video').replace(/\.(mp4|webm)$/i,'')}-${label}${task.encoding==='master'?'-444-master':''}${task.preview ? '-preview' : ''}.mp4`;
 }
 const hdrChoice=document.createElement('label');hdrChoice.className='check';const hdrInput=document.createElement('input');hdrInput.type='checkbox';hdrInput.id='enhance-hdr-sdr';hdrChoice.append(hdrInput,document.createTextNode(E('HDR 转 SDR（另存，原视频保留）','Convert HDR to SDR (save a copy)')));$('enhance-mode-hint').after(hdrChoice);
@@ -169,7 +170,7 @@ async function saveTaskResult(task) {
 async function exportTask(task) {
   const ticket=await(await enhancementRequest(`/jobs/${task.id}/export`,{method:'POST'})).json();
   // Native download streams from disk, avoiding a multi-gigabyte Blob in the browser heap.
-  if(chrome.downloads?.download){const source=task.sourceId ? await readStore('recordings',task.sourceId):null;const folder=relativeFolder(task.exportFolder || source?.exportFolder || '');await chrome.downloads.download({url:ticket.url,filename:(folder ? folder+'/':'')+resultName(task),saveAs:true});}
+  if(chrome.downloads?.download){const source=task.sourceId ? await readStore('recordings',task.sourceId):null;const folder=relativeFolder(task.exportFolder || source?.exportFolder || '');return chrome.downloads.download({url:ticket.url,filename:(folder ? folder+'/':'')+resultName(task),saveAs:true});}
   else {const anchor=document.createElement('a');anchor.href=ticket.url;anchor.download=resultName(task);anchor.click();}
 }
 async function enhanceVideo(preview) {
@@ -207,6 +208,18 @@ async function enhanceVideo(preview) {
   }catch(error){enhancementStatus(E('处理未完成或保存失败：','Processing or saving failed: ')+enhancementErrorText(error.message)+(task ? E(' 任务结果仍可在“处理任务”中查看或导出。',' Inspect or export the retained result in Tasks.') : ''));}
   finally{enhancementJob=null;enhancementControls(false);renderEnhancementTasks().catch(()=>{});}
 }
+// Persist the attempt before opening a save dialog so refreshes and other tabs cannot repeat it.
+async function autoExportMergedTask(task) {
+ if(!task.autoDownload || task.state!=='done')return;
+ await navigator.locks.request('wescreen-auto-export-'+task.id,async()=>{
+  const stored=await readStore('tasks',task.id);
+  if(!stored?.autoDownload || stored.autoDownloadAttemptedAt)return;
+  const attempted={...stored,...task,autoDownloadAttemptedAt:Date.now()};
+  await runTx('tasks','readwrite',tx=>tx.objectStore('tasks').put(attempted));
+  try{const downloadId=await exportTask(task);await runTx('tasks','readwrite',tx=>tx.objectStore('tasks').put({...attempted,autoDownloadId:downloadId}));}
+  catch(error){await runTx('tasks','readwrite',tx=>tx.objectStore('tasks').put({...attempted,autoDownloadError:error.message}));$('tasks-status').textContent=E('自动下载未完成，可点击任务的“导出结果”重试：','Automatic download did not finish. Use Export result to retry: ')+error.message;}
+ });
+}
 async function renderEnhancementTasks() {
   if(taskPolling)return;taskPolling=true;
   try {
@@ -223,12 +236,15 @@ async function renderEnhancementTasks() {
       const row=document.createElement('li');row.className='task-row';row.dataset.state=task.state;const icon=document.createElement('span');icon.className='task-media-icon';icon.innerHTML='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4Z"/></svg>';row.append(icon);
       const title=document.createElement('strong');title.textContent=task.name || task.id;row.append(title);
       let saved=records.find(entry=>entry.helperJobId===task.id);const remote=jobs.some(job=>job.id===task.id);
+      if(task.autoDownload && task.state==='done' && remote)await autoExportMergedTask(task);
       if(task.playbackAI && task.state==='done' && remote && !saved){try{const id=await saveTaskResult(task);saved={id};if(typeof completePlaybackAI==='function')await completePlaybackAI(task,id);}catch(error){$('tasks-status').textContent=error.message;}}
-      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit'),merge:E('合并','Merge'),audio:E('声音修复','Audio repair'),face:E('脸部修复（生成式）','Face restoration (generative)')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
+      const detail=document.createElement('p');detail.className='hint';detail.textContent=(saved ? L('jobSaved'):L({queued:'jobQueued',processing:'jobProcessing',done:'jobDone',error:'jobError',cancelled:'jobCancelled'}[task.state] || 'jobError'))+` · ${{natural:E('自然修复','Natural restoration'),ai:'AI 2×',strong:'SeedVR2',light:E('明暗增强','Brightness'),basic:E('基础增强','Basic enhancement'),edit:E('剪辑','Edit'),merge:task.compress ? E('合并压缩 · 1080p MP4','Compressed merge · 1080p MP4'):E('合并','Merge'),audio:E('声音修复','Audio repair'),face:E('脸部修复（生成式）','Face restoration (generative)')}[task.mode] || task.mode}${task.size ? ' · '+fmtBytes(task.size):''}${task.preview ? ' · '+L('enhancedPreview'):''}`;row.append(detail);
+      if(task.sequence && task.detail){const stage=document.createElement('p');stage.className='hint';stage.textContent=E('当前阶段：','Current stage: ')+task.detail;row.append(stage);}
       if(task.error || (!remote && remoteChecked)){const error=document.createElement('p');error.className='hint alert';error.textContent=task.error ? enhancementErrorText(task.error) : L('taskLost');row.append(error);}
+      if(task.autoDownloadError){const error=document.createElement('p');error.className='hint alert';error.textContent=E('自动下载未完成，请点击“导出结果”：','Automatic download did not finish. Use Export result: ')+task.autoDownloadError;row.append(error);}
       if(['queued','processing'].includes(task.state) && remote){const progress=document.createElement('progress');progress.max=1;progress.value=task.progress || 0;row.append(progress);const percent=document.createElement('span');percent.className='task-percent';percent.textContent=Math.round((task.progress || 0)*100)+'%';row.append(percent);}
       const buttons=document.createElement('div');buttons.className='controls task-actions';
-      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.smartTail)await queueSmartTail(source.id,task.requireSilence!==false);else if(task.mode==='merge')await mergeRecordingParts(source,task.compatible);else await submitProcessing(source,{mode:task.mode,encoding:task.encoding,toneMap:task.toneMap,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength,faceFidelity:task.faceFidelity,facePreviewId:task.facePreviewId,watermark:task.watermark,requireSilence:task.requireSilence});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
+      if(['error','cancelled'].includes(task.state) && task.sourceId){const retry=document.createElement('button');retry.type='button';retry.textContent=E('重试','Retry');retry.onclick=async()=>{retry.disabled=true;try{const source=await readStore('recordings',task.sourceId);if(!source || source.deletedAt)throw new Error(E('原视频已删除，无法重试。','Original deleted; cannot retry.'));if(task.smartTail)await queueSmartTail(source.id,task.requireSilence!==false);else if(task.mode==='merge')await mergeRecordingParts(source,task.compatible,{compress:task.compress,autoDownload:task.autoDownload});else await submitProcessing(source,{mode:task.mode,encoding:task.encoding,toneMap:task.toneMap,preview:task.preview,start:task.start,end:task.end,crop:task.crop,rotation:task.rotation,audioPreset:task.audioPreset,strength:task.strength,faceFidelity:task.faceFidelity,facePreviewId:task.facePreviewId,watermark:task.watermark,requireSilence:task.requireSilence});await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}finally{retry.disabled=false;}};buttons.append(retry);}
       if(task.state==='done' && remote){if(!saved)buttons.append(libraryButton('saveLibrary',async()=>{await saveTaskResult(task);await renderEnhancementTasks();}));buttons.append(libraryButton('exportResult',()=>exportTask(task)));}
       if(['queued','processing'].includes(task.state) && remote)buttons.append(libraryButton('cancelTask',async()=>{await enhancementRequest(`/jobs/${task.id}`,{method:'DELETE'});await renderEnhancementTasks();}));
       else buttons.append(libraryButton('deleteTask',async()=>{
@@ -263,7 +279,7 @@ $('helper-check').onclick=()=>connectHelper({repair:true,launch:true});
 $('enhance-token').oninput=()=>{helperHealth=null;updateEnhancementMode();};
 window.addEventListener('wescreen-language',()=>{updateEnhancementMode();if(workspaceView==='tasks')renderEnhancementTasks().catch(()=>{});});
 if(chrome.storage.session)chrome.storage.session.get('enhancementToken').then(value=>{enhancementToken=value.enhancementToken || '';$('enhance-token').value=enhancementToken;if(chrome.runtime.id)connectHelper();}).catch(()=>{});
-setInterval(()=>{if(workspaceView==='tasks' && !$('task-items').contains(document.activeElement))renderEnhancementTasks().catch(error=>$('tasks-status').textContent=error.message);},3000);
+setInterval(async()=>{try{const pending=(await readStore('tasks')).some(task=>task.autoDownload && !task.autoDownloadAttemptedAt && !['error','cancelled'].includes(task.state));if(pending || (workspaceView==='tasks' && !$('task-items').contains(document.activeElement)))await renderEnhancementTasks();}catch(error){$('tasks-status').textContent=error.message;}},3000);
 
 $('helper-token-file').onchange=async()=>{try{const file=$('helper-token-file').files[0];if(!file)return;if(file.size>1024)throw new Error(E('连接文件过大。','Connection file is too large.'));const token=(await file.text()).trim();if(!/^[A-Za-z0-9_-]{20,128}$/.test(token))throw new Error(E('连接文件无效。','Invalid connection file.'));$('enhance-token').value=token;await connectHelper();}catch(error){$('helper-status').textContent=error.message;}finally{$('helper-token-file').value='';}};
 $('compare-zoom').oninput=()=>{for(const id of ['enhance-original','enhance-output'])$(id).style.width=String(Number($('compare-zoom').value)*100)+'%';};

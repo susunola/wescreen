@@ -25,7 +25,7 @@ const I18N = {
     countdownNone: '不等待', countdown3: '3 秒', countdown5: '5 秒',
     autostopNone: '不设置', autostop5: '5 分钟', autostop15: '15 分钟', autostop30: '30 分钟', segmentOff: '仅按内存自动分段', segment15: '每 15 分钟', segment30: '每 30 分钟',
     legendSources: '音视频源', toggleScreenAudio: '系统 / 标签页音频', toggleMicrophone: '麦克风旁白', toggleCamera: '摄像头画中画', toggleClicks: '鼠标点击高亮（当前标签页）',
-    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载录像', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '录制下一条',
+    btnStart: '开始录制', btnPause: '暂停', btnResume: '继续', btnStop: '停止录制', btnDownload: '下载录像', mergeDownload: '合并下载（自动压缩）', btnNotes: '下载学习笔记', btnMark: '标记重点', btnNewRecording: '录制下一条',
     btnRecover: '恢复到录像库', btnDiscard: '丢弃',
     shortcutHint: '录制中可按 Ctrl/⌘ + Shift + S 停止；Ctrl/⌘ + Shift + U 暂停或继续。',
     recordingHint: '录制片段会暂存到本机，以便意外关闭后恢复。',
@@ -67,7 +67,7 @@ const I18N = {
     countdownNone: 'No wait', countdown3: '3 seconds', countdown5: '5 seconds',
     autostopNone: 'Off', autostop5: '5 minutes', autostop15: '15 minutes', autostop30: '30 minutes', segmentOff: 'Memory-based rotation only', segment15: 'Every 15 minutes', segment30: 'Every 30 minutes',
     legendSources: 'Audio and video sources', toggleScreenAudio: 'System / tab audio', toggleMicrophone: 'Microphone narration', toggleCamera: 'Camera picture-in-picture', toggleClicks: 'Highlight clicks (current tab)',
-    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download video', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'Record next video',
+    btnStart: 'Start recording', btnPause: 'Pause', btnResume: 'Resume', btnStop: 'Stop recording', btnDownload: 'Download video', mergeDownload: 'Merge & download (compressed)', btnNotes: 'Download learning notes', btnMark: 'Mark important', btnNewRecording: 'Record next video',
     btnRecover: 'Restore to library', btnDiscard: 'Discard',
     shortcutHint: 'While recording: Ctrl/⌘ + Shift + S stops, Ctrl/⌘ + Shift + U pauses or resumes.',
     recordingHint: 'Chunks are written to this device so an accidental close can be recovered.',
@@ -281,10 +281,15 @@ const SETTING_FIELDS = [
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
 const persist = () => chrome.storage.local.set({ settings: readSettings() }).catch(() => {});
 async function loadSettings() {
-  const { settings = {}, lang, pendingLink, filenameSuggestion } = await chrome.storage.local.get(['settings', 'lang', 'pendingLink', 'filenameSuggestion']);
+  const { settings = {}, lang, pendingLink, filenameSuggestion, storageEfficientRecording } = await chrome.storage.local.get(['settings', 'lang', 'pendingLink', 'filenameSuggestion', 'storageEfficientRecording']);
+  // Migrate once: old native/high defaults produced oversized long recordings.
+  if (!storageEfficientRecording) {
+    Object.assign(settings, { resolution: '1080', quality: 'compact', framerate: '30' });
+    await chrome.storage.local.set({ settings, storageEfficientRecording: true });
+  }
   if (settings.quality === '1' || settings.quality === '0') settings.quality = 'standard';
   // 1.0 folded resolution into the quality preset; 1.1 gives it its own field.
-  if (!OPEN_QUALITIES.has(settings.resolution)) settings.resolution = settings.quality === 'compact' ? '720' : 'native';
+  if (!OPEN_QUALITIES.has(settings.resolution)) settings.resolution = '1080';
   if (lang && I18N[lang]) LANG = lang;
   else if (!String(navigator.language || '').startsWith('zh')) LANG = 'en';
   await refreshMicDevices().catch(() => {});
@@ -337,7 +342,7 @@ function applyCapturePreset() {
   if (!telegram) return;
   $('capture-method').value='tab';
   const mp4 = MP4_TYPES.some(type => MediaRecorder.isTypeSupported(type));
-  const values = { format: mp4 ? 'mp4' : 'webm', resolution: 'native', quality: 'high', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };
+  const values = { format: mp4 ? 'mp4' : 'webm', resolution: '1080', quality: 'compact', framerate: '30', countdown: '5', autostop: '0', 'segment-minutes': '0' };
   for (const [id, value] of Object.entries(values)) $(id).value = value;
   for (const id of ['microphone', 'camera', 'clicks', 'course-enabled']) $(id).checked = false;
   $('screen-audio').checked = true;
@@ -450,7 +455,7 @@ function videoBitrate(track) {
   const pixels=width*height/(1920*1080),fps=Math.max(1,frameRate)/30;
   const content=$('capture-content')?.value;const scene=content==='auto' || !content ? ($('capture-mode')?.value==='telegram'?'motion':'detail'):content;
   const quality=$('quality').value;
-  const base=scene==='detail'?(quality==='high'?24000000:18000000):(quality==='high'?14000000:quality==='compact'?5000000:10000000);
+  const base=scene==='detail'?(quality==='high'?24000000:quality==='compact'?3000000:6000000):(quality==='high'?14000000:quality==='compact'?2500000:4000000);
   // Sublinear scaling preserves text without making 4K30 four times as large.
   return Math.min(180000000,Math.round(base * Math.max(.5,Math.pow(pixels,.75)) * Math.pow(fps,.585)));
 
@@ -508,7 +513,7 @@ function armRecorder(stream, type, state) {
       segmentSaves.add(saving); saving.finally(() => segmentSaves.delete(saving));
     }
   };
-  instance.onerror = () => { videoFailure = 'errRecorder'; stop(); };
+  instance.onerror = () => { if(typeof recordDiagnostic==='function')recordDiagnostic('encoder-failed');videoFailure = 'errRecorder'; stop(); };
   return instance;
 }
 let recordingGroupId=null;
@@ -615,6 +620,7 @@ async function start() {
   const content=$('capture-content')?.value;displayStream.getVideoTracks()[0].contentHint=content==='auto' || !content ? ($('capture-mode')?.value==='telegram'?'motion':'detail'):content;
   const note = await applyOutputSize(displayStream);
   setCaptureNote(note && note.key, (note && note.args) || []);
+  if(note?.key==='capFailed'){if(typeof recordDiagnostic==='function')recordDiagnostic('resolution-cap-rejected');releaseCapture();setNotice(E('浏览器未能限制录制分辨率，已取消开始以避免超大文件。请重新共享，或明确选择原始分辨率后重试。','The browser did not apply the resolution limit. Recording was canceled to avoid oversized files. Share again, or explicitly select Source resolution to retry.'));resetStart();return;}
   await addMic();
   try { await addCamera(); } catch (error) { releaseCapture(); setNotice(L('cameraFailed')); resetStart(); return; }
   try{if($('preflight-enabled')?.checked && !await confirmCaptureSource(displayStream)){releaseCapture();resetStart();return;}}catch(error){clearInterval(preflightTimer);await preflightAudio?.close().catch(()=>{});preflightAudio=null;resolvePreflight(false);$('preflight-video').srcObject=null;releaseCapture();setNotice(error.message);resetStart();return;}

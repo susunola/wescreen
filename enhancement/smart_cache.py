@@ -20,7 +20,7 @@ CACHE=Path(os.environ.get('WESCREEN_SMART_CACHE_DIR') or (Path(os.environ.get('W
 
 # Change policy when restoration math/model settings change: incompatible results
 # must never be silently reused. Source identity includes every uploaded byte.
-POLICY='smart-v7-grid-adaptive-guide960-dni-crf15'
+POLICY='smart-v8-clean-preserve-grid-adaptive-guide960-dni-crf15'
 CACHE_LIMIT=8*1024*1024*1024
 
 def save_chunk(session,index,chunk):
@@ -114,6 +114,22 @@ def handle_smart(handler,method,api):
     if not parts or parts[0]!='smart':return False
     expire(api);query=parse_qs(parsed.query)
     try:
+        if parsed.path=='/smart/cache' and method in ('GET','DELETE'):
+            with GUARD:
+                CACHE.mkdir(parents=True,exist_ok=True,mode=0o700)
+                active={s.get('asset') for s in SESSIONS.values()}
+                assets=[p for p in CACHE.iterdir() if p.is_dir() and re.fullmatch('[a-f0-9]{64}',p.name)]
+                removed=0
+                if method=='DELETE':
+                    for asset in assets:
+                        if asset not in active:
+                            size=sum(f.stat().st_size for f in asset.iterdir() if f.is_file())
+                            shutil.rmtree(asset);removed+=size
+                    assets=[p for p in assets if p.exists()]
+                size=sum(f.stat().st_size for p in assets for f in p.iterdir() if f.is_file())
+                source_size=sum(f.stat().st_size for p in CACHE.iterdir() if p.is_dir() and re.fullmatch('[a-f0-9]{32}',p.name) for f in p.iterdir() if f.is_file())
+                handler.reply(200,{'bytes':size,'sourceBytes':source_size,'limit':CACHE_LIMIT,'activeSessions':len(SESSIONS),'assets':len(assets),'removedBytes':removed})
+            return True
         if method=='POST' and parsed.path=='/smart/sources':
             length=int(handler.headers.get('Content-Length','0'))
             if not 0<length<=1600*1024*1024:raise ValueError('Smart input must be under 1.6 GB')
@@ -153,6 +169,8 @@ def handle_smart(handler,method,api):
         with GUARD:session=SESSIONS.get(parts[1])
         if not session:handler.reply(404,{'error':'Smart session expired'});return True
         session['touch']=time.monotonic()
+        if method=='GET' and len(parts)==2:
+            handler.reply(200,{'alive':True,'completedChunks':sum(c['state']=='done' for c in session['chunks'].values())});return True
         if method=='DELETE' and len(parts)==2:
             with GUARD:SESSIONS.pop(parts[1],None)
             cleanup_session(session,api);handler.reply(200,{'deleted':True});return True
@@ -175,8 +193,8 @@ def handle_smart(handler,method,api):
             if chunk and chunk['state'] in ('queued','processing','done'):
                 chunk['touch']=time.monotonic();handler.reply(200,public_chunk(chunk));return True
             if sum(f.stat().st_size for asset in CACHE.iterdir() if asset.is_dir() and re.fullmatch('[a-f0-9]{64}',asset.name) for f in asset.iterdir() if f.is_file())>=CACHE_LIMIT:
-                handler.reply(409,{'error':'Local repair cache is full (8 GB); original playback continues'});return True
-            if session['busy'] or not api['SLOT'].acquire(blocking=False):handler.reply(409,{'error':'Helper busy; original playback continues'});return True
+                handler.reply(409,{'error':'Local repair cache is full (8 GB); clear inactive cache or choose Original'});return True
+            if session['busy'] or not api['SLOT'].acquire(blocking=False):handler.reply(409,{'error':'Helper busy; wait for the current local task'});return True
             try:
                 chunk={'state':'queued','progress':0,'start':index*CHUNK_SECONDS,'path':session['directory']/f'{index}.mp4','touch':time.monotonic()}
                 with GUARD:
