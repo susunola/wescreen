@@ -10,6 +10,7 @@ Lower is better. Geometric mean over the clips where both encoders reach the tar
 
 | Encoder | edge PSNR 30 dB | edge PSNR 35 dB |
 |---|---|---|
+| browser: MediaRecorder vp9 | — | 1.78× (n=3) |
 | browser: WebCodecs avc-vbr | — | 1.79× (n=1) |
 | browser: WebCodecs vp9-vbr | — | 2.91× (n=1) |
 | ffmpeg: realtime-proxy | 4.40× (n=2) | 2.16× (n=3) |
@@ -21,13 +22,20 @@ Lower is better. Geometric mean over the clips where both encoders reach the tar
 
 Anchor: `browser: MediaRecorder vp9 standard` (current default). For each clip, the size an encoder needs to reach the anchor's edge PSNR, divided by the anchor's size. Below 1.00× means smaller at equal text sharpness; "—" means the encoder never reached that quality in the measured range. Geometric mean; n is the number of clips.
 
-Excluded as timing-limited (real-time MediaRecorder dropped or retimed frames, so pixel comparison against the reference is not meaningful): `code_scroll`, `slides_static`, `ui_mixed`, `video_motion`, `web_scroll`.
-
-No clip produced a trustworthy MediaRecorder anchor in this run, so no ratio is given. Re-run `browser_bench.mjs` on an idle, real machine (headed, not under CPU load) before drawing conclusions about MediaRecorder.
-
+| Encoder | Relative size | n |
+|---|---:|---:|
+| browser: WebCodecs av1-quantizer | 0.68× | 1 |
+| browser: WebCodecs avc-vbr | 0.89× | 2 |
+| browser: WebCodecs vp9-quantizer | 0.69× | 1 |
+| browser: WebCodecs vp9-vbr | 0.72× | 2 |
+| ffmpeg: realtime-proxy | 0.95× | 4 |
+| ffmpeg: vp9 | 0.39× | 4 |
+| ffmpeg: x264 | 0.49× | 4 |
+| ffmpeg: x265 | 0.22× | 4 |
 
 ## How far to trust this
 
+- Browser rows carry a frame-index marker (top-left, cropped from every metric), so decoded frames are matched to the reference exactly. MediaRecorder rows are therefore valid even when the recorder drops frames; "Frames kept" shows how many of the clip's frames it actually delivered. Pixel quality is judged on the frames it kept, so a recorder that drops many frames looks better here than it feels: check the kept column before celebrating a MediaRecorder number. In this headless 2-CPU container MediaRecorder keeps roughly 75-95% of frames; WebCodecs keeps 100%.
 - Rows marked ⚠ come from real-time MediaRecorder capture whose output timeline could not be aligned with the reference (`mean_shift` > 3 frames, or more frames than the clip has). On a loaded or headless machine this says more about capture timing than about the encoder, so those rows are not used for any ratio above.
 - WebCodecs and FFmpeg rows use exact frame timestamps and decode 1:1 (`mean_shift` ≈ 0 for the former), so comparisons between them are sound for the synthetic corpus.
 - Synthetic content, software encoders only: hardware H.264/HEVC/AV1 and real screen captures are not covered by this run.
@@ -36,163 +44,190 @@ No clip produced a trustworthy MediaRecorder anchor in this run, so no ratio is 
 
 ### code_scroll
 
-| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
-|---|---|---:|---:|---:|---:|---:|
-| browser: WebCodecs av1-detail | standard@3266k | 1669 | 12.52 | 0.9993 | 36.81 | 150/150 |
-| browser: WebCodecs av1-quantizer | q52 | 1610 | 12.08 | 0.9989 | 36.92 | 150/150 |
-| browser: WebCodecs av1-quantizer | q40 | 2264 | 16.98 | 0.9992 | 37.22 | 150/150 |
-| browser: WebCodecs av1-text | standard@3266k | 1669 | 12.52 | 0.9993 | 36.81 | 150/150 |
-| browser: WebCodecs av1-vbr | standard@3266k | 1806 | 13.54 | 0.9938 | 34.88 | 150/150 |
-| browser: WebCodecs avc-vbr | compact@1633k | 1627 | 12.21 | 0.9872 | 31.06 | 150/150 |
-| browser: WebCodecs avc-vbr | standard@3266k | 3208 | 24.06 | 0.9946 | 34.65 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q50 | 2532 | 18.99 | 0.9986 | 36.73 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q40 | 3134 | 23.51 | 0.9989 | 37.07 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q30 | 3726 | 27.94 | 0.9991 | 37.3 | 150/150 |
-| browser: WebCodecs vp9-vbr | compact@1633k | 2111 | 15.84 | 0.9933 | 34.26 | 150/150 |
-| browser: WebCodecs vp9-vbr | standard@3266k | 3257 | 24.43 | 0.9979 | 36.43 | 150/150 |
-| browser: WebCodecs vp9-vbr | standard@3266k | 3257 | 24.43 | 0.9979 | 36.43 | 150/150 |
-| browser: WebCodecs vp9-vbr | high@13064k | 7973 | 59.80 | 0.9993 | 37.45 | 150/150 |
-| ffmpeg: realtime-proxy | compact@1632k | 1466 | 10.99 | 0.9901 | 32.77 | 150/150 |
-| ffmpeg: realtime-proxy | standard@3265k | 3082 | 23.12 | 0.9967 | 39.33 | 150/150 |
-| ffmpeg: realtime-proxy | high@13063k | 11618 | 87.13 | 0.9995 | 48.36 | 150/150 |
-| ffmpeg: svtav1 | crf46 | 573 | 4.30 | 0.9986 | 41.58 | 150/150 |
-| ffmpeg: svtav1 | crf38 | 718 | 5.38 | 0.9994 | 44.87 | 150/150 |
-| ffmpeg: svtav1 | crf30 | 922 | 6.91 | 0.9998 | 47.58 | 150/150 |
-| ffmpeg: vp9 | crf44 | 598 | 4.49 | 0.9934 | 33.65 | 150/150 |
-| ffmpeg: vp9 | crf36 | 803 | 6.02 | 0.9972 | 37.93 | 150/150 |
-| ffmpeg: vp9 | crf28 | 1086 | 8.14 | 0.9989 | 41.88 | 150/150 |
-| ffmpeg: x264 | crf32 | 546 | 4.10 | 0.9873 | 29.22 | 150/150 |
-| ffmpeg: x264 | crf26 | 837 | 6.28 | 0.9955 | 34.93 | 150/150 |
-| ffmpeg: x264 | crf20 | 1198 | 8.99 | 0.9985 | 40.4 | 150/150 |
-| ffmpeg: x265 | crf34 | 492 | 3.69 | 0.9916 | 31.03 | 150/150 |
-| ffmpeg: x265 | crf28 | 738 | 5.53 | 0.9972 | 36.74 | 150/150 |
-| ffmpeg: x265 | crf22 | 1088 | 8.16 | 0.9989 | 41.76 | 150/150 |
+| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected | Frames kept |
+|---|---|---:|---:|---:|---:|---:|---:|
+| browser: MediaRecorder vp9 | compact@1633k | 1828 | 13.71 | 0.9956 | 34.85 | 128/150 | 85% |
+| browser: MediaRecorder vp9 | standard@3266k | 2729 | 20.47 | 0.9885 | 34.42 | 119/150 | 79% |
+| browser: MediaRecorder vp9 | high@13064k | 5342 | 40.06 | 0.9976 | 36.29 | 122/150 | 81% |
+| browser: WebCodecs av1-detail | standard@3266k | 1669 | 12.52 | 0.9993 | 36.81 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q52 | 1610 | 12.08 | 0.9989 | 36.92 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q40 | 2264 | 16.98 | 0.9992 | 37.22 | 150/150 | — |
+| browser: WebCodecs av1-text | standard@3266k | 1669 | 12.52 | 0.9993 | 36.81 | 150/150 | — |
+| browser: WebCodecs av1-vbr | standard@3266k | 1806 | 13.54 | 0.9938 | 34.88 | 150/150 | — |
+| browser: WebCodecs avc-vbr | compact@1633k | 1627 | 12.21 | 0.9872 | 31.06 | 150/150 | — |
+| browser: WebCodecs avc-vbr | standard@3266k | 3208 | 24.06 | 0.9946 | 34.65 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q50 | 2532 | 18.99 | 0.9986 | 36.73 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q40 | 3134 | 23.51 | 0.9989 | 37.07 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q30 | 3726 | 27.94 | 0.9991 | 37.3 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | compact@1633k | 2111 | 15.84 | 0.9933 | 34.26 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | standard@3266k | 3257 | 24.43 | 0.9979 | 36.43 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | standard@3266k | 3257 | 24.43 | 0.9979 | 36.43 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | high@13064k | 7973 | 59.80 | 0.9993 | 37.45 | 150/150 | — |
+| ffmpeg: realtime-proxy | compact@1632k | 1466 | 10.99 | 0.9901 | 32.77 | 150/150 | — |
+| ffmpeg: realtime-proxy | standard@3265k | 3082 | 23.12 | 0.9967 | 39.33 | 150/150 | — |
+| ffmpeg: realtime-proxy | high@13063k | 11618 | 87.13 | 0.9995 | 48.36 | 150/150 | — |
+| ffmpeg: svtav1 | crf46 | 573 | 4.30 | 0.9986 | 41.58 | 150/150 | — |
+| ffmpeg: svtav1 | crf38 | 718 | 5.38 | 0.9994 | 44.87 | 150/150 | — |
+| ffmpeg: svtav1 | crf30 | 922 | 6.91 | 0.9998 | 47.58 | 150/150 | — |
+| ffmpeg: vp9 | crf44 | 598 | 4.49 | 0.9934 | 33.65 | 150/150 | — |
+| ffmpeg: vp9 | crf36 | 803 | 6.02 | 0.9972 | 37.93 | 150/150 | — |
+| ffmpeg: vp9 | crf28 | 1086 | 8.14 | 0.9989 | 41.88 | 150/150 | — |
+| ffmpeg: x264 | crf32 | 546 | 4.10 | 0.9873 | 29.22 | 150/150 | — |
+| ffmpeg: x264 | crf26 | 837 | 6.28 | 0.9955 | 34.93 | 150/150 | — |
+| ffmpeg: x264 | crf20 | 1198 | 8.99 | 0.9985 | 40.4 | 150/150 | — |
+| ffmpeg: x265 | crf34 | 492 | 3.69 | 0.9916 | 31.03 | 150/150 | — |
+| ffmpeg: x265 | crf28 | 738 | 5.53 | 0.9972 | 36.74 | 150/150 | — |
+| ffmpeg: x265 | crf22 | 1088 | 8.16 | 0.9989 | 41.76 | 150/150 | — |
 
 ### slides_static
 
-| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
-|---|---|---:|---:|---:|---:|---:|
-| browser: WebCodecs av1-detail | standard@3266k ⚠ | 265 | 1.99 | 1 | 45.99 | 150/150 |
-| browser: WebCodecs av1-quantizer | q52 ⚠ | 450 | 3.37 | 0.9996 | 42.56 | 150/150 |
-| browser: WebCodecs av1-quantizer | q40 ⚠ | 490 | 3.68 | 0.9998 | 44.52 | 150/150 |
-| browser: WebCodecs av1-text | standard@3266k ⚠ | 265 | 1.99 | 1 | 45.99 | 150/150 |
-| browser: WebCodecs av1-vbr | standard@3266k ⚠ | 482 | 3.62 | 0.9993 | 42.25 | 150/150 |
-| browser: WebCodecs avc-vbr | standard@3266k ⚠ | 468 | 3.51 | 0.9995 | 43.64 | 150/150 |
-| browser: WebCodecs avc-vbr | compact@1633k ⚠ | 475 | 3.56 | 0.9992 | 41.89 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q50 ⚠ | 440 | 3.30 | 0.9996 | 41.66 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q40 ⚠ | 475 | 3.56 | 0.9997 | 43.55 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q30 ⚠ | 499 | 3.74 | 0.9998 | 44.91 | 150/150 |
-| browser: WebCodecs vp9-vbr | high@13064k ⚠ | 800 | 6.00 | 0.9999 | 49.08 | 150/150 |
-| browser: WebCodecs vp9-vbr | standard@3266k ⚠ | 815 | 6.11 | 0.9998 | 47.91 | 150/150 |
-| browser: WebCodecs vp9-vbr | compact@1633k ⚠ | 862 | 6.47 | 0.9997 | 47.97 | 150/150 |
-| ffmpeg: realtime-proxy | high@13063k ⚠ | 486 | 3.65 | 0.9999 | 48.88 | 150/150 |
-| ffmpeg: realtime-proxy | compact@1632k ⚠ | 543 | 4.07 | 0.9996 | 46.29 | 150/150 |
-| ffmpeg: realtime-proxy | standard@3265k ⚠ | 543 | 4.07 | 0.9999 | 48.64 | 150/150 |
-| ffmpeg: svtav1 | crf46 ⚠ | 257 | 1.93 | 0.9997 | 43.01 | 150/150 |
-| ffmpeg: svtav1 | crf38 ⚠ | 305 | 2.29 | 0.9999 | 46.02 | 150/150 |
-| ffmpeg: svtav1 | crf30 ⚠ | 374 | 2.81 | 1.0 | 48.32 | 150/150 |
-| ffmpeg: vp9 | crf44 ⚠ | 252 | 1.89 | 0.9975 | 34.67 | 150/150 |
-| ffmpeg: vp9 | crf36 ⚠ | 320 | 2.40 | 0.9988 | 38.91 | 150/150 |
-| ffmpeg: vp9 | crf28 ⚠ | 393 | 2.95 | 0.9994 | 42.71 | 150/150 |
-| ffmpeg: x264 | crf32 ⚠ | 138 | 1.03 | 0.9963 | 29.14 | 150/150 |
-| ffmpeg: x264 | crf26 ⚠ | 187 | 1.41 | 0.9985 | 34.92 | 150/150 |
-| ffmpeg: x264 | crf20 ⚠ | 241 | 1.81 | 0.9994 | 40.49 | 150/150 |
-| ffmpeg: x265 | crf34 ⚠ | 228 | 1.71 | 0.9968 | 30.36 | 150/150 |
-| ffmpeg: x265 | crf28 ⚠ | 300 | 2.25 | 0.9988 | 35.85 | 150/150 |
-| ffmpeg: x265 | crf22 ⚠ | 394 | 2.96 | 0.9997 | 41.38 | 150/150 |
+| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected | Frames kept |
+|---|---|---:|---:|---:|---:|---:|---:|
+| browser: MediaRecorder av1 | standard@3266k | 386 | 2.89 | 0.9955 | 37.75 | 118/150 | 78% |
+| browser: MediaRecorder mkv-avc | standard@3266k | 376 | 2.82 | 0.9987 | 39.42 | 109/150 | 72% |
+| browser: MediaRecorder mp4-av1 | standard@3266k | 396 | 2.97 | 0.9949 | 37.8 | 113/150 | 75% |
+| browser: MediaRecorder vp9 | compact@1633k | 602 | 4.52 | 0.9989 | 43.07 | 114/150 | 75% |
+| browser: MediaRecorder vp9 | standard@3266k | 665 | 4.99 | 0.996 | 42.65 | 115/150 | 76% |
+| browser: MediaRecorder vp9 | high@13064k | 673 | 5.05 | 0.999 | 45.14 | 116/150 | 77% |
+| browser: WebCodecs av1-detail | standard@3266k | 265 | 1.99 | 1 | 45.99 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q52 | 450 | 3.37 | 0.9996 | 42.56 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q40 | 490 | 3.68 | 0.9998 | 44.52 | 150/150 | — |
+| browser: WebCodecs av1-text | standard@3266k | 265 | 1.99 | 1 | 45.99 | 150/150 | — |
+| browser: WebCodecs av1-vbr | standard@3266k | 482 | 3.62 | 0.9993 | 42.25 | 150/150 | — |
+| browser: WebCodecs avc-vbr | standard@3266k | 468 | 3.51 | 0.9995 | 43.64 | 150/150 | — |
+| browser: WebCodecs avc-vbr | compact@1633k | 475 | 3.56 | 0.9992 | 41.89 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q50 | 440 | 3.30 | 0.9996 | 41.66 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q40 | 475 | 3.56 | 0.9997 | 43.55 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q30 | 499 | 3.74 | 0.9998 | 44.91 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | high@13064k | 800 | 6.00 | 0.9999 | 49.08 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | standard@3266k | 815 | 6.11 | 0.9998 | 47.91 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | compact@1633k | 862 | 6.47 | 0.9997 | 47.97 | 150/150 | — |
+| ffmpeg: realtime-proxy | high@13063k | 486 | 3.65 | 0.9999 | 48.88 | 150/150 | — |
+| ffmpeg: realtime-proxy | compact@1632k | 543 | 4.07 | 0.9996 | 46.29 | 150/150 | — |
+| ffmpeg: realtime-proxy | standard@3265k | 543 | 4.07 | 0.9999 | 48.64 | 150/150 | — |
+| ffmpeg: svtav1 | crf46 | 257 | 1.93 | 0.9997 | 43.01 | 150/150 | — |
+| ffmpeg: svtav1 | crf38 | 305 | 2.29 | 0.9999 | 46.02 | 150/150 | — |
+| ffmpeg: svtav1 | crf30 | 374 | 2.81 | 1.0 | 48.32 | 150/150 | — |
+| ffmpeg: vp9 | crf44 | 252 | 1.89 | 0.9975 | 34.67 | 150/150 | — |
+| ffmpeg: vp9 | crf36 | 320 | 2.40 | 0.9988 | 38.91 | 150/150 | — |
+| ffmpeg: vp9 | crf28 | 393 | 2.95 | 0.9994 | 42.71 | 150/150 | — |
+| ffmpeg: x264 | crf32 | 138 | 1.03 | 0.9963 | 29.14 | 150/150 | — |
+| ffmpeg: x264 | crf26 | 187 | 1.41 | 0.9985 | 34.92 | 150/150 | — |
+| ffmpeg: x264 | crf20 | 241 | 1.81 | 0.9994 | 40.49 | 150/150 | — |
+| ffmpeg: x265 | crf34 | 228 | 1.71 | 0.9968 | 30.36 | 150/150 | — |
+| ffmpeg: x265 | crf28 | 300 | 2.25 | 0.9988 | 35.85 | 150/150 | — |
+| ffmpeg: x265 | crf22 | 394 | 2.96 | 0.9997 | 41.38 | 150/150 | — |
 
 ### ui_mixed
 
-| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
-|---|---|---:|---:|---:|---:|---:|
-| browser: WebCodecs av1-detail | standard@3266k | 3103 | 23.27 | 0.9798 | 37 | 150/150 |
-| browser: WebCodecs av1-quantizer | q52 | 8006 | 60.04 | 0.996 | 37.96 | 150/150 |
-| browser: WebCodecs av1-quantizer | q40 | 9169 | 68.77 | 0.9972 | 38.82 | 150/150 |
-| browser: WebCodecs av1-text | standard@3266k | 3103 | 23.27 | 0.9798 | 37 | 150/150 |
-| browser: WebCodecs av1-vbr | standard@3266k | 3037 | 22.78 | 0.9777 | 35.15 | 150/150 |
-| browser: WebCodecs avc-vbr | compact@1633k | 1630 | 12.22 | 0.9557 | 30.83 | 150/150 |
-| browser: WebCodecs avc-vbr | standard@3266k | 3255 | 24.42 | 0.9709 | 32.32 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q50 | 8117 | 60.88 | 0.9953 | 37.77 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q40 | 9327 | 69.95 | 0.9967 | 38.51 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q30 | 10298 | 77.24 | 0.9974 | 38.97 | 150/150 |
-| browser: WebCodecs vp9-vbr | compact@1633k | 1504 | 11.28 | 0.9679 | 35.32 | 150/150 |
-| browser: WebCodecs vp9-vbr | standard@3266k | 2387 | 17.90 | 0.9767 | 36.63 | 150/150 |
-| browser: WebCodecs vp9-vbr | high@13064k | 7023 | 52.67 | 0.9952 | 39.11 | 150/150 |
-| ffmpeg: realtime-proxy | compact@1632k | 1695 | 12.71 | 0.9603 | 26.73 | 150/150 |
-| ffmpeg: realtime-proxy | standard@3265k | 3397 | 25.48 | 0.9793 | 29.53 | 150/150 |
-| ffmpeg: realtime-proxy | high@13063k | 13389 | 100.42 | 0.9992 | 43.18 | 150/150 |
-| ffmpeg: svtav1 | crf46 | 258 | 1.93 | 0.9433 | 38.9 | 150/150 |
-| ffmpeg: svtav1 | crf38 | 530 | 3.97 | 0.9463 | 40.42 | 150/150 |
-| ffmpeg: svtav1 | crf30 | 2915 | 21.86 | 0.9777 | 42.33 | 150/150 |
-| ffmpeg: vp9 | crf44 | 314 | 2.36 | 0.9413 | 31.46 | 150/150 |
-| ffmpeg: vp9 | crf36 | 1507 | 11.30 | 0.964 | 35.61 | 150/150 |
-| ffmpeg: vp9 | crf28 | 4203 | 31.52 | 0.9861 | 39.51 | 150/150 |
-| ffmpeg: x264 | crf32 | 194 | 1.45 | 0.9372 | 28.35 | 150/150 |
-| ffmpeg: x264 | crf26 | 564 | 4.23 | 0.9434 | 32.93 | 150/150 |
-| ffmpeg: x264 | crf20 | 4617 | 34.63 | 0.987 | 36.72 | 150/150 |
-| ffmpeg: x265 | crf34 | 186 | 1.40 | 0.937 | 29.08 | 150/150 |
-| ffmpeg: x265 | crf28 | 508 | 3.81 | 0.9487 | 34.61 | 150/150 |
-| ffmpeg: x265 | crf22 | 3080 | 23.10 | 0.9826 | 39.82 | 150/150 |
+| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected | Frames kept |
+|---|---|---:|---:|---:|---:|---:|---:|
+| browser: MediaRecorder av1 | standard@3266k | 2704 | 20.28 | 0.9742 | 34.17 | 118/150 | 78% |
+| browser: MediaRecorder mkv-avc | standard@3266k | 1342 | 10.06 | 0.9528 | 29.53 | 123/150 | 81% |
+| browser: MediaRecorder mp4-av1 | standard@3266k | 2716 | 20.37 | 0.9755 | 34.46 | 121/150 | 80% |
+| browser: MediaRecorder vp9 | compact@1633k | 1395 | 10.46 | 0.9538 | 34.06 | 124/150 | 82% |
+| browser: MediaRecorder vp9 | standard@3266k | 2145 | 16.09 | 0.961 | 35.16 | 116/150 | 77% |
+| browser: MediaRecorder vp9 | high@13064k | 6557 | 49.18 | 0.994 | 39.37 | 121/150 | 80% |
+| browser: WebCodecs av1-detail | standard@3266k | 3103 | 23.27 | 0.9798 | 37 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q52 | 8006 | 60.04 | 0.996 | 37.96 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q40 | 9169 | 68.77 | 0.9972 | 38.82 | 150/150 | — |
+| browser: WebCodecs av1-text | standard@3266k | 3103 | 23.27 | 0.9798 | 37 | 150/150 | — |
+| browser: WebCodecs av1-vbr | standard@3266k | 3037 | 22.78 | 0.9777 | 35.15 | 150/150 | — |
+| browser: WebCodecs avc-vbr | compact@1633k | 1630 | 12.22 | 0.9557 | 30.83 | 150/150 | — |
+| browser: WebCodecs avc-vbr | standard@3266k | 3255 | 24.42 | 0.9709 | 32.32 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q50 | 8117 | 60.88 | 0.9953 | 37.77 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q40 | 9327 | 69.95 | 0.9967 | 38.51 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q30 | 10298 | 77.24 | 0.9974 | 38.97 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | compact@1633k | 1504 | 11.28 | 0.9679 | 35.32 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | standard@3266k | 2387 | 17.90 | 0.9767 | 36.63 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | high@13064k | 7023 | 52.67 | 0.9952 | 39.11 | 150/150 | — |
+| ffmpeg: realtime-proxy | compact@1632k | 1695 | 12.71 | 0.9603 | 26.73 | 150/150 | — |
+| ffmpeg: realtime-proxy | standard@3265k | 3397 | 25.48 | 0.9793 | 29.53 | 150/150 | — |
+| ffmpeg: realtime-proxy | high@13063k | 13389 | 100.42 | 0.9992 | 43.18 | 150/150 | — |
+| ffmpeg: svtav1 | crf46 | 258 | 1.93 | 0.9433 | 38.9 | 150/150 | — |
+| ffmpeg: svtav1 | crf38 | 530 | 3.97 | 0.9463 | 40.42 | 150/150 | — |
+| ffmpeg: svtav1 | crf30 | 2915 | 21.86 | 0.9777 | 42.33 | 150/150 | — |
+| ffmpeg: vp9 | crf44 | 314 | 2.36 | 0.9413 | 31.46 | 150/150 | — |
+| ffmpeg: vp9 | crf36 | 1507 | 11.30 | 0.964 | 35.61 | 150/150 | — |
+| ffmpeg: vp9 | crf28 | 4203 | 31.52 | 0.9861 | 39.51 | 150/150 | — |
+| ffmpeg: x264 | crf32 | 194 | 1.45 | 0.9372 | 28.35 | 150/150 | — |
+| ffmpeg: x264 | crf26 | 564 | 4.23 | 0.9434 | 32.93 | 150/150 | — |
+| ffmpeg: x264 | crf20 | 4617 | 34.63 | 0.987 | 36.72 | 150/150 | — |
+| ffmpeg: x265 | crf34 | 186 | 1.40 | 0.937 | 29.08 | 150/150 | — |
+| ffmpeg: x265 | crf28 | 508 | 3.81 | 0.9487 | 34.61 | 150/150 | — |
+| ffmpeg: x265 | crf22 | 3080 | 23.10 | 0.9826 | 39.82 | 150/150 | — |
 
 ### video_motion
 
-| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
-|---|---|---:|---:|---:|---:|---:|
-| browser: WebCodecs av1-quantizer | q52 | 38080 | 285.60 | 0.9816 | 32.08 | 150/150 |
-| browser: WebCodecs av1-quantizer | q40 | 43632 | 327.24 | 0.9868 | 32.18 | 150/150 |
-| browser: WebCodecs av1-vbr | standard@2177k | 2460 | 18.45 | 0.7265 | 29.07 | 150/150 |
-| browser: WebCodecs avc-vbr | compact@1361k | 1359 | 10.19 | 0.699 | 26.76 | 150/150 |
-| browser: WebCodecs avc-vbr | standard@2177k | 2161 | 16.21 | 0.7104 | 27.33 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q50 | 38222 | 286.66 | 0.9794 | 32.02 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q40 | 43982 | 329.87 | 0.9853 | 32.13 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q30 | 48652 | 364.89 | 0.9885 | 32.2 | 150/150 |
-| browser: WebCodecs vp9-vbr | compact@1361k | 1836 | 13.77 | 0.725 | 28.32 | 150/150 |
-| browser: WebCodecs vp9-vbr | standard@2177k | 2667 | 20.00 | 0.7443 | 28.67 | 150/150 |
-| browser: WebCodecs vp9-vbr | high@7621k | 8199 | 61.49 | 0.8217 | 29.96 | 150/150 |
-| ffmpeg: realtime-proxy | compact@1360k | 1416 | 10.62 | 0.6962 | 25.9 | 150/150 |
-| ffmpeg: realtime-proxy | standard@2177k | 2274 | 17.05 | 0.7112 | 27.87 | 150/150 |
-| ffmpeg: realtime-proxy | high@7620k | 7950 | 59.62 | 0.8044 | 30.68 | 150/150 |
-| ffmpeg: svtav1 | crf46 | 171 | 1.28 | 0.6937 | 31.01 | 150/150 |
-| ffmpeg: svtav1 | crf38 | 538 | 4.03 | 0.6976 | 32.33 | 150/150 |
-| ffmpeg: svtav1 | crf30 | 11426 | 85.69 | 0.8683 | 32.88 | 150/150 |
-| ffmpeg: vp9 | crf44 | 770 | 5.78 | 0.7174 | 31.15 | 150/150 |
-| ffmpeg: vp9 | crf36 | 7058 | 52.93 | 0.8012 | 34.04 | 150/150 |
-| ffmpeg: vp9 | crf28 | 19854 | 148.90 | 0.9248 | 37.18 | 150/150 |
-| ffmpeg: x264 | crf32 | 508 | 3.81 | 0.6889 | 25.54 | 150/150 |
-| ffmpeg: x264 | crf26 | 3617 | 27.13 | 0.731 | 29.88 | 150/150 |
-| ffmpeg: x264 | crf20 | 24427 | 183.20 | 0.9511 | 34.64 | 150/150 |
-| ffmpeg: x265 | crf34 | 189 | 1.42 | 0.6903 | 26.88 | 150/150 |
-| ffmpeg: x265 | crf28 | 1053 | 7.90 | 0.7201 | 31.09 | 150/150 |
-| ffmpeg: x265 | crf22 | 13097 | 98.23 | 0.891 | 35.82 | 150/150 |
+| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected | Frames kept |
+|---|---|---:|---:|---:|---:|---:|---:|
+| browser: MediaRecorder av1 | standard@2177k | 2820 | 21.15 | 0.7179 | 28.98 | 136/150 | 90% |
+| browser: MediaRecorder mkv-avc | standard@2177k | 1343 | 10.07 | 0.6955 | 25.35 | 132/150 | 87% |
+| browser: MediaRecorder mp4-av1 | standard@2177k | 2558 | 19.19 | 0.7116 | 28.86 | 126/150 | 83% |
+| browser: MediaRecorder vp9 | compact@1361k | 2322 | 17.42 | 0.71 | 27.77 | 151/150 | 100% |
+| browser: MediaRecorder vp9 | standard@2177k | 3109 | 23.32 | 0.7227 | 28.21 | 133/150 | 88% |
+| browser: MediaRecorder vp9 | high@7621k | 7826 | 58.70 | 0.7806 | 29.38 | 136/150 | 90% |
+| browser: WebCodecs av1-quantizer | q52 | 38080 | 285.60 | 0.9816 | 32.08 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q40 | 43632 | 327.24 | 0.9868 | 32.18 | 150/150 | — |
+| browser: WebCodecs av1-vbr | standard@2177k | 2460 | 18.45 | 0.7265 | 29.07 | 150/150 | — |
+| browser: WebCodecs avc-vbr | compact@1361k | 1359 | 10.19 | 0.699 | 26.76 | 150/150 | — |
+| browser: WebCodecs avc-vbr | standard@2177k | 2161 | 16.21 | 0.7104 | 27.33 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q50 | 38222 | 286.66 | 0.9794 | 32.02 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q40 | 43982 | 329.87 | 0.9853 | 32.13 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q30 | 48652 | 364.89 | 0.9885 | 32.2 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | compact@1361k | 1836 | 13.77 | 0.725 | 28.32 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | standard@2177k | 2667 | 20.00 | 0.7443 | 28.67 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | high@7621k | 8199 | 61.49 | 0.8217 | 29.96 | 150/150 | — |
+| ffmpeg: realtime-proxy | compact@1360k | 1416 | 10.62 | 0.6962 | 25.9 | 150/150 | — |
+| ffmpeg: realtime-proxy | standard@2177k | 2274 | 17.05 | 0.7112 | 27.87 | 150/150 | — |
+| ffmpeg: realtime-proxy | high@7620k | 7950 | 59.62 | 0.8044 | 30.68 | 150/150 | — |
+| ffmpeg: svtav1 | crf46 | 171 | 1.28 | 0.6937 | 31.01 | 150/150 | — |
+| ffmpeg: svtav1 | crf38 | 538 | 4.03 | 0.6976 | 32.33 | 150/150 | — |
+| ffmpeg: svtav1 | crf30 | 11426 | 85.69 | 0.8683 | 32.88 | 150/150 | — |
+| ffmpeg: vp9 | crf44 | 770 | 5.78 | 0.7174 | 31.15 | 150/150 | — |
+| ffmpeg: vp9 | crf36 | 7058 | 52.93 | 0.8012 | 34.04 | 150/150 | — |
+| ffmpeg: vp9 | crf28 | 19854 | 148.90 | 0.9248 | 37.18 | 150/150 | — |
+| ffmpeg: x264 | crf32 | 508 | 3.81 | 0.6889 | 25.54 | 150/150 | — |
+| ffmpeg: x264 | crf26 | 3617 | 27.13 | 0.731 | 29.88 | 150/150 | — |
+| ffmpeg: x264 | crf20 | 24427 | 183.20 | 0.9511 | 34.64 | 150/150 | — |
+| ffmpeg: x265 | crf34 | 189 | 1.42 | 0.6903 | 26.88 | 150/150 | — |
+| ffmpeg: x265 | crf28 | 1053 | 7.90 | 0.7201 | 31.09 | 150/150 | — |
+| ffmpeg: x265 | crf22 | 13097 | 98.23 | 0.891 | 35.82 | 150/150 | — |
 
 ### web_scroll
 
-| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
-|---|---|---:|---:|---:|---:|---:|
-| browser: WebCodecs av1-quantizer | q52 ⚠ | 3640 | 27.30 | 0.9921 | 40.21 | 150/150 |
-| browser: WebCodecs av1-quantizer | q40 ⚠ | 3949 | 29.61 | 0.9941 | 40.81 | 150/150 |
-| browser: WebCodecs av1-vbr | standard@3266k ⚠ | 2044 | 15.33 | 0.9683 | 35.27 | 150/150 |
-| browser: WebCodecs avc-vbr | compact@1633k ⚠ | 1669 | 12.52 | 0.9569 | 32.88 | 150/150 |
-| browser: WebCodecs avc-vbr | standard@3266k ⚠ | 2308 | 17.31 | 0.9773 | 36.27 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q50 ⚠ | 2375 | 17.81 | 0.9928 | 39.64 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q40 ⚠ | 2597 | 19.48 | 0.9947 | 40.56 | 150/150 |
-| browser: WebCodecs vp9-quantizer | q30 ⚠ | 2923 | 21.92 | 0.9956 | 41.18 | 150/150 |
-| browser: WebCodecs vp9-vbr | compact@1633k ⚠ | 1971 | 14.78 | 0.9659 | 35.73 | 150/150 |
-| browser: WebCodecs vp9-vbr | standard@3266k ⚠ | 3172 | 23.79 | 0.9898 | 39.91 | 150/150 |
-| browser: WebCodecs vp9-vbr | high@13064k ⚠ | 5029 | 37.72 | 0.9971 | 42.46 | 150/150 |
-| ffmpeg: realtime-proxy | compact@1632k ⚠ | 1403 | 10.52 | 0.9725 | 33.45 | 150/150 |
-| ffmpeg: realtime-proxy | standard@3265k ⚠ | 2525 | 18.94 | 0.9931 | 42.22 | 150/150 |
-| ffmpeg: realtime-proxy | high@13063k ⚠ | 3898 | 29.24 | 0.9995 | 50.7 | 150/150 |
-| ffmpeg: svtav1 | crf46 | 847 | 6.35 | 0.9926 | 41.9 | 150/150 |
-| ffmpeg: svtav1 | crf38 ⚠ | 1085 | 8.13 | 0.9969 | 45.76 | 150/150 |
-| ffmpeg: svtav1 | crf30 ⚠ | 1352 | 10.14 | 0.9985 | 48.96 | 150/150 |
-| ffmpeg: vp9 | crf44 | 616 | 4.62 | 0.9458 | 32.57 | 150/150 |
-| ffmpeg: vp9 | crf36 | 965 | 7.24 | 0.9826 | 37.08 | 150/150 |
-| ffmpeg: vp9 | crf28 | 1321 | 9.91 | 0.9939 | 41.44 | 150/150 |
-| ffmpeg: x264 | crf32 | 619 | 4.64 | 0.9632 | 27.35 | 150/150 |
-| ffmpeg: x264 | crf26 | 1029 | 7.72 | 0.9907 | 33.25 | 150/150 |
-| ffmpeg: x264 | crf20 | 1481 | 11.11 | 0.9973 | 39.27 | 150/150 |
-| ffmpeg: x265 | crf34 | 527 | 3.95 | 0.9225 | 28.43 | 150/150 |
-| ffmpeg: x265 | crf28 | 954 | 7.16 | 0.9786 | 34.19 | 150/150 |
-| ffmpeg: x265 | crf22 | 1466 | 10.99 | 0.9943 | 40.12 | 150/150 |
+| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected | Frames kept |
+|---|---|---:|---:|---:|---:|---:|---:|
+| browser: MediaRecorder av1 | standard@3266k | 1775 | 13.31 | 0.9433 | 32.46 | 122/150 | 81% |
+| browser: MediaRecorder mkv-avc | standard@3266k | 1535 | 11.51 | 0.908 | 28.07 | 119/150 | 79% |
+| browser: MediaRecorder mp4-av1 | standard@3266k | 1885 | 14.14 | 0.9427 | 32.99 | 125/150 | 83% |
+| browser: MediaRecorder vp9 | compact@1633k | 2096 | 15.72 | 0.9553 | 34.53 | 145/150 | 96% |
+| browser: MediaRecorder vp9 | standard@3266k | 3263 | 24.47 | 0.9626 | 36.37 | 124/150 | 82% |
+| browser: MediaRecorder vp9 | high@13064k | 5473 | 41.05 | 0.991 | 40.76 | 118/150 | 78% |
+| browser: WebCodecs av1-quantizer | q52 | 3640 | 27.30 | 0.9921 | 40.21 | 150/150 | — |
+| browser: WebCodecs av1-quantizer | q40 | 3949 | 29.61 | 0.9941 | 40.81 | 150/150 | — |
+| browser: WebCodecs av1-vbr | standard@3266k | 2044 | 15.33 | 0.9683 | 35.27 | 150/150 | — |
+| browser: WebCodecs avc-vbr | compact@1633k | 1669 | 12.52 | 0.9569 | 32.88 | 150/150 | — |
+| browser: WebCodecs avc-vbr | standard@3266k | 2308 | 17.31 | 0.9773 | 36.27 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q50 | 2375 | 17.81 | 0.9928 | 39.64 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q40 | 2597 | 19.48 | 0.9947 | 40.56 | 150/150 | — |
+| browser: WebCodecs vp9-quantizer | q30 | 2923 | 21.92 | 0.9956 | 41.18 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | compact@1633k | 1971 | 14.78 | 0.9659 | 35.73 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | standard@3266k | 3172 | 23.79 | 0.9898 | 39.91 | 150/150 | — |
+| browser: WebCodecs vp9-vbr | high@13064k | 5029 | 37.72 | 0.9971 | 42.46 | 150/150 | — |
+| ffmpeg: realtime-proxy | compact@1632k | 1403 | 10.52 | 0.9725 | 33.45 | 150/150 | — |
+| ffmpeg: realtime-proxy | standard@3265k | 2525 | 18.94 | 0.9931 | 42.22 | 150/150 | — |
+| ffmpeg: realtime-proxy | high@13063k | 3898 | 29.24 | 0.9995 | 50.7 | 150/150 | — |
+| ffmpeg: svtav1 | crf46 | 847 | 6.35 | 0.9926 | 41.9 | 150/150 | — |
+| ffmpeg: svtav1 | crf38 | 1085 | 8.13 | 0.9969 | 45.76 | 150/150 | — |
+| ffmpeg: svtav1 | crf30 | 1352 | 10.14 | 0.9985 | 48.96 | 150/150 | — |
+| ffmpeg: vp9 | crf44 | 616 | 4.62 | 0.9458 | 32.57 | 150/150 | — |
+| ffmpeg: vp9 | crf36 | 965 | 7.24 | 0.9826 | 37.08 | 150/150 | — |
+| ffmpeg: vp9 | crf28 | 1321 | 9.91 | 0.9939 | 41.44 | 150/150 | — |
+| ffmpeg: x264 | crf32 | 619 | 4.64 | 0.9632 | 27.35 | 150/150 | — |
+| ffmpeg: x264 | crf26 | 1029 | 7.72 | 0.9907 | 33.25 | 150/150 | — |
+| ffmpeg: x264 | crf20 | 1481 | 11.11 | 0.9973 | 39.27 | 150/150 | — |
+| ffmpeg: x265 | crf34 | 527 | 3.95 | 0.9225 | 28.43 | 150/150 | — |
+| ffmpeg: x265 | crf28 | 954 | 7.16 | 0.9786 | 34.19 | 150/150 | — |
+| ffmpeg: x265 | crf22 | 1466 | 10.99 | 0.9943 | 40.12 | 150/150 | — |
 

@@ -122,7 +122,7 @@ function startServer({ corpus, out, mediabunny }) {
 }
 
 function evaluate(refDir, file) {
-  const run = spawnSync('python3', [path.join(here, 'metrics.py'), '--ref', refDir, '--encoded', file], { encoding: 'utf8' });
+  const run = spawnSync('python3', [path.join(here, 'metrics.py'), '--ref', refDir, '--encoded', file, '--markers'], { encoding: 'utf8' });
   if (run.status !== 0) throw new Error(run.stderr.trim().split('\n').pop() || 'metrics failed');
   return JSON.parse(run.stdout);
 }

@@ -12,6 +12,20 @@ import report  # noqa: E402
 import ffmpeg_sweep  # noqa: E402
 
 
+class FrameMarkerTest(unittest.TestCase):
+    def test_roundtrip_all_indices_survive_noise(self):
+        rng = np.random.default_rng(1)
+        for index in (0, 1, 149, 255, 256, 40000, 65535):
+            frame = rng.integers(0, 255, (64, 320), dtype=np.uint8)
+            metrics.stamp_marker(frame, index)
+            noisy = np.clip(frame.astype(int) + rng.integers(-40, 40, frame.shape), 0, 255).astype(np.uint8)
+            self.assertEqual(metrics.read_marker(noisy), index)
+
+    def test_unstamped_frame_is_rejected(self):
+        self.assertIsNone(metrics.read_marker(np.full((64, 320), 128, dtype=np.uint8)))
+        self.assertIsNone(metrics.read_marker(np.zeros((64, 320), dtype=np.uint8)))
+
+
 class SizeAtQualityTest(unittest.TestCase):
     points = [{'bytes': 1000, 'edge_psnr': 30.0}, {'bytes': 4000, 'edge_psnr': 40.0}]
 

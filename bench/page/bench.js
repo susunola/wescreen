@@ -19,6 +19,13 @@ async function upload(name, body) {
   if (!response.ok) throw new Error(`upload failed: ${response.status}`);
 }
 
+// Every frame carries its own index (18 blocks of 16 px, sync "10" + 16 bits) so metrics.py can match decoded
+// frames to the reference exactly, however the recorder drops or re-times them. Mirrors metrics.stamp_marker.
+function stampMarker(context, index) {
+  const bits = [1, 0, ...Array.from({ length: 16 }, (_, k) => (index >> (15 - k)) & 1)];
+  bits.forEach((bit, k) => { context.fillStyle = bit ? '#fff' : '#000'; context.fillRect(k * 16, 0, 16, 16); });
+}
+
 async function runMediaRecorder(cfg, meta) {
   if (!MediaRecorder.isTypeSupported(cfg.mime)) return { skipped: `MediaRecorder does not support ${cfg.mime}` };
   const canvas = document.getElementById('c');
@@ -42,6 +49,7 @@ async function runMediaRecorder(cfg, meta) {
     const wait = started + (i * 1000) / meta.fps - performance.now();
     if (wait > 0) await sleep(wait);
     context.drawImage(bitmap, 0, 0);
+    stampMarker(context, i);
     track.requestFrame();
     bitmap.close();
   }
@@ -81,10 +89,14 @@ async function runWebCodecs(cfg, meta) {
   const source = new MB.VideoSampleSource(encoding);
   output.addVideoTrack(source, { frameRate: meta.fps });
   await output.start();
+  const stampCanvas = new OffscreenCanvas(meta.width, meta.height);
+  const stampContext = stampCanvas.getContext('2d', { alpha: false });
   const started = performance.now();
   for (let i = 0; i < meta.frames; i++) {
     const bitmap = await loadFrame(cfg.clip, i);
-    const frame = new VideoFrame(bitmap, { timestamp: Math.round((i * 1e6) / meta.fps), duration: Math.round(1e6 / meta.fps) });
+    stampContext.drawImage(bitmap, 0, 0);
+    stampMarker(stampContext, i);
+    const frame = new VideoFrame(stampCanvas, { timestamp: Math.round((i * 1e6) / meta.fps), duration: Math.round(1e6 / meta.fps) });
     bitmap.close();
     const sample = new MB.VideoSample(frame);
     await source.add(sample);

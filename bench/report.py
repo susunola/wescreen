@@ -36,7 +36,8 @@ def group_key(row):
 
 
 def timing_limited(row):
-    return row['encoder'].startswith('MediaRecorder') and (row.get('mean_shift') or 0) > TIMING_LIMIT
+    # Rows with frame markers are matched exactly, so timing cannot bias them; only legacy unmarked rows can be limited.
+    return row['encoder'].startswith('MediaRecorder') and not row.get('markers') and (row.get('mean_shift') or 0) > TIMING_LIMIT
 
 
 def build_tables(rows, baseline):
@@ -78,7 +79,7 @@ def operating_point(rows, anchor):
         base = next((r for r in groups.get(name, []) if r['param'].startswith(param)), None)
         if not base or base.get('edge_psnr') is None:
             continue
-        if (base.get('mean_shift') or 0) > TIMING_LIMIT:
+        if timing_limited(base):
             excluded.append(clip)
             continue
         for other, points in groups.items():
@@ -125,15 +126,17 @@ def render(rows, baseline):
         vals = [v for _, v in ratios2[name]]
         out.append(f'| {name} | {geometric_mean(vals):.2f}× | {len(vals)} |')
     out += ['', '## How far to trust this', '',
+            '- Browser rows carry a frame-index marker (top-left, cropped from every metric), so decoded frames are matched to the reference exactly. MediaRecorder rows are therefore valid even when the recorder drops frames; "Frames kept" shows how many of the clip\'s frames it actually delivered. Pixel quality is judged on the frames it kept, so a recorder that drops many frames looks better here than it feels: check the kept column before celebrating a MediaRecorder number. In this headless 2-CPU container MediaRecorder keeps roughly 75-95% of frames; WebCodecs keeps 100%.',
             '- Rows marked ⚠ come from real-time MediaRecorder capture whose output timeline could not be aligned with the reference (`mean_shift` > ' + str(int(TIMING_LIMIT)) + ' frames, or more frames than the clip has). On a loaded or headless machine this says more about capture timing than about the encoder, so those rows are not used for any ratio above.',
             '- WebCodecs and FFmpeg rows use exact frame timestamps and decode 1:1 (`mean_shift` ≈ 0 for the former), so comparisons between them are sound for the synthetic corpus.',
             '- Synthetic content, software encoders only: hardware H.264/HEVC/AV1 and real screen captures are not covered by this run.', '', '## Per-clip measurements', '']
     for clip in sorted(by_clip):
-        out += [f'### {clip}', '', '| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |', '|---|---|---:|---:|---:|---:|---:|']
+        out += [f'### {clip}', '', '| Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected | Frames kept |', '|---|---|---:|---:|---:|---:|---:|---:|']
         for name in sorted(by_clip[clip]):
             for row in sorted(by_clip[clip][name], key=lambda r: r['kbps']):
-                flag = ' ⚠' if (row.get('mean_shift') or 0) > TIMING_LIMIT else ''
-                out.append(f'| {name} | {row["param"]}{flag} | {row["kbps"]:.0f} | {row["mb_per_min"]:.2f} | {row["ssim"]} | {row["edge_psnr"]} | {row["frames_decoded"]}/{row["frames_expected"]} |')
+                flag = ' ⚠' if timing_limited(row) else ''
+                kept = f'{row["coverage"] * 100:.0f}%' if row.get('markers') else '—'
+                out.append(f'| {name} | {row["param"]}{flag} | {row["kbps"]:.0f} | {row["mb_per_min"]:.2f} | {row["ssim"]} | {row["edge_psnr"]} | {row["frames_decoded"]}/{row["frames_expected"]} | {kept} |')
         out.append('')
     return '\n'.join(out)
 

@@ -25,6 +25,42 @@ MAX_OFFSET = 4       # frames of start-time misalignment we search over (MediaRe
 MATCH_WINDOW = 24    # extra frames decoded beyond the clip length so a stretched real-time recording is still covered
 
 
+# Frame markers: browser benchmark frames carry their own index in the top-left corner as 18 black/white
+# 16x16 blocks (2 sync bits "10", then 16 index bits, MSB first). Blocks that large survive any sane bitrate.
+# That makes matching exact even when a real-time recorder drops, repeats or re-times frames, which is what
+# MediaRecorder does. The marker rows are cropped from every comparison so they never count as content.
+MARKER_BLOCK = 16
+MARKER_SYNC = (1, 0)
+MARKER_BITS = 16
+MARKER_ROWS = MARKER_BLOCK
+
+
+def marker_bits(index):
+    return [*MARKER_SYNC, *[(index >> (MARKER_BITS - 1 - k)) & 1 for k in range(MARKER_BITS)]]
+
+
+def stamp_marker(frame, index):
+    """Write the marker for `index` into a grayscale frame (in place) and return it."""
+    for k, bit in enumerate(marker_bits(index)):
+        frame[:MARKER_BLOCK, k * MARKER_BLOCK:(k + 1) * MARKER_BLOCK] = 255 if bit else 0
+    return frame
+
+
+def read_marker(frame):
+    """Frame index encoded in the marker, or None when the sync bits do not match (not a stamped frame)."""
+    half = MARKER_BLOCK // 2
+    levels = []
+    for k in range(len(MARKER_SYNC) + MARKER_BITS):
+        block = frame[half - 3:half + 3, k * MARKER_BLOCK + half - 3:k * MARKER_BLOCK + half + 3]
+        levels.append(1 if float(block.mean()) > 127 else 0)
+    if tuple(levels[:len(MARKER_SYNC)]) != MARKER_SYNC:
+        return None
+    value = 0
+    for bit in levels[len(MARKER_SYNC):]:
+        value = (value << 1) | bit
+    return value
+
+
 def load_meta(ref_dir):
     return json.loads((Path(ref_dir) / 'meta.json').read_text())
 
@@ -36,6 +72,16 @@ def read_reference(ref_dir, indices):
 def decode_luma(path, width, height, fps, limit):
     """Decode to constant-frame-rate raw luma so variable-frame-rate output lines up index by index."""
     cmd = ['ffmpeg', '-v', 'error', '-i', str(path), '-vf', f'fps={fps},scale={width}:{height}:flags=bicubic,format=gray',
+           '-frames:v', str(limit), '-f', 'rawvideo', '-pix_fmt', 'gray', '-']
+    data = subprocess.run(cmd, capture_output=True, check=True).stdout
+    size = width * height
+    count = len(data) // size
+    return np.frombuffer(data[:count * size], dtype=np.uint8).reshape(count, height, width)
+
+
+def decode_luma_raw(path, width, height, limit):
+    """Every frame the file actually contains, in order, with no frame-rate resampling."""
+    cmd = ['ffmpeg', '-v', 'error', '-i', str(path), '-fps_mode', 'passthrough', '-vf', f'scale={width}:{height}:flags=bicubic,format=gray',
            '-frames:v', str(limit), '-f', 'rawvideo', '-pix_fmt', 'gray', '-']
     data = subprocess.run(cmd, capture_output=True, check=True).stdout
     size = width * height
@@ -138,6 +184,53 @@ def evaluate(ref_dir, encoded, sample=5, align=True):
     return row
 
 
+def evaluate_stamped(ref_dir, encoded, sample=5):
+    """Score a recording whose frames carry index markers. Timing cannot bias the pixel metrics here.
+
+    Quality is measured on sampled reference frames that the recording actually contains; how many it
+    dropped is reported separately as coverage and max_gap (longest run of missing frames).
+    """
+    meta = load_meta(ref_dir)
+    width, height, fps, frames = meta['width'], meta['height'], meta['fps'], meta['frames']
+    decoded = decode_luma_raw(encoded, width, height, frames * 3)
+    by_index = {}
+    unreadable = 0
+    for frame in decoded:
+        index = read_marker(frame)
+        if index is None or index >= frames:
+            unreadable += 1
+        else:
+            by_index.setdefault(index, frame)
+    present = sorted(by_index)
+    gaps, previous, max_gap = 0, -1, 0
+    for index in [*present, frames]:
+        max_gap = max(max_gap, index - previous - 1)
+        previous = index
+    indices = [i for i in range(0, frames, sample) if i in by_index]
+    ref_frames = read_reference(ref_dir, indices)
+    ps, ss, es = [], [], []
+    for i in indices:
+        a, b = ref_frames[i][MARKER_ROWS:], by_index[i][MARKER_ROWS:]
+        ps.append(psnr(a, b))
+        ss.append(structural_similarity(a, b, data_range=255))
+        e = edge_psnr(a, b)
+        if e is not None:
+            es.append(e)
+    size = Path(encoded).stat().st_size
+    seconds = frames / fps
+    row = {
+        'clip': meta['name'], 'file': Path(encoded).name, 'bytes': size, 'seconds': round(seconds, 3),
+        'kbps': round(size * 8 / seconds / 1000, 1), 'mb_per_min': round(size / seconds * 60 / 1e6, 3),
+        'psnr': round(float(np.mean(ps)), 2) if ps else None,
+        'ssim': round(float(np.mean(ss)), 4) if ss else None,
+        'edge_psnr': round(float(np.mean(es)), 2) if es else None,
+        'frames_decoded': len(decoded), 'frames_expected': frames, 'markers': True,
+        'coverage': round(len(present) / frames, 4), 'max_gap': max_gap, 'unreadable_frames': unreadable, 'mean_shift': 0.0,
+    }
+    row.update(probe(encoded))
+    return row
+
+
 def size_at_quality(points, metric, target):
     """Interpolate the byte size at which `metric` reaches `target`, in log-size.
 
@@ -158,8 +251,10 @@ def main(argv=None):
     parser.add_argument('--encoded', required=True)
     parser.add_argument('--sample', type=int, default=5, help='evaluate every Nth frame')
     parser.add_argument('--no-align', action='store_true')
+    parser.add_argument('--markers', action='store_true', help='frames carry index markers (browser benchmark output)')
     args = parser.parse_args(argv)
-    print(json.dumps(evaluate(args.ref, args.encoded, args.sample, not args.no_align), indent=2))
+    result = evaluate_stamped(args.ref, args.encoded, args.sample) if args.markers else evaluate(args.ref, args.encoded, args.sample, not args.no_align)
+    print(json.dumps(result, indent=2))
     return 0
 
 
