@@ -1,3 +1,9 @@
+# Unreleased
+
+- Add MP4 · HEVC and MP4 · AV1 recording formats; each is enabled only when this browser/OS reports MediaRecorder support, and never silently falls back to another codec.
+- Fix a failed automatic segment rotation leaving an orphaned session record behind; the running recording now keeps its encoder and the new session is discarded.
+- Add `bench/`, a reproducible encoder benchmark (MediaRecorder vs WebCodecs vs FFmpeg) with edge-sharpness metrics.
+
 # 1.29.0 — 2026-10-25
 
 - Add compressed multipart merging and resumable incremental library merging, including conservative audio/video overlap checks and validated output duration.

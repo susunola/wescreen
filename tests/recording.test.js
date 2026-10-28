@@ -342,3 +342,60 @@ test('recording cancels before encoding when requested resolution cap is not app
  assert.equal(seen.recordings.length,0);assert.ok(seen.releases>0);
  assert.match(seen.notices.join(' '),/超大文件/);
 });
+
+function rotationContext({ startFails }) {
+  const seen = { discarded: [], stopped: [], selected: [] };
+  const listeners = {};
+  const nextRecorder = {
+    state: 'inactive',
+    addEventListener: (name, fn) => { listeners[name] = fn; },
+    start() { if (startFails) { this.state = 'recording'; queueMicrotask(() => listeners.error(new Error('encoder refused'))); } else { this.state = 'recording'; queueMicrotask(() => listeners.start()); } },
+    stop() { this.state = 'inactive'; seen.stopped.push('next'); }
+  };
+  const previous = { index: 1, recorder: { state: 'recording', stop() { seen.stopped.push('previous'); } } };
+  const context = {
+    rollingSegment: false, stopRequested: false, activeSegment: previous, recorder: previous.recorder,
+    recordingStream: {}, recordingMime: 'video/webm', recordingGroupId: 'g', pausedAt: 0, TIMESLICE_MS: 1000,
+    createSegment: index => ({ index, session: 'session-' + index, name: 'n', recorder: null }),
+    armRecorder: (stream, type, state) => { state.recorder = nextRecorder; },
+    setInProgress: async () => {},
+    discardSession: async session => { seen.discarded.push(session); },
+    elapsed: () => 0, segmentDetails: () => ({}), selectSegment: state => seen.selected.push(state.index), scheduleSegment: () => {}
+  };
+  vm.runInNewContext(extract('async function saveSegmentAndContinue()', 'function tick()') + '\nthis.saveSegmentAndContinue = saveSegmentAndContinue;', context);
+  return { context, seen };
+}
+
+test('a failed segment rotation discards the new session metadata and releases the rotation lock', async () => {
+  const { context, seen } = rotationContext({ startFails: true });
+  await assert.rejects(context.saveSegmentAndContinue(), /encoder refused/);
+  assert.deepEqual(seen.discarded, ['session-2']);
+  assert.deepEqual(seen.selected, []);
+  assert.ok(seen.stopped.includes('next'));
+  assert.ok(!seen.stopped.includes('previous'), 'the running recorder must keep capturing when rotation fails');
+  assert.equal(context.rollingSegment, false);
+});
+
+test('a successful segment rotation keeps the new session and stops the previous recorder', async () => {
+  const { context, seen } = rotationContext({ startFails: false });
+  await context.saveSegmentAndContinue();
+  assert.deepEqual(seen.discarded, []);
+  assert.deepEqual(seen.selected, [2]);
+  assert.deepEqual(seen.stopped, ['previous']);
+});
+
+test('HEVC and AV1-in-MP4 are offered only when MediaRecorder reports support, and are labelled mp4', () => {
+  const ask = (format, supported) => {
+    const context = { $: () => ({ value: format }), MediaRecorder: { isTypeSupported: type => supported.includes(type) }, recordingMime: 'video/mp4' };
+    vm.runInNewContext(extract('const MP4_TYPES', 'function captureError'), context);
+    return context;
+  };
+  const hevc = 'video/mp4;codecs=hvc1.1.6.L120.90,mp4a.40.2';
+  assert.equal(ask('hevc', [hevc]).mediaType(), hevc);
+  assert.equal(ask('hevc', [hevc]).selectedExtension(), 'mp4');
+  assert.equal(ask('hevc', ['video/mp4;codecs=avc1,mp4a.40.2']).mediaType(), undefined, 'no silent fallback to H.264');
+  const av1 = 'video/mp4;codecs=av01.0.08M.08,opus';
+  assert.equal(ask('av1mp4', [av1]).mediaType(), av1);
+  assert.equal(ask('av1mp4', [av1]).recordingExtension(), 'mp4');
+  assert.equal(ask('av1mp4', []).mediaType(), undefined);
+});

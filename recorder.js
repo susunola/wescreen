@@ -350,10 +350,14 @@ function applyCapturePreset() {
   setNotice(mp4 ? '' : L('telegramWebM'));
 }
 const MP4_TYPES = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.640033,mp4a.40.2'];
-function selectedExtension() { return $('format').value === 'mp4' ? 'mp4' : 'webm'; }
+// Formats that MediaRecorder only offers when the OS/browser can encode them; capture-quality.js disables the unavailable ones.
+const HEVC_TYPES = ['video/mp4;codecs=hvc1.1.6.L120.90,mp4a.40.2', 'video/mp4;codecs=hev1.1.6.L120.90,mp4a.40.2', 'video/mp4;codecs=hvc1,mp4a.40.2', 'video/mp4;codecs=hevc,mp4a.40.2'];
+const AV1_MP4_TYPES = ['video/mp4;codecs=av01.0.08M.08,opus', 'video/mp4;codecs=av01,opus', 'video/mp4;codecs=av01.0.08M.08,mp4a.40.2'];
+const FORMAT_TYPES = { hevc: HEVC_TYPES, av1mp4: AV1_MP4_TYPES, vp9: ['video/webm;codecs=vp9,opus'], av1: ['video/webm;codecs=av1,opus'] };
+function selectedExtension() { return ['mp4', 'hevc', 'av1mp4'].includes($('format').value) ? 'mp4' : 'webm'; }
 function mediaType() {
   const format=$('format').value;
-  const types = format==='vp9' ? ['video/webm;codecs=vp9,opus'] : format==='av1' ? ['video/webm;codecs=av1,opus'] : selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const types = FORMAT_TYPES[format] || (selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']);
   return types.find(type => MediaRecorder.isTypeSupported(type));
 }
 function recordingExtension() { return recordingMime.startsWith('video/mp4') ? 'mp4' : 'webm'; }
@@ -573,8 +577,9 @@ async function saveSegmentAndContinue() {
   if (rollingSegment || stopRequested || !activeSegment || recorder.state === 'inactive') return;
   rollingSegment = true;
   const previous = activeSegment;
+  let next = null, adopted = false;
   try {
-    const next = createSegment(previous.index + 1); armRecorder(recordingStream, recordingMime, next);
+    next = createSegment(previous.index + 1); armRecorder(recordingStream, recordingMime, next);
     // Persist the new session while the old encoder is STILL RUNNING. Disk latency cannot cause a capture gap.
     await setInProgress({ session: next.session, recordingGroupId, part:next.index, name: next.name, mimeType: recordingMime, index: next.index, course: next.course, episode: next.episode, ...(next.channelMetadata || {}) });
     if (stopRequested || previous.recorder.state === 'inactive') { await discardSession(next.session); if (previous.recorder.state !== 'inactive') previous.recorder.stop(); return; }
@@ -583,8 +588,15 @@ async function saveSegmentAndContinue() {
     if (pausedAt) next.recorder.pause();
     // Start-before-stop intentionally allows a tiny overlap instead of losing frames at the boundary.
     previous.details = segmentDetails(previous);
-    selectSegment(next); previous.recorder.stop();
+    selectSegment(next); adopted = true; previous.recorder.stop();
     if (stopRequested) next.recorder.stop(); else scheduleSegment();
+  } catch (error) {
+    // setInProgress() already wrote this session's metadata; if the encoder never took over, nothing else will clean it up.
+    if (next && !adopted) {
+      try { if (next.recorder && next.recorder.state !== 'inactive') next.recorder.stop(); } catch { /* already stopped */ }
+      await discardSession(next.session).catch(() => {});
+    }
+    throw error;
   } finally { rollingSegment = false; }
 }
 function tick() {
