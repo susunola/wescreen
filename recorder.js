@@ -275,7 +275,7 @@ function applyLang(next) {
 
 // ---- settings -------------------------------------------------------------
 const SETTING_FIELDS = [
-  ['mic-device', 'select'], ['capture-mode', 'select'], ['filename', 'text'], ['format', 'select'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
+  ['mic-device', 'select'], ['capture-mode', 'select'], ['filename', 'text'], ['format', 'select'], ['engine', 'select'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
   ['channel-name', 'text'], ['channel-url', 'text'], ['channel-video-title', 'text'], ['channel-message-url', 'text'], ['channel-episode', 'text'], ['channel-folder', 'text'], ['countdown', 'select'], ['autostop', 'select'], ['segment-minutes', 'select'], ['quiet-tab-audio', 'checked'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
 ];
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
@@ -355,8 +355,11 @@ const HEVC_TYPES = ['video/mp4;codecs=hvc1.1.6.L120.90,mp4a.40.2', 'video/mp4;co
 const AV1_MP4_TYPES = ['video/mp4;codecs=av01.0.08M.08,opus', 'video/mp4;codecs=av01,opus', 'video/mp4;codecs=av01.0.08M.08,mp4a.40.2'];
 const FORMAT_TYPES = { hevc: HEVC_TYPES, av1mp4: AV1_MP4_TYPES, vp9: ['video/webm;codecs=vp9,opus'], av1: ['video/webm;codecs=av1,opus'] };
 function selectedExtension() { return ['mp4', 'hevc', 'av1mp4'].includes($('format').value) ? 'mp4' : 'webm'; }
+// The Pro (WebCodecs) engine is opt-in and only for the MP4 formats; anything else stays on MediaRecorder.
+function proEngineSelected() { return $('engine')?.value === 'pro' && typeof proEngineSupports === 'function' && proEngineSupports($('format').value); }
 function mediaType() {
   const format=$('format').value;
+  if (proEngineSelected()) return proEngineMime(format);
   const types = FORMAT_TYPES[format] || (selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']);
   return types.find(type => MediaRecorder.isTypeSupported(type));
 }
@@ -485,9 +488,9 @@ function armRecorder(stream, type, state) {
   const videoTracks = stream.getVideoTracks();
   if (!videoTracks.length || videoTracks[0].readyState !== 'live') throw new Error(L('errNoSource'));
   const audio = mixAudio();
-  const instance = new MediaRecorder(new MediaStream([...videoTracks, ...(audio ? [audio] : [])]), {
-    mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: captureAudioBitrate()
-  });
+  const recorderStream = new MediaStream([...videoTracks, ...(audio ? [audio] : [])]);
+  const recorderOptions = { mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: captureAudioBitrate() };
+  const instance = proEngineSelected() ? new ProRecorder(recorderStream, { ...recorderOptions, format: $('format').value }) : new MediaRecorder(recorderStream, recorderOptions);
   state = state || { session: crypto.randomUUID(), index: 1, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0, name: `${sanitized()}.${recordingExtension()}` };
   state.recorder = instance;
   state.captureAudioTreatment=$('capture-clear-voice')?.checked?'clearVoice':'original';

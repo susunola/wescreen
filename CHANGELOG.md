@@ -1,6 +1,7 @@
 # Unreleased
 
 - Add MP4 · HEVC and MP4 · AV1 recording formats; each is enabled only when this browser/OS reports MediaRecorder support, and never silently falls back to another codec.
+- Add an opt-in "Pro" recording engine (WebCodecs via vendored Mediabunny, MPL-2.0) for the MP4 formats: direct H.264/HEVC/AV1 encoder control and fragmented MP4 output, so an interrupted recording remains playable. Standard (MediaRecorder) stays the default; Pro never silently switches codecs.
 - Fix a failed automatic segment rotation leaving an orphaned session record behind; the running recording now keeps its encoder and the new session is discarded.
 - Add `bench/`, a reproducible encoder benchmark (MediaRecorder vs WebCodecs vs FFmpeg) with edge-sharpness metrics.
 

@@ -399,3 +399,20 @@ test('HEVC and AV1-in-MP4 are offered only when MediaRecorder reports support, a
   assert.equal(ask('av1mp4', [av1]).recordingExtension(), 'mp4');
   assert.equal(ask('av1mp4', []).mediaType(), undefined);
 });
+
+test('the Pro engine is used only when selected, supported and an MP4 format; otherwise MediaRecorder decides', () => {
+  const make = ({ engine, format, supported }) => {
+    const context = {
+      $: id => ({ value: id === 'engine' ? engine : format }),
+      MediaRecorder: { isTypeSupported: type => type === 'video/mp4;codecs=avc1,mp4a.40.2' }, recordingMime: 'video/mp4',
+      proEngineSupports: f => supported.includes(f), proEngineMime: f => `pro:${f}`
+    };
+    vm.runInNewContext(extract('const MP4_TYPES', 'function captureError'), context);
+    return context;
+  };
+  assert.equal(make({ engine: 'pro', format: 'hevc', supported: ['hevc'] }).mediaType(), 'pro:hevc');
+  assert.equal(make({ engine: 'standard', format: 'hevc', supported: ['hevc'] }).mediaType(), undefined, 'standard engine ignores Pro support');
+  assert.equal(make({ engine: 'pro', format: 'hevc', supported: [] }).mediaType(), undefined, 'unsupported codec is an error, not a silent fallback');
+  assert.equal(make({ engine: 'pro', format: 'vp9', supported: ['hevc'] }).mediaType(), undefined);
+  assert.equal(make({ engine: 'pro', format: 'mp4', supported: [] }).mediaType(), 'video/mp4;codecs=avc1,mp4a.40.2', 'H.264 falls back to the standard engine only because it is the same codec');
+});
