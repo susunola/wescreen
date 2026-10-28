@@ -23,6 +23,7 @@ from face import face_ready, run_face, file_sha256
 from pairing import connect_origin
 from tail import trim_static_tail
 from merge import handle_media_post
+from optimize import handle_optimize_post, available_encoders, MIME as OPTIMIZE_MIME
 from sequence_merge import handle_sequence
 
 for ffmpeg_bin in ('/opt/homebrew/opt/ffmpeg-full/bin','/usr/local/opt/ffmpeg-full/bin'):
@@ -74,7 +75,7 @@ SEED_WEIGHTS = {
     'ema_vae_fp16.safetensors': '20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1',
 }
 
-PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding','faceFidelity','facePreviewId','faceRestoredFrames','faceSourceHash','compress','sequence','receivedParts','totalParts','overlapRemoved')
+PUBLIC_KEYS = ('id', 'state', 'progress', 'stage', 'detail', 'duration', 'width', 'height', 'size', 'error', 'mode', 'preview', 'previewSeconds', 'start', 'end', 'sourceId', 'name', 'createdAt', 'crop', 'rotation', 'batchRef', 'landscape', 'strength','audioPreset','compatible','watermark','requireSilence','tailRemoved','tailReason','smartTail','toneMap','captureContent','frameRate','encoding','faceFidelity','facePreviewId','faceRestoredFrames','faceSourceHash','compress','sequence','receivedParts','totalParts','overlapRemoved','outputName','mime','target','quality','inputBytes','savedRatio')
 
 def persist_job(job):
     path = job['output'].parent / 'job.json'
@@ -89,7 +90,8 @@ def load_jobs():
             job = json.loads(path.read_text())
             if path.parent.name != job['id'] or not re.fullmatch('[a-f0-9]{32}', job['id']):
                 continue
-            job.update(source=path.parent/'input', output=path.parent/'enhanced.mp4', cancel=threading.Event(), processes=[])
+            name = job.get('outputName') if re.fullmatch(r'optimized\.(mp4|webm|gif|webp)', str(job.get('outputName'))) else 'enhanced.mp4'
+            job.update(source=path.parent/'input', output=path.parent/name, cancel=threading.Event(), processes=[])
             if job['state'] in ('queued', 'processing'):
                 job.update(state='error', error='Local helper restarted before processing finished. Retry from the original video.')
                 job['output'].unlink(missing_ok=True)
@@ -442,6 +444,7 @@ class Handler(BaseHTTPRequestHandler):
         if handle_smart(self,'POST',globals()): return
         if handle_sequence(self,urlparse(self.path).path,globals()): return
         if handle_media_post(self,urlparse(self.path).path,globals()): return
+        if handle_optimize_post(self,urlparse(self.path).path,globals()): return
         if urlparse(self.path).path == '/realtime/frame':
             try: size = int(self.headers.get('Content-Length', '0'))
             except ValueError: size = 0
@@ -586,7 +589,7 @@ class Handler(BaseHTTPRequestHandler):
                 active=sum(job['state'] in ('queued','processing') for job in JOBS.values())
             return self.reply(200,{'diskFree':shutil.disk_usage(WORK).free,'uploadsBytes':folder_bytes(WORK/'uploads'),'jobsBytes':sum(folder_bytes(p) for p in WORK.iterdir() if p.is_dir() and p.name!='uploads'),'activeJobs':active})
         if path == '/health':
-            return self.reply(200, {'version':'1.29.0','protocolVersion':PROTOCOL_VERSION,'buildId':BUILD_ID,'managedUpdates':True,'activeSmartSessions':len(SMART_SESSIONS),'nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'mergeCompression':True,'sequenceMerge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'Adaptive spatial repair / FSRCNN 2x','realtimeTemporal':False,'smartChunks':True,'smartHeartbeat':True,'smartNeural':smart_ready(),'smartTemporal':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
+            return self.reply(200, {'version':'1.29.0','protocolVersion':PROTOCOL_VERSION,'buildId':BUILD_ID,'managedUpdates':True,'activeSmartSessions':len(SMART_SESSIONS),'nativePairing':True,'smartTail':True,'watermark':True,'merge':True,'mergeCompression':True,'optimize':available_encoders(),'sequenceMerge':True,'face':face_ready(),'faceModel':'CodeFormer','diskFree':shutil.disk_usage(WORK).free,'ready': True, 'ai': MODEL.exists(), 'strong': seed_ready(), 'realtime': MODEL.exists(), 'realtimeLossless':True,'realtimeRGB':True,'realtimeRGBMaxWidth':1920,'realtimeRGBMaxHeight':1080,'realtimeOutputScale':2,'realtimeEngine':'Adaptive spatial repair / FSRCNN 2x','realtimeTemporal':False,'smartChunks':True,'smartHeartbeat':True,'smartNeural':smart_ready(),'smartTemporal':True,'toneMap':tone_map_ready(),'realtimeModel': 'FSRCNN 2x', 'model': 'FSRCNN 2x', 'strongModel': 'SeedVR2 3B FP16'})
         parts = path.strip('/').split('/')
         with GUARD:
             job = JOBS.get(parts[1]) if len(parts) >= 2 and parts[0] == 'jobs' else None
@@ -595,7 +598,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[2] == 'result':
             if job['state'] != 'done':
                 return self.reply(409, {'error': 'Result is not ready'})
-            self.send_response(200); self.cors_headers(); self.send_header('Content-Disposition', 'attachment; filename=enhanced.mp4'); self.send_header('Content-Type', 'video/mp4'); self.send_header('Content-Length', str(job['output'].stat().st_size)); self.end_headers()
+            self.send_response(200); self.cors_headers(); self.send_header('Content-Disposition', 'attachment; filename=' + job['output'].name); self.send_header('Content-Type', job.get('mime') or 'video/mp4'); self.send_header('Content-Length', str(job['output'].stat().st_size)); self.end_headers()
             with job['output'].open('rb') as video:
                 shutil.copyfileobj(video, self.wfile)
             return

@@ -1,0 +1,19 @@
+{
+  "name": "wescreen-bench",
+  "private": true,
+  "type": "module",
+  "description": "Encoder benchmark for WeScreen: MediaRecorder vs WebCodecs, measured on identical pixels.",
+  "scripts": {
+    "corpus": "python3 make_corpus.py",
+    "sweep": "python3 ffmpeg_sweep.py",
+    "browser": "node browser_bench.mjs",
+    "report": "python3 report.py"
+  },
+  "dependencies": {
+    "mediabunny": "^1.62.1",
+    "puppeteer-core": "^25.16.0"
+  },
+  "optionalDependencies": {
+    "@sparticuz/chromium": "^153.0.0"
+  }
+}

@@ -4,6 +4,10 @@
 
 macOS 已装好依赖后，双击 `install-launcher.command` 注册本机启动器。之后扩展内“启动本机增强包”可通过 `wescreen-helper://start` 启动，旧程序无运行中任务时可更新。安装器保留模型与 `.runtime`，不会删除录像。运行中任务会阻止更新，需要完成后再启动新版。
 
+Windows (experimental, untested by CI): double-click `start.cmd` (or run `.\start.ps1`). It installs FFmpeg and Python 3.12 through winget if they are missing, creates `.venv`, and starts the helper on `127.0.0.1:8765`. The one-click registration and update flow is macOS-only for now.
+
+Size optimisation and GIF / animated WebP export (`POST /jobs/optimize`, `optimize` in `/health`) use whichever of libx264, libx265, libsvtav1, libvpx-vp9 and libwebp_anim your FFmpeg build has; the defaults come from `bench/RESULTS.md`. GIF/WebP exports are limited to 60 seconds.
+
 合并上传受本机鉴权、输入格式、随机文件标识、单段 1.6 GB 上限和空间检查约束。闲置超过 24 小时的上传暂存文件在下次上传时清理；任务结束清理内部输入副本，完整结果保留至用户删除任务。录像库原文件不受影响。
 
 默认提供两个修复档位，另保留轻量增强选项：

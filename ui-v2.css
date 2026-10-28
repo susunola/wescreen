@@ -1,0 +1,104 @@
+/* Recording-first look: quiet neutral surfaces, one mint accent for quality and savings, one red for recording.
+   Dark is the default; html[data-theme="light"] switches the whole shell. Loaded after studio-ui.css. */
+:root,html[data-theme="dark"]{
+  --bg:#0b0c0f;--panel:#14161b;--inset:#0e1013;--raised:#1c1f26;--line:#ffffff17;--line-strong:#ffffff2b;
+  --text:#eceef3;--muted:#9aa1af;--soft:#c8cdd8;--accent:#5eead4;--accent-ink:#04201b;--accent-tint:#0f1a17;--accent-line:#1f5f54;
+  --record:#ff5a4f;--record-ink:#1a0807;--danger:#ff8a80;--shadow:0 24px 60px #0008;
+}
+html[data-theme="light"]{
+  --bg:#f6f7f9;--panel:#ffffff;--inset:#f1f3f7;--raised:#eef0f4;--line:#14161b1f;--line-strong:#14161b38;
+  --text:#14161b;--muted:#5b6272;--soft:#3a404d;--accent:#0b7f70;--accent-ink:#ffffff;--accent-tint:#e6f5f2;--accent-line:#9ed7cd;
+  --record:#ff5a4f;--record-ink:#1a0807;--danger:#b3261e;--shadow:0 24px 60px #14161b2e;
+  color-scheme:light;
+}
+html{background:var(--bg);color:var(--soft)}
+.studio-ui{background:var(--bg);color:var(--soft);font-family:Inter,"Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif}
+.studio-ui h1,.studio-ui h2,.studio-ui h3,.studio-ui strong{color:var(--text)}
+.studio-ui .app>header,.studio-ui .workspace-nav{border-color:var(--line)}
+.studio-ui .eyebrow,.studio-ui .hint,.studio-ui label,.studio-ui label>span{color:var(--muted)}
+.studio-ui .workspace-nav [data-view]{color:var(--muted)}
+.studio-ui .workspace-nav [data-view][aria-pressed="true"]{color:var(--text)}
+.studio-ui .workspace-nav [data-view][aria-pressed="true"]::after{background:var(--accent)}
+.studio-ui .panel,.studio-ui dialog{background:var(--panel);border-color:var(--line);color:var(--soft)}
+.studio-ui .setup-form,.studio-ui .capture-ready{background:var(--inset);border:1px solid var(--line);color:var(--soft)}
+.studio-ui .capture-ready>svg{color:var(--muted)}
+.studio-ui .capture-steps li::before{background:var(--raised);color:var(--accent);border-color:var(--line-strong)}
+.studio-ui input,.studio-ui select,.studio-ui textarea{background:var(--panel);color:var(--text);border-color:var(--line-strong)}
+.studio-ui input:focus-visible,.studio-ui select:focus-visible,.studio-ui textarea:focus-visible,.studio-ui button:focus-visible,.studio-ui summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.studio-ui button.quiet,.studio-ui .quiet{background:var(--panel);color:var(--text);border:1px solid var(--line-strong)}
+.studio-ui button.quiet:hover:not(:disabled){background:var(--raised)}
+.studio-ui .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.studio-ui .local-recording{color:var(--accent)}
+.studio-ui .record-advanced,.studio-ui details.advanced{background:var(--panel);border-color:var(--line)}
+.studio-ui .brand-title h1{color:var(--text)}
+.studio-ui .github-link{color:var(--text)}
+
+/* Quality panel (built by ui-v2.js) */
+.v2-quality{display:flex;flex-direction:column;gap:12px;margin:0 0 20px}
+.v2-title{margin:0;font-size:11px!important;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)!important}
+.v2-presets{display:flex;flex-direction:column;gap:10px}
+.studio-ui .v2-preset{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--panel);color:var(--text);text-align:left;cursor:pointer;font-size:13px}
+.studio-ui .v2-preset:hover:not([aria-pressed="true"]){border-color:var(--line-strong)}
+.studio-ui .v2-preset[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint)}
+.v2-dot{flex:none;width:16px;height:16px;border-radius:50%;box-sizing:border-box;border:2px solid var(--line-strong)}
+.v2-preset[aria-pressed="true"] .v2-dot{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 38%,transparent 42%)}
+.v2-preset-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.v2-preset-copy strong{font-size:14px;font-weight:600}
+.v2-preset-copy small{font-size:12px;color:var(--muted)}
+.v2-preset-size{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--soft);white-space:nowrap}
+.v2-estimate{padding:16px;border-radius:14px;background:var(--panel);border:1px solid var(--line)}
+.v2-estimate-row{display:flex;align-items:baseline;gap:8px}
+.v2-number{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-size:34px;font-weight:600;line-height:1;color:var(--accent)}
+.v2-unit{font-size:13px;color:var(--muted)}
+.v2-hour{margin:6px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}
+.v2-meter{margin-top:12px;height:8px;border-radius:4px;background:var(--raised);overflow:hidden}
+.v2-meter span{display:block;height:100%;border-radius:4px;background:var(--accent);transition:width .2s}
+.v2-chips{display:flex;gap:8px}
+.studio-ui .v2-chip{flex:1;min-height:38px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--soft);font-size:13px;font-weight:600;cursor:pointer}
+.studio-ui .v2-chip[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-tint);color:var(--accent)}
+.studio-ui .v2-chip:disabled{opacity:.4;cursor:not-allowed}
+.v2-format-note{margin:0!important}
+.v2-fine{margin:0 0 16px}
+.v2-fine>summary{font-size:12px;color:var(--muted);cursor:pointer}
+
+/* The one action */
+.v2-start-row{margin-top:20px}
+.studio-ui .start-button{width:100%;min-height:60px;border-radius:16px;border:0;background:var(--record);color:var(--record-ink);font-size:17px;font-weight:700;box-shadow:0 10px 30px #ff5a4f47;cursor:pointer}
+.studio-ui .start-button:hover:not(:disabled){background:#ff6f65}
+.studio-ui .start-button::before{content:"";display:inline-block;width:13px;height:13px;border-radius:50%;background:var(--record-ink);margin-right:12px;vertical-align:-1px}
+.studio-ui .danger{background:var(--record);color:var(--record-ink);border:0}
+
+/* Recording and result views */
+.studio-ui #recording .live{color:var(--record)}
+.studio-ui #recording .record-head strong,.studio-ui #timer{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;color:var(--text)}
+.studio-ui #live-preview{background:var(--inset);border:1px solid var(--line);border-radius:14px}
+.studio-ui .completion-card{background:var(--inset);border:1px solid var(--line)}
+.v2-theme{margin-right:8px}
+
+/* Surfaces that studio-ui.css paints with fixed dark values */
+.studio-ui :is(#setup,#recording-library,#channel-workbench,#tasks-view,#about-view,#player-view){background:var(--panel);border-color:var(--line)}
+.studio-ui .studio-source-empty{background:var(--inset);border-color:var(--line-strong)}
+.studio-ui :is(.studio-source,.studio-record-settings,.telegram-form,.telegram-plan){border-color:var(--line)}
+.studio-ui :is(.studio-record-settings,.telegram-form,dialog,.library-toolbar) :is(input:not([type=checkbox]):not([type=range]):not([type=hidden]):not([type=file]),select),.studio-ui textarea{border-color:var(--line-strong);background:var(--panel);color:var(--text)}
+.studio-ui #record-advanced>summary,.studio-ui details>summary{color:var(--soft)}
+.studio-ui .studio-record-settings .studio-settings-title{border-color:var(--line)}
+.studio-ui .record-options{border-color:var(--line)}
+html[data-theme="light"] .studio-ui .github-logo{filter:none}
+html[data-theme="light"] .studio-ui .capture-ready>svg{color:var(--soft)}
+html[data-theme="light"] .studio-ui .toggle input[type=checkbox]:not(:checked){background:#c4c9d3}
+.studio-ui .recording-review,.studio-ui .recording-review>summary{background:var(--inset);color:var(--soft);border-color:var(--line)}
+.studio-ui .recording-review{border:1px solid var(--line);border-radius:12px}
+.studio-ui #recording #timer{color:var(--text);font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+.studio-ui .recording-control-dock{background:var(--inset);border-color:var(--line)}
+.studio-ui .recording-console-title span{color:var(--muted)}
+.studio-ui #recording .live{color:var(--record)}
+
+
+.studio-ui .recording-control-dock .source-status,.studio-ui .recording-control-dock .source-status *{color:var(--muted)}
+.studio-ui .recording-transport button:not(#stop){color:var(--text)!important}
+.studio-ui .recording-transport #pause{border-color:var(--line-strong)!important}
+.studio-ui .recording-transport #stop{background:var(--record)!important}
+.studio-ui .recording-control-dock .source-status{opacity:1}
+.studio-ui .recording-transport button:not(#stop),.studio-ui .recording-transport button:not(#stop)::before,.studio-ui .recording-transport button:not(#stop)::after{color:var(--text)!important;opacity:1!important}
+.studio-ui .recording-transport button:not(#stop) :is(svg,path,i){color:var(--text)!important;stroke:currentColor}
+.studio-ui #recording :is(#memory,.source-status,.source-status span,.source-status label){color:var(--muted)!important}

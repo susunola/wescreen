@@ -1,3 +1,21 @@
+# Unreleased
+
+- New recording-first interface on the capture page: one "quality and size" choice (Text first / Balanced / Motion) with the expected MB per minute and per hour shown live, format chips (AV1, HEVC, H.264, VP9; unsupported ones are disabled), the record button beside the decision, and all fine settings folded into one disclosure. The original controls keep their ids and events. A new dark/light appearance toggle in the header; dark is the default, and light fully covers the capture, recording and result views (other pages may still show dark panels).
+
+- Audio encoding gains an "Auto" mode (now the default in the Course and Everyday presets): 64 kbps when only a voice is recorded, 128 kbps with system audio, 192 kbps for motion content. Explicit 128/192/256 kbps choices are unchanged. At the 100-500 kbps video rates the Pro engine reaches, a fixed 192 kbps audio track would otherwise be a large share of the file.
+
+- Optional "shrink after recording" (Professional capture settings): with the local helper running, a finished recording is re-encoded in the background (AV1 with screen-content tools, or HEVC) and the smaller copy is added to the library. The original is never replaced, and a result less than 15% smaller is discarded. Jobs are queued durably, so a busy or offline helper just retries later.
+- Benchmark: browser frames now carry an index marker, so MediaRecorder results can be matched to the reference exactly even when the recorder drops frames. RESULTS.md reports the share of frames each recorder kept.
+
+- Add MP4 · HEVC and MP4 · AV1 recording formats; each is enabled only when this browser/OS reports MediaRecorder support, and never silently falls back to another codec.
+- Add an opt-in "Pro" recording engine (WebCodecs via vendored Mediabunny, MPL-2.0) for the MP4 formats: direct H.264/HEVC/AV1 encoder control and fragmented MP4 output, so an interrupted recording remains playable. Standard (MediaRecorder) stays the default; Pro never silently switches codecs.
+- Fix a failed automatic segment rotation leaving an orphaned session record behind; the running recording now keeps its encoder and the new session is discarded.
+- Add helper-side size optimisation (HEVC/AV1/VP9 constant-quality re-encode) and GIF / animated WebP export (`POST /jobs/optimize`), with library buttons that download the result without replacing the original. GIF/WebP exports are limited to 60 s.
+- Add an experimental Windows launcher for the helper (`start.cmd` / `start.ps1`); untested by CI.
+- Pro engine now turns on the encoder's screen-content tools (`contentHint: text`) for text/UI recordings: in Chromium's AV1 encoder, on the benchmark clips, that was 2–4 dB sharper text edges at the same bitrate target, with up to 45% fewer bytes on slides (UI was ~2% larger).
+- Helper optimisation gains an AV1 (SVT-AV1) target with screen-content mode: on the benchmark clips it was 16–56% smaller than SVT-AV1 without it, at equal or better text sharpness (`bench/TUNING.md`). New `effort` option trades speed for size.
+- Add `bench/`, a reproducible encoder benchmark (MediaRecorder vs WebCodecs vs FFmpeg) with edge-sharpness metrics.
+
 # 1.29.0 — 2026-10-25
 
 - Add compressed multipart merging and resumable incremental library merging, including conservative audio/video overlap checks and validated output duration.

@@ -275,7 +275,7 @@ function applyLang(next) {
 
 // ---- settings -------------------------------------------------------------
 const SETTING_FIELDS = [
-  ['mic-device', 'select'], ['capture-mode', 'select'], ['filename', 'text'], ['format', 'select'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
+  ['mic-device', 'select'], ['capture-mode', 'select'], ['filename', 'text'], ['format', 'select'], ['engine', 'select'], ['resolution', 'select'], ['quality', 'select'], ['framerate', 'select'],
   ['channel-name', 'text'], ['channel-url', 'text'], ['channel-video-title', 'text'], ['channel-message-url', 'text'], ['channel-episode', 'text'], ['channel-folder', 'text'], ['countdown', 'select'], ['autostop', 'select'], ['segment-minutes', 'select'], ['quiet-tab-audio', 'checked'], ['screen-audio', 'checked'], ['microphone', 'checked'], ['camera', 'checked'], ['clicks', 'checked'], ['course-enabled', 'checked'], ['course-name', 'text'], ['episode-number', 'text'], ['episode-title', 'text']
 ];
 const readSettings = () => Object.fromEntries(SETTING_FIELDS.map(([id, kind]) => [id, kind === 'checked' ? $(id).checked : $(id).value]));
@@ -350,10 +350,17 @@ function applyCapturePreset() {
   setNotice(mp4 ? '' : L('telegramWebM'));
 }
 const MP4_TYPES = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.640033,mp4a.40.2'];
-function selectedExtension() { return $('format').value === 'mp4' ? 'mp4' : 'webm'; }
+// Formats that MediaRecorder only offers when the OS/browser can encode them; capture-quality.js disables the unavailable ones.
+const HEVC_TYPES = ['video/mp4;codecs=hvc1.1.6.L120.90,mp4a.40.2', 'video/mp4;codecs=hev1.1.6.L120.90,mp4a.40.2', 'video/mp4;codecs=hvc1,mp4a.40.2', 'video/mp4;codecs=hevc,mp4a.40.2'];
+const AV1_MP4_TYPES = ['video/mp4;codecs=av01.0.08M.08,opus', 'video/mp4;codecs=av01,opus', 'video/mp4;codecs=av01.0.08M.08,mp4a.40.2'];
+const FORMAT_TYPES = { hevc: HEVC_TYPES, av1mp4: AV1_MP4_TYPES, vp9: ['video/webm;codecs=vp9,opus'], av1: ['video/webm;codecs=av1,opus'] };
+function selectedExtension() { return ['mp4', 'hevc', 'av1mp4'].includes($('format').value) ? 'mp4' : 'webm'; }
+// The Pro (WebCodecs) engine is opt-in and only for the MP4 formats; anything else stays on MediaRecorder.
+function proEngineSelected() { return $('engine')?.value === 'pro' && typeof proEngineSupports === 'function' && proEngineSupports($('format').value); }
 function mediaType() {
   const format=$('format').value;
-  const types = format==='vp9' ? ['video/webm;codecs=vp9,opus'] : format==='av1' ? ['video/webm;codecs=av1,opus'] : selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  if (proEngineSelected()) return proEngineMime(format);
+  const types = FORMAT_TYPES[format] || (selectedExtension() === 'mp4' ? MP4_TYPES : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']);
   return types.find(type => MediaRecorder.isTypeSupported(type));
 }
 function recordingExtension() { return recordingMime.startsWith('video/mp4') ? 'mp4' : 'webm'; }
@@ -450,6 +457,11 @@ function audioHintKey() {
   return null;
 }
 
+// Same scene rule videoBitrate() uses: UI/text recordings are 'detail', Telegram/video-style capture is 'motion'.
+function captureScene() {
+  const content = $('capture-content')?.value;
+  return content === 'auto' || !content ? ($('capture-mode')?.value === 'telegram' ? 'motion' : 'detail') : content;
+}
 function videoBitrate(track) {
   const { width = 1920, height = 1080, frameRate = Number($('framerate').value) || 30 } = track.getSettings();
   const pixels=width*height/(1920*1080),fps=Math.max(1,frameRate)/30;
@@ -460,7 +472,15 @@ function videoBitrate(track) {
   return Math.min(180000000,Math.round(base * Math.max(.5,Math.pow(pixels,.75)) * Math.pow(fps,.585)));
 
 }
-function captureAudioBitrate(){return Number($('capture-audio-quality')?.value)||AUDIO_BITRATE;
+// Opus is transparent for a single voice at 64 kbps, while 128-192 kbps only pays off for music or mixed system sound.
+// "Auto" (value 0) therefore follows the content: voice-only 64, system audio 128, motion/music content 192.
+// Once video drops to a few hundred kbps, the audio track is otherwise a large share of the file.
+function autoAudioBitrate({ system = false, content = 'auto' } = {}) { return !system ? 64000 : content === 'motion' ? 192000 : 128000; }
+function captureAudioBitrate(){
+  const chosen = Number($('capture-audio-quality')?.value);
+  if (chosen) return chosen;
+  if ($('capture-audio-quality') && $('capture-audio-quality').value === '0') return autoAudioBitrate({ system: !!displayStream?.getAudioTracks().length, content: $('capture-content')?.value });
+  return AUDIO_BITRATE;
 }
 async function acquireRecordingLock() {
   if (!navigator.locks) return true;
@@ -481,9 +501,9 @@ function armRecorder(stream, type, state) {
   const videoTracks = stream.getVideoTracks();
   if (!videoTracks.length || videoTracks[0].readyState !== 'live') throw new Error(L('errNoSource'));
   const audio = mixAudio();
-  const instance = new MediaRecorder(new MediaStream([...videoTracks, ...(audio ? [audio] : [])]), {
-    mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: captureAudioBitrate()
-  });
+  const recorderStream = new MediaStream([...videoTracks, ...(audio ? [audio] : [])]);
+  const recorderOptions = { mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: captureAudioBitrate() };
+  const instance = proEngineSelected() ? new ProRecorder(recorderStream, { ...recorderOptions, format: $('format').value, contentHint: captureScene() === 'detail' ? 'text' : undefined }) : new MediaRecorder(recorderStream, recorderOptions);
   state = state || { session: crypto.randomUUID(), index: 1, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0, name: `${sanitized()}.${recordingExtension()}` };
   state.recorder = instance;
   state.captureAudioTreatment=$('capture-clear-voice')?.checked?'clearVoice':'original';
@@ -573,8 +593,9 @@ async function saveSegmentAndContinue() {
   if (rollingSegment || stopRequested || !activeSegment || recorder.state === 'inactive') return;
   rollingSegment = true;
   const previous = activeSegment;
+  let next = null, adopted = false;
   try {
-    const next = createSegment(previous.index + 1); armRecorder(recordingStream, recordingMime, next);
+    next = createSegment(previous.index + 1); armRecorder(recordingStream, recordingMime, next);
     // Persist the new session while the old encoder is STILL RUNNING. Disk latency cannot cause a capture gap.
     await setInProgress({ session: next.session, recordingGroupId, part:next.index, name: next.name, mimeType: recordingMime, index: next.index, course: next.course, episode: next.episode, ...(next.channelMetadata || {}) });
     if (stopRequested || previous.recorder.state === 'inactive') { await discardSession(next.session); if (previous.recorder.state !== 'inactive') previous.recorder.stop(); return; }
@@ -583,8 +604,15 @@ async function saveSegmentAndContinue() {
     if (pausedAt) next.recorder.pause();
     // Start-before-stop intentionally allows a tiny overlap instead of losing frames at the boundary.
     previous.details = segmentDetails(previous);
-    selectSegment(next); previous.recorder.stop();
+    selectSegment(next); adopted = true; previous.recorder.stop();
     if (stopRequested) next.recorder.stop(); else scheduleSegment();
+  } catch (error) {
+    // setInProgress() already wrote this session's metadata; if the encoder never took over, nothing else will clean it up.
+    if (next && !adopted) {
+      try { if (next.recorder && next.recorder.state !== 'inactive') next.recorder.stop(); } catch { /* already stopped */ }
+      await discardSession(next.session).catch(() => {});
+    }
+    throw error;
   } finally { rollingSegment = false; }
 }
 function tick() {
@@ -745,6 +773,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
   if (finalId && $('auto-static-tail')?.checked && typeof queueSmartTail==='function') queueSmartTail(finalId).catch(error=>setNotice(error.message));
+  if (finalId && $('auto-shrink')?.checked && typeof queueAutoShrink==='function') queueAutoShrink(finalId).catch(error=>setNotice(error.message));
 }
 async function download(blob = finalBlob, explicitName = null, recordingId = finalId) {
   if (!blob || !blob.size) { setNotice(L('errEmpty')); return; }
