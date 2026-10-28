@@ -1,0 +1,5 @@
+corpus/
+out/
+node_modules
+package-lock.json
+# results/ is kept: RESULTS.md is generated from it, and the raw rows make the numbers auditable.
