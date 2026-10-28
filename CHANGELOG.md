@@ -3,6 +3,8 @@
 - Add MP4 · HEVC and MP4 · AV1 recording formats; each is enabled only when this browser/OS reports MediaRecorder support, and never silently falls back to another codec.
 - Add an opt-in "Pro" recording engine (WebCodecs via vendored Mediabunny, MPL-2.0) for the MP4 formats: direct H.264/HEVC/AV1 encoder control and fragmented MP4 output, so an interrupted recording remains playable. Standard (MediaRecorder) stays the default; Pro never silently switches codecs.
 - Fix a failed automatic segment rotation leaving an orphaned session record behind; the running recording now keeps its encoder and the new session is discarded.
+- Add helper-side size optimisation (HEVC/AV1/VP9 constant-quality re-encode) and GIF / animated WebP export (`POST /jobs/optimize`), with library buttons that download the result without replacing the original. GIF/WebP exports are limited to 60 s.
+- Add an experimental Windows launcher for the helper (`start.cmd` / `start.ps1`); untested by CI.
 - Add `bench/`, a reproducible encoder benchmark (MediaRecorder vs WebCodecs vs FFmpeg) with edge-sharpness metrics.
 
 # 1.29.0 — 2026-10-25
