@@ -1,5 +1,7 @@
 # Unreleased
 
+- New recording-first interface on the capture page: one "quality and size" choice (Text first / Balanced / Motion) with the expected MB per minute and per hour shown live, format chips (AV1, HEVC, H.264, VP9; unsupported ones are disabled), the record button beside the decision, and all fine settings folded into one disclosure. The original controls keep their ids and events. A new dark/light appearance toggle in the header; dark is the default, and light fully covers the capture, recording and result views (other pages may still show dark panels).
+
 - Audio encoding gains an "Auto" mode (now the default in the Course and Everyday presets): 64 kbps when only a voice is recorded, 128 kbps with system audio, 192 kbps for motion content. Explicit 128/192/256 kbps choices are unchanged. At the 100-500 kbps video rates the Pro engine reaches, a fixed 192 kbps audio track would otherwise be a large share of the file.
 
 - Optional "shrink after recording" (Professional capture settings): with the local helper running, a finished recording is re-encoded in the background (AV1 with screen-content tools, or HEVC) and the smaller copy is added to the library. The original is never replaced, and a result less than 15% smaller is discarded. Jobs are queued durably, so a busy or offline helper just retries later.
