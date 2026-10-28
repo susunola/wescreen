@@ -1,5 +1,8 @@
 # Unreleased
 
+- Optional "shrink after recording" (Professional capture settings): with the local helper running, a finished recording is re-encoded in the background (AV1 with screen-content tools, or HEVC) and the smaller copy is added to the library. The original is never replaced, and a result less than 15% smaller is discarded. Jobs are queued durably, so a busy or offline helper just retries later.
+- Benchmark: browser frames now carry an index marker, so MediaRecorder results can be matched to the reference exactly even when the recorder drops frames. RESULTS.md reports the share of frames each recorder kept.
+
 - Add MP4 · HEVC and MP4 · AV1 recording formats; each is enabled only when this browser/OS reports MediaRecorder support, and never silently falls back to another codec.
 - Add an opt-in "Pro" recording engine (WebCodecs via vendored Mediabunny, MPL-2.0) for the MP4 formats: direct H.264/HEVC/AV1 encoder control and fragmented MP4 output, so an interrupted recording remains playable. Standard (MediaRecorder) stays the default; Pro never silently switches codecs.
 - Fix a failed automatic segment rotation leaving an orphaned session record behind; the running recording now keeps its encoder and the new session is discarded.

@@ -765,6 +765,7 @@ async function finish(savedBlob = null, savedName = null, archived = false, save
   syncMemory();
   setHint('resultSize', [fmtBytes(finalSize)]);
   if (finalId && $('auto-static-tail')?.checked && typeof queueSmartTail==='function') queueSmartTail(finalId).catch(error=>setNotice(error.message));
+  if (finalId && $('auto-shrink')?.checked && typeof queueAutoShrink==='function') queueAutoShrink(finalId).catch(error=>setNotice(error.message));
 }
 async function download(blob = finalBlob, explicitName = null, recordingId = finalId) {
   if (!blob || !blob.size) { setNotice(L('errEmpty')); return; }

@@ -109,7 +109,7 @@ async function openEnhancement(entry=null) {
   await connectHelper();
 }
 function resultName(task) {
-  const label=task.mode==='face' ? 'face-generated' : task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? (task.compress ? 'merged-compressed-1080p':'merged') : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode;
+  const label=task.mode==='face' ? 'face-generated' : task.smartTail ? 'merged-trimmed' : task.mode==='merge' ? (task.compress ? 'merged-compressed-1080p':'merged') : task.mode==='trimstatic' ? 'trimmed' : task.mode==='watermark' ? 'patched' : task.mode==='edit' ? 'edited' : task.mode==='strong' ? 'SeedVR2' : task.mode==='ai' ? 'AI-2x' : task.mode==='optimize' ? (task.target==='svtav1' ? 'av1' : 'small') : task.mode;
   return `${(task.name || 'video').replace(/\.(mp4|webm)$/i,'')}-${label}${task.encoding==='master'?'-444-master':''}${task.preview ? '-preview' : ''}.mp4`;
 }
 const hdrChoice=document.createElement('label');hdrChoice.className='check';const hdrInput=document.createElement('input');hdrInput.type='checkbox';hdrInput.id='enhance-hdr-sdr';hdrChoice.append(hdrInput,document.createTextNode(E('HDR 转 SDR（另存，原视频保留）','Convert HDR to SDR (save a copy)')));$('enhance-mode-hint').after(hdrChoice);
