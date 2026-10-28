@@ -416,3 +416,17 @@ test('the Pro engine is used only when selected, supported and an MP4 format; ot
   assert.equal(make({ engine: 'pro', format: 'vp9', supported: ['hevc'] }).mediaType(), undefined);
   assert.equal(make({ engine: 'pro', format: 'mp4', supported: [] }).mediaType(), 'video/mp4;codecs=avc1,mp4a.40.2', 'H.264 falls back to the standard engine only because it is the same codec');
 });
+
+test('Auto audio bitrate follows the content, and explicit choices are respected', () => {
+  const run = (quality, content, withSystemAudio) => {
+    const fields = { 'capture-audio-quality': { value: quality }, 'capture-content': { value: content } };
+    const context = { AUDIO_BITRATE: 192000, $: id => fields[id], displayStream: { getAudioTracks: () => (withSystemAudio ? [{}] : []) } };
+    vm.runInNewContext(extract('function videoBitrate(', 'async function acquireRecordingLock()'), context);
+    return context.captureAudioBitrate();
+  };
+  assert.equal(run('0', 'auto', false), 64000, 'a voice-only recording needs no more than 64 kbps Opus');
+  assert.equal(run('0', 'detail', true), 128000);
+  assert.equal(run('0', 'motion', true), 192000, 'motion content may carry music');
+  assert.equal(run('256000', 'auto', false), 256000, 'an explicit choice always wins');
+  assert.equal(run('', 'auto', false), 192000, 'a missing setting keeps the old default');
+});

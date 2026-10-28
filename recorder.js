@@ -472,7 +472,15 @@ function videoBitrate(track) {
   return Math.min(180000000,Math.round(base * Math.max(.5,Math.pow(pixels,.75)) * Math.pow(fps,.585)));
 
 }
-function captureAudioBitrate(){return Number($('capture-audio-quality')?.value)||AUDIO_BITRATE;
+// Opus is transparent for a single voice at 64 kbps, while 128-192 kbps only pays off for music or mixed system sound.
+// "Auto" (value 0) therefore follows the content: voice-only 64, system audio 128, motion/music content 192.
+// Once video drops to a few hundred kbps, the audio track is otherwise a large share of the file.
+function autoAudioBitrate({ system = false, content = 'auto' } = {}) { return !system ? 64000 : content === 'motion' ? 192000 : 128000; }
+function captureAudioBitrate(){
+  const chosen = Number($('capture-audio-quality')?.value);
+  if (chosen) return chosen;
+  if ($('capture-audio-quality') && $('capture-audio-quality').value === '0') return autoAudioBitrate({ system: !!displayStream?.getAudioTracks().length, content: $('capture-content')?.value });
+  return AUDIO_BITRATE;
 }
 async function acquireRecordingLock() {
   if (!navigator.locks) return true;

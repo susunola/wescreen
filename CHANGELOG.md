@@ -1,5 +1,7 @@
 # Unreleased
 
+- Audio encoding gains an "Auto" mode (now the default in the Course and Everyday presets): 64 kbps when only a voice is recorded, 128 kbps with system audio, 192 kbps for motion content. Explicit 128/192/256 kbps choices are unchanged. At the 100-500 kbps video rates the Pro engine reaches, a fixed 192 kbps audio track would otherwise be a large share of the file.
+
 - Optional "shrink after recording" (Professional capture settings): with the local helper running, a finished recording is re-encoded in the background (AV1 with screen-content tools, or HEVC) and the smaller copy is added to the library. The original is never replaced, and a result less than 15% smaller is discarded. Jobs are queued durably, so a busy or offline helper just retries later.
 - Benchmark: browser frames now carry an index marker, so MediaRecorder results can be matched to the reference exactly even when the recorder drops frames. RESULTS.md reports the share of frames each recorder kept.
 
