@@ -53,6 +53,17 @@ class PureBuildersTest(unittest.TestCase):
         self.assertEqual(command[-1], 'out.mp4')
         self.assertNotIn('-b:v', command)
 
+    def test_svtav1_uses_screen_content_mode_effort_presets_and_can_opt_out(self):
+        options = optimize.validate({'target': 'svtav1', 'quality': 'small', 'effort': 'fast'}, ['svtav1'])
+        command = optimize.optimize_command('in', 'o.mp4', options, PROBE)
+        self.assertEqual(command[command.index('-svtav1-params') + 1], 'scm=1')
+        self.assertEqual(command[command.index('-crf') + 1], '50')
+        self.assertEqual(command[command.index('-preset') + 1], '10')
+        plain = optimize.optimize_command('in', 'o.mp4', {**options, 'screenContent': False}, PROBE)
+        self.assertNotIn('-svtav1-params', plain)
+        with self.assertRaises(ValueError):
+            optimize.validate({'target': 'svtav1', 'effort': 'instant'}, ['svtav1'])
+
     def test_copy_audio_when_already_mp4_friendly_and_opus_for_webm(self):
         mp4 = optimize.optimize_command('in', 'o.mp4', optimize.validate({'target': 'x264'}, ['x264']), {**PROBE, 'audio_codec': 'aac'})
         self.assertEqual(mp4[mp4.index('-c:a') + 1], 'copy')
@@ -154,6 +165,14 @@ class JobTest(unittest.TestCase):
             self.assertEqual(response.headers['Content-Type'], 'video/mp4')
             self.assertIn('optimized.mp4', response.headers['Content-Disposition'])
             self.assertEqual(len(response.read()), output.stat().st_size)
+
+    def test_svtav1_screen_content_job_is_a_playable_av1_mp4(self):
+        if 'svtav1' not in self.encoders: self.skipTest('no libsvtav1')
+        identifier, job = self.run_job(target='svtav1', quality='small', effort='fast', maxHeight=180)
+        self.assertEqual(job['state'], 'done', job)
+        output = server.JOBS[identifier]['output']
+        self.assertEqual({s['codec_type']: s['codec_name'] for s in self.probe(output)['streams']}['video'], 'av1')
+        subprocess.run(['ffmpeg', '-v', 'error', '-i', str(output), '-f', 'null', '-'], check=True)
 
     def test_vp9_webm_result_survives_a_helper_restart(self):
         if 'vp9' not in self.encoders: self.skipTest('no libvpx-vp9')

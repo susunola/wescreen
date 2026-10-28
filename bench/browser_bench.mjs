@@ -70,6 +70,8 @@ export function buildSuite(meta, suite = 'quick') {
     for (const q of ['compact', 'standard', 'high']) wcv('av1-vbr', 'av1', 'mp4', q);
     for (const q of ['compact', 'standard', 'high']) mr('vp9-kf2s', 'video/webm;codecs=vp9,opus', q, { keyframeMs: 2000 });
     wcv('vp9-text', 'vp9', 'webm', 'standard', { contentHint: 'text' });
+    wcv('av1-text', 'av1', 'mp4', 'standard', { contentHint: 'text' });
+    wcv('av1-detail', 'av1', 'mp4', 'standard', { contentHint: 'detail' });
     wcv('vp9-realtime', 'vp9', 'webm', 'standard', { latencyMode: 'realtime' });
   }
   return cfgs;

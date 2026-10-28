@@ -103,7 +103,10 @@ class ProRecorder {
       bitrate: this.videoBitsPerSecond,
       keyFrameInterval: PRO_KEYFRAME_SECONDS,
       latencyMode: 'realtime',
-      sizeChangeBehavior: 'contain'
+      sizeChangeBehavior: 'contain',
+      // 'text' switches on the encoder's screen-content tools. Measured in Chromium's AV1 encoder (bench/RESULTS.md):
+      // 2-4 dB sharper text edges on code, slides and UI clips at the same bitrate target, and up to 45% fewer bytes on slides.
+      ...(this.options.contentHint ? { contentHint: this.options.contentHint } : {})
     });
     output.addVideoTrack(this.videoSource);
     if (audioTrack && proEngine.audioCodec) {

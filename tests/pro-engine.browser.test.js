@@ -42,7 +42,7 @@ async function withPage(run) {
   } finally { await browser.close(); server.close(); }
 }
 
-const RECORD = async ({ pauseMs = 0, codec = 'vp9', failEncoder = false }) => {
+const RECORD = async ({ pauseMs = 0, codec = 'vp9', contentHint = undefined }) => {
   await probeProEngine();
   if (!proEngine.ready) return { skipped: 'engine not ready: ' + (proEngine.error && proEngine.error.message) };
   const mb = proEngine.mb;
@@ -52,7 +52,7 @@ const RECORD = async ({ pauseMs = 0, codec = 'vp9', failEncoder = false }) => {
   const osc = audioContext.createOscillator(); osc.connect(destination); osc.start();
   const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...destination.stream.getAudioTracks()]);
   let frame = 0; const draw = setInterval(() => { ctx.fillStyle = `hsl(${frame * 7 % 360} 70% 50%)`; ctx.fillRect(0, 0, 640, 360); ctx.fillStyle = '#fff'; ctx.font = '48px monospace'; ctx.fillText('frame ' + frame++, 40, 180); }, 33);
-  const recorder = new ProRecorder(stream, { codec, format: 'mp4', videoBitsPerSecond: 1.5e6, audioBitsPerSecond: 96000 });
+  const recorder = new ProRecorder(stream, { codec, contentHint, format: 'mp4', videoBitsPerSecond: 1.5e6, audioBitsPerSecond: 96000 });
   const events = [], chunks = [];
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); events.push('data'); };
   recorder.onstop = () => events.push('stop');
@@ -96,6 +96,16 @@ test('Pro engine records a fragmented MP4 with video and audio, emitted in time 
     assert.equal(info.streams.find(s => s.codec_type === 'video').width, 640);
     assert.ok(Math.abs(Number(info.format.duration) - 3) < 0.8, 'duration ' + info.format.duration);
     assert.match(info.format.format_name, /mp4/);
+  });
+});
+
+test('Pro engine accepts the screen-content hint on a real encoder', { skip: !chromium || !hasFfprobe }, async () => {
+  await withPage(async (page, results) => {
+    const out = await page.evaluate(RECORD, { contentHint: 'text', codec: 'av1' });
+    if (out.skipped) return console.log('skipped:', out.skipped);
+    assert.ok(!out.events.some(e => e.startsWith('error')), out.events.join(','));
+    const { info } = probe(results[0]);
+    assert.equal(info.streams.find(s => s.codec_type === 'video').codec_name, 'av1');
   });
 });
 

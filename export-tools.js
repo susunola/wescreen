@@ -4,6 +4,7 @@
 // Results are downloaded directly; nothing is added to the library, so originals are never replaced.
 const EXPORT_PRESETS = {
   hevc: { target: 'x265', quality: 'balanced', suffix: '-small', ext: 'mp4', zh: '缩小体积（HEVC，需本机增强包）', en: 'Shrink file size (HEVC, needs helper)', note: 'HEVC plays on Safari, Edge and recent Chrome; use H.264 or VP9 for older players.' },
+  av1: { target: 'svtav1', quality: 'balanced', suffix: '-av1', ext: 'mp4', zh: '极限压缩（AV1，最小体积，需本机增强包）', en: 'Smallest file (AV1, needs helper)', note: 'AV1 is the smallest; it plays in Chrome, Edge and Firefox, but older Safari/QuickTime may not play it.' },
   gif: { target: 'gif', quality: 'balanced', suffix: '', ext: 'gif', zh: '导出 GIF（≤60 秒，需本机增强包）', en: 'Export GIF (≤60 s, needs helper)' },
   webp: { target: 'webp', quality: 'balanced', suffix: '', ext: 'webp', zh: '导出动态 WebP（≤60 秒，需本机增强包）', en: 'Export animated WebP (≤60 s, needs helper)' }
 };
@@ -38,7 +39,7 @@ async function helperExport(entry, presetKey, hooks = {}) {
     const name = exportFileName(entry.name, preset);
     await download(new Blob([result], { type: info.mime || result.type }), name, null);
     const saved = info.savedRatio;
-    status(E('已保存 ', 'Saved ') + name + (presetKey === 'hevc' && typeof saved === 'number' ? (saved >= 0 ? E('，体积减少 ', ' — ') + Math.round(saved * 100) + E('%', '% smaller') : E('，但比原文件更大，建议保留原文件', ' — larger than the original; keep the original')) : ''));
+    status(E('已保存 ', 'Saved ') + name + ((presetKey === 'hevc' || presetKey === 'av1') && typeof saved === 'number' ? (saved >= 0 ? E('，体积减少 ', ' — ') + Math.round(saved * 100) + E('%', '% smaller') : E('，但比原文件更大，建议保留原文件', ' — larger than the original; keep the original')) : ''));
     return { name, size: result.size, info };
   } finally {
     // The helper keeps results until deleted; never leave a copy of the user's recording behind.

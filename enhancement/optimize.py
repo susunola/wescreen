@@ -23,13 +23,18 @@ from pathlib import Path
 CRF = {
     'x264': {'archive': 18, 'balanced': 23, 'small': 28},
     'x265': {'archive': 22, 'balanced': 26, 'small': 30},
-    'svtav1': {'archive': 28, 'balanced': 34, 'small': 40},
+    # SVT-AV1 with screen-content mode (scm=1) holds ~46 dB text-edge PSNR at CRF 38, ~42 dB at CRF 50 on the
+    # benchmark clips (bench/results/tune*.jsonl), far above where x264/x265 sit at 5-10x the bytes.
+    'svtav1': {'archive': 38, 'balanced': 44, 'small': 50},
     'vp9': {'archive': 28, 'balanced': 34, 'small': 40},
 }
 ENCODER_NAMES = {'x264': 'libx264', 'x265': 'libx265', 'svtav1': 'libsvtav1', 'vp9': 'libvpx-vp9'}
 CONTAINERS = {'x264': 'mp4', 'x265': 'mp4', 'svtav1': 'mp4', 'vp9': 'webm'}
 ANIMATED = ('gif', 'webp')
 QUALITIES = ('archive', 'balanced', 'small')
+# SVT-AV1 preset by how long the user is willing to wait: measured at 720p30 on a 2-core box, preset 6 / 8 / 10 encode
+# at about 0.3x / 0.45x / 0.55x real time, and the faster presets cost 10-40% more bytes.
+EFFORT_PRESETS = {'thorough': 6, 'balanced': 8, 'fast': 10}
 MAX_ANIMATION_SECONDS = 60
 MAX_ANIMATION_WIDTH = 1280
 MIME = {'mp4': 'video/mp4', 'webm': 'video/webm', 'gif': 'image/gif', 'webp': 'image/webp'}
@@ -75,7 +80,9 @@ def validate(options, available):
     start, end = float(options.get('start') or 0), float(options.get('end') or 0)
     if start < 0 or end < 0 or (end and end <= start): raise ValueError('Invalid trim range')
     if not all(math.isfinite(v) for v in (max_fps, start, end)): raise ValueError('Invalid number')
-    return dict(target=target, quality=quality, maxHeight=max_height, maxFps=max_fps, start=start, end=end)
+    effort = options.get('effort', 'balanced')
+    if effort not in EFFORT_PRESETS: raise ValueError('Effort must be thorough, balanced or fast')
+    return dict(target=target, quality=quality, effort=effort, maxHeight=max_height, maxFps=max_fps, start=start, end=end, screenContent=options.get('screenContent') is not False)
 
 
 def video_filter(width, height, fps, options):
@@ -107,7 +114,9 @@ def optimize_command(source, output, options, probe_info):
     elif target == 'x265':
         command += ['-c:v', 'libx265', '-preset', 'medium', '-crf', crf, '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1', '-x265-params', 'log-level=error', '-movflags', '+faststart']
     elif target == 'svtav1':
-        command += ['-c:v', 'libsvtav1', '-preset', '6', '-crf', crf, '-pix_fmt', 'yuv420p', '-movflags', '+faststart']
+        # scm=1 turns on AV1's screen-content tools (palette, intra block copy): the biggest single win for screen recordings.
+        params = ['-svtav1-params', 'scm=1'] if options.get('screenContent', True) else []
+        command += ['-c:v', 'libsvtav1', '-preset', str(EFFORT_PRESETS[options.get('effort', 'balanced')]), '-crf', crf, *params, '-pix_fmt', 'yuv420p', '-movflags', '+faststart']
     else:  # vp9 / webm
         command += ['-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', crf, '-row-mt', '1', '-cpu-used', '2', '-pix_fmt', 'yuv420p']
     if CONTAINERS[target] == 'webm':
@@ -203,16 +212,22 @@ def run_optimize(job, options, api):
         span = (options['end'] or duration) - options['start']
         if not math.isfinite(span) or span <= 0: raise ValueError('Cannot determine the length to encode')
         if options['target'] in ANIMATED and span > MAX_ANIMATION_SECONDS: raise ValueError(f'Animated exports are limited to {MAX_ANIMATION_SECONDS} seconds; trim first')
-        command = (animation_command if options['target'] in ANIMATED else optimize_command)(source, output, options, info)
+        build = animation_command if options['target'] in ANIMATED else optimize_command
+        attempts = [options]
+        if options['target'] == 'svtav1' and options.get('screenContent', True):
+            attempts.append({**options, 'screenContent': False})  # an older SVT-AV1 may not know scm
         with (output.parent / 'ffmpeg.log').open('wb') as log:
             job['log'] = log
-            process = api['checked_process'](job, command, stdout=subprocess.PIPE, text=True)
-            for line in process.stdout:
-                api['update_ffmpeg_progress'](job, line, span)
-            process.stdout.close()
-            if process.wait() != 0:
+            for number, attempt in enumerate(attempts):
+                process = api['checked_process'](job, build(source, output, attempt, info), stdout=subprocess.PIPE, text=True)
+                for line in process.stdout:
+                    api['update_ffmpeg_progress'](job, line, span)
+                process.stdout.close()
+                if process.wait() == 0: break
                 if job['cancel'].is_set(): raise InterruptedError('Cancelled')
-                raise RuntimeError('Encoding failed; see the local ffmpeg.log')
+                output.unlink(missing_ok=True)
+                if number == len(attempts) - 1: raise RuntimeError('Encoding failed; see the local ffmpeg.log')
+                job['progress'] = 0
         if job['cancel'].is_set(): raise InterruptedError('Cancelled')
         dimensions = {}
         if options['target'] in ANIMATED:

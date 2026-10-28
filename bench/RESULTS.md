@@ -38,8 +38,10 @@ No clip produced a trustworthy MediaRecorder anchor in this run, so no ratio is 
 
 | Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
 |---|---|---:|---:|---:|---:|---:|
+| browser: WebCodecs av1-detail | standard@3266k | 1669 | 12.52 | 0.9993 | 36.81 | 150/150 |
 | browser: WebCodecs av1-quantizer | q52 | 1610 | 12.08 | 0.9989 | 36.92 | 150/150 |
 | browser: WebCodecs av1-quantizer | q40 | 2264 | 16.98 | 0.9992 | 37.22 | 150/150 |
+| browser: WebCodecs av1-text | standard@3266k | 1669 | 12.52 | 0.9993 | 36.81 | 150/150 |
 | browser: WebCodecs av1-vbr | standard@3266k | 1806 | 13.54 | 0.9938 | 34.88 | 150/150 |
 | browser: WebCodecs avc-vbr | compact@1633k | 1627 | 12.21 | 0.9872 | 31.06 | 150/150 |
 | browser: WebCodecs avc-vbr | standard@3266k | 3208 | 24.06 | 0.9946 | 34.65 | 150/150 |
@@ -70,8 +72,10 @@ No clip produced a trustworthy MediaRecorder anchor in this run, so no ratio is 
 
 | Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
 |---|---|---:|---:|---:|---:|---:|
+| browser: WebCodecs av1-detail | standard@3266k ⚠ | 265 | 1.99 | 1 | 45.99 | 150/150 |
 | browser: WebCodecs av1-quantizer | q52 ⚠ | 450 | 3.37 | 0.9996 | 42.56 | 150/150 |
 | browser: WebCodecs av1-quantizer | q40 ⚠ | 490 | 3.68 | 0.9998 | 44.52 | 150/150 |
+| browser: WebCodecs av1-text | standard@3266k ⚠ | 265 | 1.99 | 1 | 45.99 | 150/150 |
 | browser: WebCodecs av1-vbr | standard@3266k ⚠ | 482 | 3.62 | 0.9993 | 42.25 | 150/150 |
 | browser: WebCodecs avc-vbr | standard@3266k ⚠ | 468 | 3.51 | 0.9995 | 43.64 | 150/150 |
 | browser: WebCodecs avc-vbr | compact@1633k ⚠ | 475 | 3.56 | 0.9992 | 41.89 | 150/150 |
@@ -101,8 +105,10 @@ No clip produced a trustworthy MediaRecorder anchor in this run, so no ratio is 
 
 | Encoder | Setting | kbps | MB/min | SSIM | Edge PSNR | Frames out/expected |
 |---|---|---:|---:|---:|---:|---:|
+| browser: WebCodecs av1-detail | standard@3266k | 3103 | 23.27 | 0.9798 | 37 | 150/150 |
 | browser: WebCodecs av1-quantizer | q52 | 8006 | 60.04 | 0.996 | 37.96 | 150/150 |
 | browser: WebCodecs av1-quantizer | q40 | 9169 | 68.77 | 0.9972 | 38.82 | 150/150 |
+| browser: WebCodecs av1-text | standard@3266k | 3103 | 23.27 | 0.9798 | 37 | 150/150 |
 | browser: WebCodecs av1-vbr | standard@3266k | 3037 | 22.78 | 0.9777 | 35.15 | 150/150 |
 | browser: WebCodecs avc-vbr | compact@1633k | 1630 | 12.22 | 0.9557 | 30.83 | 150/150 |
 | browser: WebCodecs avc-vbr | standard@3266k | 3255 | 24.42 | 0.9709 | 32.32 | 150/150 |

@@ -5,6 +5,8 @@
 - Fix a failed automatic segment rotation leaving an orphaned session record behind; the running recording now keeps its encoder and the new session is discarded.
 - Add helper-side size optimisation (HEVC/AV1/VP9 constant-quality re-encode) and GIF / animated WebP export (`POST /jobs/optimize`), with library buttons that download the result without replacing the original. GIF/WebP exports are limited to 60 s.
 - Add an experimental Windows launcher for the helper (`start.cmd` / `start.ps1`); untested by CI.
+- Pro engine now turns on the encoder's screen-content tools (`contentHint: text`) for text/UI recordings: in Chromium's AV1 encoder, on the benchmark clips, that was 2–4 dB sharper text edges at the same bitrate target, with up to 45% fewer bytes on slides (UI was ~2% larger).
+- Helper optimisation gains an AV1 (SVT-AV1) target with screen-content mode: on the benchmark clips it was 16–56% smaller than SVT-AV1 without it, at equal or better text sharpness (`bench/TUNING.md`). New `effort` option trades speed for size.
 - Add `bench/`, a reproducible encoder benchmark (MediaRecorder vs WebCodecs vs FFmpeg) with edge-sharpness metrics.
 
 # 1.29.0 — 2026-10-25

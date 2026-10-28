@@ -457,6 +457,11 @@ function audioHintKey() {
   return null;
 }
 
+// Same scene rule videoBitrate() uses: UI/text recordings are 'detail', Telegram/video-style capture is 'motion'.
+function captureScene() {
+  const content = $('capture-content')?.value;
+  return content === 'auto' || !content ? ($('capture-mode')?.value === 'telegram' ? 'motion' : 'detail') : content;
+}
 function videoBitrate(track) {
   const { width = 1920, height = 1080, frameRate = Number($('framerate').value) || 30 } = track.getSettings();
   const pixels=width*height/(1920*1080),fps=Math.max(1,frameRate)/30;
@@ -490,7 +495,7 @@ function armRecorder(stream, type, state) {
   const audio = mixAudio();
   const recorderStream = new MediaStream([...videoTracks, ...(audio ? [audio] : [])]);
   const recorderOptions = { mimeType: type, videoBitsPerSecond: videoBitrate(displayStream?.getVideoTracks()[0] || videoTracks[0]), audioBitsPerSecond: captureAudioBitrate() };
-  const instance = proEngineSelected() ? new ProRecorder(recorderStream, { ...recorderOptions, format: $('format').value }) : new MediaRecorder(recorderStream, recorderOptions);
+  const instance = proEngineSelected() ? new ProRecorder(recorderStream, { ...recorderOptions, format: $('format').value, contentHint: captureScene() === 'detail' ? 'text' : undefined }) : new MediaRecorder(recorderStream, recorderOptions);
   state = state || { session: crypto.randomUUID(), index: 1, chunks: [], bytes: 0, seq: 0, writes: new Set(), start: 0, name: `${sanitized()}.${recordingExtension()}` };
   state.recorder = instance;
   state.captureAudioTreatment=$('capture-clear-voice')?.checked?'clearVoice':'original';
