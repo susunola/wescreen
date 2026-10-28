@@ -1,0 +1,37 @@
+name: Release
+
+# Push a tag such as v1.29.0 to publish the extension and helper packages.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check the tag matches manifest.json
+        run: |
+          version=$(python -c "import json; print(json.load(open('manifest.json'))['version'])")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match manifest version $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - run: python scripts/build-package.py
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="# $VERSION " 'index($0,v)==1{f=1;next} /^# /{f=0} f' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" \
+            "store/wescreen-$VERSION.zip" \
+            "store/wescreen-helper-$VERSION.zip" \
+            --title "WeScreen $VERSION" \
+            --notes "${notes:-See CHANGELOG.md}"

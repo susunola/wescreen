@@ -4,7 +4,7 @@
 
 ## 安装
 
-在浏览器扩展的开发者页面加载此目录，或解压 `store/wescreen-1.8.0.zip` 后加载。点击 WeScreen 打开录制页面。改动代码后需重新加载扩展；数据库升级前请关闭旧录制页面。
+在浏览器扩展的开发者页面加载此目录，或从 [Releases](https://github.com/susunola/wescreen/releases) 下载 `wescreen-<版本号>.zip`，解压后加载。点击 WeScreen 打开录制页面。改动代码后需重新加载扩展；数据库升级前请关闭旧录制页面。
 
 ## 使用
 
